@@ -1,4 +1,4 @@
-// MeetingRoom.jsx - Video call room with live captions
+// MeetingRoom.jsx - Video call room with live captions, lobby, and screen share
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getSupabaseClient } from '../services/supabase';
 import { useSpeechCaptions } from '../hooks/useSpeechCaptions';
@@ -16,47 +16,143 @@ const createThrottle = (ms) => {
     };
 };
 
-// Guest name entry modal
-const GuestNameModal = ({ onSubmit }) => {
-    const [name, setName] = useState('');
+// Session storage key for participant tracking
+const getSessionKey = (roomId) => `meeting_participant_${roomId}`;
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (name.trim()) {
-            onSubmit(name.trim());
+// Guest lobby component
+const GuestLobby = ({ onJoin, onCancel, roomTitle }) => {
+    const [name, setName] = useState('');
+    const [videoEnabled, setVideoEnabled] = useState(true);
+    const [audioEnabled, setAudioEnabled] = useState(true);
+    const [stream, setStream] = useState(null);
+    const [waiting, setWaiting] = useState(false);
+    const videoRef = useRef(null);
+
+    useEffect(() => {
+        startPreview();
+        return () => {
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+        };
+    }, []);
+
+    const startPreview = async () => {
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            setStream(s);
+            if (videoRef.current) {
+                videoRef.current.srcObject = s;
+            }
+        } catch (e) {
+            console.warn('No camera access:', e);
         }
     };
 
+    const toggleVideo = () => {
+        if (stream) {
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                setVideoEnabled(track.enabled);
+            }
+        }
+    };
+
+    const toggleAudio = () => {
+        if (stream) {
+            const track = stream.getAudioTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                setAudioEnabled(track.enabled);
+            }
+        }
+    };
+
+    const handleJoin = () => {
+        if (!name.trim()) {
+            alert('Please enter your name');
+            return;
+        }
+        setWaiting(true);
+        // Stop preview stream - will get new one when admitted
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+        }
+        onJoin(name.trim(), { videoEnabled, audioEnabled });
+    };
+
     return (
-        <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-            <div className="modal" style={{ maxWidth: '400px', margin: 'auto' }}>
-                <div className="modal-header">
-                    <h3>Join Meeting</h3>
+        <div className="modal-overlay active" style={{ background: 'rgba(0,0,0,0.95)' }}>
+            <div style={{ maxWidth: '500px', margin: 'auto', padding: '2rem' }}>
+                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                    <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Join: {roomTitle}</h2>
+                    <p style={{ color: 'var(--text-muted)' }}>Set up your camera and microphone before joining</p>
                 </div>
-                <form onSubmit={handleSubmit}>
-                    <div className="modal-body">
-                        <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
-                            Enter your name to join the meeting
-                        </p>
-                        <div className="form-group">
-                            <label className="form-label">Your Name</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                placeholder="Enter your name..."
-                                autoFocus
-                                required
-                            />
+
+                {/* Video preview */}
+                <div style={{ position: 'relative', background: 'var(--bg-tertiary)', borderRadius: '12px', overflow: 'hidden', aspectRatio: '16/9', marginBottom: '1rem' }}>
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: videoEnabled && stream ? 'block' : 'none' }}
+                    />
+                    {(!videoEnabled || !stream) && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-tertiary)' }}>
+                            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', color: 'white' }}>
+                                {name ? name.charAt(0).toUpperCase() : '?'}
+                            </div>
                         </div>
+                    )}
+                </div>
+
+                {/* Controls */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <button
+                        className={`btn ${audioEnabled ? 'btn-secondary' : 'btn-danger'}`}
+                        onClick={toggleAudio}
+                        style={{ padding: '0.75rem', borderRadius: '50%', width: '50px', height: '50px' }}
+                    >
+                        {audioEnabled ? '🎤' : '🔇'}
+                    </button>
+                    <button
+                        className={`btn ${videoEnabled ? 'btn-secondary' : 'btn-danger'}`}
+                        onClick={toggleVideo}
+                        style={{ padding: '0.75rem', borderRadius: '50%', width: '50px', height: '50px' }}
+                    >
+                        {videoEnabled ? '🎥' : '📷'}
+                    </button>
+                </div>
+
+                {/* Name input */}
+                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                    <label className="form-label" style={{ color: 'white' }}>Your Name</label>
+                    <input
+                        type="text"
+                        className="form-input"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="Enter your name..."
+                        disabled={waiting}
+                    />
+                </div>
+
+                {waiting ? (
+                    <div style={{ textAlign: 'center', padding: '1rem', background: 'rgba(251, 191, 36, 0.1)', borderRadius: '8px', color: 'var(--warning)' }}>
+                        ⏳ Waiting for host to let you in...
                     </div>
-                    <div className="modal-footer">
-                        <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
-                            Join Meeting
+                ) : (
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button className="btn btn-secondary" onClick={onCancel} style={{ flex: 1 }}>
+                            Cancel
+                        </button>
+                        <button className="btn btn-primary" onClick={handleJoin} style={{ flex: 2 }}>
+                            Ask to Join
                         </button>
                     </div>
-                </form>
+                )}
             </div>
         </div>
     );
@@ -73,41 +169,50 @@ const MeetingRoom = ({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [participants, setParticipants] = useState([]);
+    const [waitingParticipants, setWaitingParticipants] = useState([]);
     const [transcripts, setTranscripts] = useState([]);
     const [liveTexts, setLiveTexts] = useState({});
     const [captionsEnabled, setCaptionsEnabled] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [showCaptions, setShowCaptions] = useState(true);
-    const [guestName, setGuestName] = useState(null);
-    const [needsGuestName, setNeedsGuestName] = useState(false);
     const [myParticipantId, setMyParticipantId] = useState(null);
+    const [isHost, setIsHost] = useState(false);
+    const [showLobby, setShowLobby] = useState(false);
+    const [guestSettings, setGuestSettings] = useState(null);
 
     const localVideoRef = useRef(null);
+    const screenVideoRef = useRef(null);
     const localStreamRef = useRef(null);
+    const screenStreamRef = useRef(null);
     const throttleInterimRef = useRef(createThrottle(800));
     const supabaseChannelRef = useRef(null);
+    const emptyRoomTimerRef = useRef(null);
 
-    // Determine display name
-    const isGuest = !currentUser?.id;
-    const displayName = isGuest ? guestName : (currentUser?.name || currentUser?.email?.split('@')[0] || 'User');
-    const odId = currentUser?.id || `guest_${Date.now()}`;
+    // Determine if user is logged in (has ID)
+    const isLoggedIn = !!currentUser?.id;
+    const isGuest = !isLoggedIn;
+    const displayName = isLoggedIn
+        ? (currentUser?.name || currentUser?.email?.split('@')[0] || 'User')
+        : guestSettings?.name || 'Guest';
 
-    // Check if guest needs to enter name
+    // Check if guest needs lobby
     useEffect(() => {
-        if (isGuest && !guestName) {
-            setNeedsGuestName(true);
+        if (isGuest && !guestSettings) {
+            setShowLobby(true);
+            setLoading(false);
         }
-    }, [isGuest, guestName]);
+    }, [isGuest, guestSettings]);
 
     // Load room data
     useEffect(() => {
-        if (needsGuestName) return; // Wait for guest name
+        if (isGuest && !guestSettings) return; // Wait for lobby
         loadRoom();
         return () => {
             cleanup();
         };
-    }, [roomSlug, roomId, needsGuestName]);
+    }, [roomSlug, roomId, guestSettings]);
 
     const loadRoom = async () => {
         const client = getSupabaseClient();
@@ -138,6 +243,11 @@ const MeetingRoom = ({
             }
 
             setRoom(data);
+
+            // Check if user is host (creator or admin)
+            const hostCheck = data.created_by === currentUser?.id || currentUser?.role === 'admin';
+            setIsHost(hostCheck || isLoggedIn); // Any logged in user can admit guests
+
             await joinRoom(data.id);
             await subscribeToRoom(data.id);
             await loadTranscripts(data.id);
@@ -153,7 +263,25 @@ const MeetingRoom = ({
         const client = getSupabaseClient();
         if (!client) return;
 
-        // First, mark any old entries from this user as inactive (fix duplicate issue)
+        // Check session storage for existing participant
+        const sessionKey = getSessionKey(roomId);
+        const existingParticipantId = sessionStorage.getItem(sessionKey);
+
+        if (existingParticipantId) {
+            // Reactivate existing participant
+            const { data } = await client.from('room_participants')
+                .update({ is_active: true, status: isGuest ? 'waiting' : 'active' })
+                .eq('id', existingParticipantId)
+                .select()
+                .single();
+
+            if (data) {
+                setMyParticipantId(data.id);
+                return;
+            }
+        }
+
+        // Deactivate any old entries for this user
         if (currentUser?.id) {
             await client.from('room_participants')
                 .update({ is_active: false, left_at: new Date().toISOString() })
@@ -163,16 +291,18 @@ const MeetingRoom = ({
         }
 
         // Add self to participants
+        const status = isGuest ? 'waiting' : 'active';
         const { data } = await client.from('room_participants').insert({
             room_id: roomId,
             user_id: currentUser?.id || null,
             display_name: displayName,
-            peer_id: odId,
-            is_active: true
+            is_active: true,
+            status: status
         }).select().single();
 
         if (data) {
             setMyParticipantId(data.id);
+            sessionStorage.setItem(sessionKey, data.id);
         }
 
         // Update room status to active if scheduled
@@ -229,7 +359,29 @@ const MeetingRoom = ({
             .eq('is_active', true)
             .order('joined_at', { ascending: true });
 
-        setParticipants(data || []);
+        const all = data || [];
+        setParticipants(all.filter(p => p.status === 'active'));
+        setWaitingParticipants(all.filter(p => p.status === 'waiting'));
+
+        // Check if room is empty and start timer
+        const activeCount = all.filter(p => p.status === 'active').length;
+        if (activeCount === 0 && !emptyRoomTimerRef.current) {
+            startEmptyRoomTimer(roomId);
+        } else if (activeCount > 0 && emptyRoomTimerRef.current) {
+            clearTimeout(emptyRoomTimerRef.current);
+            emptyRoomTimerRef.current = null;
+        }
+    };
+
+    const startEmptyRoomTimer = (roomId) => {
+        emptyRoomTimerRef.current = setTimeout(async () => {
+            const client = getSupabaseClient();
+            if (client) {
+                await client.from('meeting_rooms')
+                    .update({ status: 'ended' })
+                    .eq('id', roomId);
+            }
+        }, 5 * 60 * 1000); // 5 minutes
     };
 
     const loadTranscripts = async (roomId) => {
@@ -247,13 +399,34 @@ const MeetingRoom = ({
         setTranscripts(data || []);
     };
 
+    const admitParticipant = async (participantId) => {
+        const client = getSupabaseClient();
+        if (!client) return;
+
+        await client.from('room_participants')
+            .update({ status: 'active' })
+            .eq('id', participantId);
+    };
+
+    const denyParticipant = async (participantId) => {
+        const client = getSupabaseClient();
+        if (!client) return;
+
+        await client.from('room_participants')
+            .update({ status: 'denied', is_active: false })
+            .eq('id', participantId);
+    };
+
     const cleanup = async () => {
-        // Stop local stream
+        // Stop all streams
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => track.stop());
         }
+        if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach(track => track.stop());
+        }
 
-        // Leave room - mark my participant as inactive
+        // Leave room
         if (myParticipantId) {
             const client = getSupabaseClient();
             if (client) {
@@ -261,47 +434,64 @@ const MeetingRoom = ({
                     .update({ is_active: false, left_at: new Date().toISOString() })
                     .eq('id', myParticipantId);
             }
+            // Clear session storage
+            if (room?.id) {
+                sessionStorage.removeItem(getSessionKey(room.id));
+            }
         }
 
         // Unsubscribe
         if (supabaseChannelRef.current) {
             supabaseChannelRef.current.unsubscribe();
         }
+
+        // Clear empty room timer
+        if (emptyRoomTimerRef.current) {
+            clearTimeout(emptyRoomTimerRef.current);
+        }
     };
 
-    // Start local video (camera is optional)
+    // Start local video
     const startLocalVideo = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: true,
+            const constraints = {
+                video: guestSettings?.videoEnabled !== false,
                 audio: true
-            });
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             localStreamRef.current = stream;
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
             }
+            // Apply guest settings
+            if (guestSettings) {
+                if (!guestSettings.videoEnabled) {
+                    stream.getVideoTracks().forEach(t => t.stop());
+                    setIsVideoOff(true);
+                }
+                if (!guestSettings.audioEnabled) {
+                    stream.getAudioTracks().forEach(t => { t.enabled = false; });
+                    setIsMuted(true);
+                }
+            }
         } catch (e) {
-            console.warn('Failed to get video, trying audio only:', e);
+            console.warn('Failed to get video:', e);
+            setIsVideoOff(true);
             try {
-                const audioStream = await navigator.mediaDevices.getUserMedia({
-                    video: false,
-                    audio: true
-                });
+                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 localStreamRef.current = audioStream;
-                setIsVideoOff(true);
             } catch (audioError) {
-                console.warn('No media devices available:', audioError);
-                setIsVideoOff(true);
+                console.warn('No media:', audioError);
                 setIsMuted(true);
             }
         }
     };
 
     useEffect(() => {
-        if (room && !loading && !needsGuestName) {
+        if (room && !loading && !showLobby) {
             startLocalVideo();
         }
-    }, [room, loading, needsGuestName]);
+    }, [room, loading, showLobby]);
 
     // Toggle mute
     const toggleMute = () => {
@@ -316,18 +506,77 @@ const MeetingRoom = ({
         }
     };
 
-    // Toggle video
+    // Toggle video - actually stop track
     const toggleVideo = () => {
         if (localStreamRef.current) {
             const videoTrack = localStreamRef.current.getVideoTracks()[0];
             if (videoTrack) {
-                videoTrack.enabled = !videoTrack.enabled;
-                setIsVideoOff(!videoTrack.enabled);
+                if (videoTrack.enabled) {
+                    // Stop the track completely
+                    videoTrack.stop();
+                    setIsVideoOff(true);
+                } else {
+                    // Restart video
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(stream => {
+                            const newTrack = stream.getVideoTracks()[0];
+                            localStreamRef.current.addTrack(newTrack);
+                            if (localVideoRef.current) {
+                                localVideoRef.current.srcObject = localStreamRef.current;
+                            }
+                            setIsVideoOff(false);
+                        })
+                        .catch(e => console.warn('Could not restart video:', e));
+                }
             } else {
-                setIsVideoOff(true);
+                // No track, try to start video
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        const newTrack = stream.getVideoTracks()[0];
+                        if (localStreamRef.current) {
+                            localStreamRef.current.addTrack(newTrack);
+                            if (localVideoRef.current) {
+                                localVideoRef.current.srcObject = localStreamRef.current;
+                            }
+                        }
+                        setIsVideoOff(false);
+                    })
+                    .catch(e => {
+                        console.warn('Could not start video:', e);
+                        setIsVideoOff(true);
+                    });
             }
         } else {
             setIsVideoOff(!isVideoOff);
+        }
+    };
+
+    // Screen sharing
+    const toggleScreenShare = async () => {
+        if (isScreenSharing) {
+            // Stop screen share
+            if (screenStreamRef.current) {
+                screenStreamRef.current.getTracks().forEach(t => t.stop());
+                screenStreamRef.current = null;
+            }
+            setIsScreenSharing(false);
+        } else {
+            // Start screen share
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                screenStreamRef.current = stream;
+                if (screenVideoRef.current) {
+                    screenVideoRef.current.srcObject = stream;
+                }
+                setIsScreenSharing(true);
+                // Handle when user stops sharing via browser UI
+                stream.getVideoTracks()[0].onended = () => {
+                    setIsScreenSharing(false);
+                    screenStreamRef.current = null;
+                };
+            } catch (e) {
+                console.warn('Screen share failed:', e);
+            }
         }
     };
 
@@ -383,15 +632,21 @@ const MeetingRoom = ({
         alert('Room link copied!');
     };
 
-    // Handle guest name submit
-    const handleGuestNameSubmit = (name) => {
-        setGuestName(name);
-        setNeedsGuestName(false);
+    // Handle guest lobby submit
+    const handleGuestJoin = (name, settings) => {
+        setGuestSettings({ name, ...settings });
+        setShowLobby(false);
     };
 
-    // Show guest name modal
-    if (needsGuestName) {
-        return <GuestNameModal onSubmit={handleGuestNameSubmit} />;
+    // Show guest lobby
+    if (showLobby) {
+        return (
+            <GuestLobby
+                roomTitle={roomSlug || 'Meeting'}
+                onJoin={handleGuestJoin}
+                onCancel={onClose}
+            />
+        );
     }
 
     if (loading) {
@@ -415,7 +670,40 @@ const MeetingRoom = ({
         );
     }
 
-    // Get status color
+    // Check if guest is still waiting
+    const myParticipant = participants.find(p => p.id === myParticipantId) ||
+        waitingParticipants.find(p => p.id === myParticipantId);
+    if (isGuest && myParticipant?.status === 'waiting') {
+        return (
+            <div className="modal-overlay active" style={{ background: 'rgba(0,0,0,0.95)' }}>
+                <div style={{ textAlign: 'center', padding: '3rem' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
+                    <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Waiting for host</h2>
+                    <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+                        The host will let you in shortly...
+                    </p>
+                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                </div>
+            </div>
+        );
+    }
+
+    // Check if denied
+    if (myParticipant?.status === 'denied') {
+        return (
+            <div className="modal-overlay active" style={{ background: 'rgba(0,0,0,0.95)' }}>
+                <div style={{ textAlign: 'center', padding: '3rem' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❌</div>
+                    <h2 style={{ color: 'var(--danger)', marginBottom: '0.5rem' }}>Access Denied</h2>
+                    <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+                        The host has denied your request to join.
+                    </p>
+                    <button className="btn btn-secondary" onClick={onClose}>Close</button>
+                </div>
+            </div>
+        );
+    }
+
     const getStatusColor = (status) => {
         switch (status) {
             case 'active': return '#22c55e';
@@ -425,7 +713,6 @@ const MeetingRoom = ({
         }
     };
 
-    // Check if participant is me
     const isMe = (p) => p.id === myParticipantId;
 
     return (
@@ -449,7 +736,9 @@ const MeetingRoom = ({
                             </span>
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                            {participants.length} participant{participants.length !== 1 ? 's' : ''} • Joined as <strong>{displayName}</strong>
+                            {participants.length} in call
+                            {waitingParticipants.length > 0 && <span style={{ color: 'var(--warning)' }}> • {waitingParticipants.length} waiting</span>}
+                            {' • '}Joined as <strong>{displayName}</strong>
                             {isGuest && <span style={{ color: 'var(--warning)' }}> (Guest)</span>}
                         </div>
                     </div>
@@ -463,13 +752,50 @@ const MeetingRoom = ({
                     </div>
                 </div>
 
+                {/* Waiting room notification for hosts */}
+                {isHost && waitingParticipants.length > 0 && (
+                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(251, 191, 36, 0.1)', borderBottom: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--warning)', marginBottom: '0.5rem' }}>
+                            👋 {waitingParticipants.length} waiting to join
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {waitingParticipants.map(p => (
+                                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-tertiary)', padding: '0.25rem 0.5rem', borderRadius: '8px' }}>
+                                    <span style={{ fontSize: '0.875rem' }}>{p.display_name}</span>
+                                    <button className="btn btn-success" style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }} onClick={() => admitParticipant(p.id)}>
+                                        Admit
+                                    </button>
+                                    <button className="btn btn-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }} onClick={() => denyParticipant(p.id)}>
+                                        Deny
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Main content */}
                 <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                     {/* Video area */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '1rem' }}>
+                        {/* Screen share display */}
+                        {isScreenSharing && (
+                            <div style={{ flex: 2, marginBottom: '1rem', position: 'relative', background: 'var(--bg-tertiary)', borderRadius: '12px', overflow: 'hidden' }}>
+                                <video
+                                    ref={screenVideoRef}
+                                    autoPlay
+                                    playsInline
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                />
+                                <div style={{ position: 'absolute', top: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.7)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--success)' }}>
+                                    📺 Screen Sharing
+                                </div>
+                            </div>
+                        )}
+
                         {/* Video grid */}
-                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', alignContent: 'start', overflow: 'auto' }}>
-                            {/* Local video - always show first */}
+                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', alignContent: 'start', overflow: 'auto' }}>
+                            {/* Local video */}
                             <div style={{ position: 'relative', background: 'var(--bg-tertiary)', borderRadius: '12px', overflow: 'hidden', aspectRatio: '16/9', border: '2px solid var(--primary)' }}>
                                 <video
                                     ref={localVideoRef}
@@ -498,18 +824,18 @@ const MeetingRoom = ({
                                         {(p.display_name || 'U').charAt(0).toUpperCase()}
                                     </div>
                                     <div style={{ position: 'absolute', bottom: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.7)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                                        {p.display_name || 'User'} {p.is_muted && '🔇'}
+                                        {p.display_name || 'User'}
                                     </div>
                                 </div>
                             ))}
                         </div>
 
                         {/* Controls */}
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', padding: '1rem 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', padding: '1rem 0' }}>
                             <button
                                 className={`btn ${isMuted ? 'btn-danger' : 'btn-secondary'}`}
                                 onClick={toggleMute}
-                                style={{ padding: '1rem', borderRadius: '50%', width: '60px', height: '60px' }}
+                                style={{ padding: '1rem', borderRadius: '50%', width: '56px', height: '56px' }}
                                 title={isMuted ? 'Unmute' : 'Mute'}
                             >
                                 {isMuted ? '🔇' : '🎤'}
@@ -517,16 +843,24 @@ const MeetingRoom = ({
                             <button
                                 className={`btn ${isVideoOff ? 'btn-danger' : 'btn-secondary'}`}
                                 onClick={toggleVideo}
-                                style={{ padding: '1rem', borderRadius: '50%', width: '60px', height: '60px' }}
-                                title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+                                style={{ padding: '1rem', borderRadius: '50%', width: '56px', height: '56px' }}
+                                title={isVideoOff ? 'Start video' : 'Stop video'}
                             >
                                 {isVideoOff ? '📷' : '🎥'}
+                            </button>
+                            <button
+                                className={`btn ${isScreenSharing ? 'btn-success' : 'btn-secondary'}`}
+                                onClick={toggleScreenShare}
+                                style={{ padding: '1rem', borderRadius: '50%', width: '56px', height: '56px' }}
+                                title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                            >
+                                📺
                             </button>
                             <button
                                 className={`btn ${captionsEnabled ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setCaptionsEnabled(!captionsEnabled)}
                                 disabled={!isSupported}
-                                style={{ padding: '1rem', borderRadius: '50%', width: '60px', height: '60px' }}
+                                style={{ padding: '1rem', borderRadius: '50%', width: '56px', height: '56px' }}
                                 title={isSupported ? (captionsEnabled ? 'Stop captions' : 'Start captions') : 'Captions not supported'}
                             >
                                 💬
@@ -534,8 +868,8 @@ const MeetingRoom = ({
                             <button
                                 className="btn btn-secondary"
                                 onClick={() => setShowCaptions(!showCaptions)}
-                                style={{ padding: '1rem', borderRadius: '50%', width: '60px', height: '60px' }}
-                                title={showCaptions ? 'Hide transcript' : 'Show transcript'}
+                                style={{ padding: '1rem', borderRadius: '50%', width: '56px', height: '56px' }}
+                                title={showCaptions ? 'Hide panel' : 'Show panel'}
                             >
                                 📜
                             </button>
@@ -544,14 +878,13 @@ const MeetingRoom = ({
 
                     {/* Captions panel */}
                     {showCaptions && (
-                        <div style={{ width: '350px', background: 'var(--bg-secondary)', borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ width: '320px', background: 'var(--bg-secondary)', borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
                             <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span>💬 Live Captions</span>
+                                <span>💬 Transcript</span>
                                 {captionsEnabled && isListening && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>● Recording</span>}
                             </div>
 
                             <div style={{ flex: 1, overflow: 'auto', padding: '1rem' }}>
-                                {/* Final transcripts */}
                                 {transcripts.map((t, i) => (
                                     <div key={t.id || i} style={{ marginBottom: '0.75rem' }}>
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
@@ -561,17 +894,15 @@ const MeetingRoom = ({
                                     </div>
                                 ))}
 
-                                {/* Live texts from others */}
                                 {Object.entries(liveTexts).map(([uid, data]) => (
                                     <div key={uid} style={{ marginBottom: '0.75rem', opacity: 0.7 }}>
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                                            {data.name} <span style={{ color: 'var(--warning)' }}>(typing...)</span>
+                                            {data.name} <span style={{ color: 'var(--warning)' }}>(speaking...)</span>
                                         </div>
                                         <div style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>{data.text}</div>
                                     </div>
                                 ))}
 
-                                {/* My interim */}
                                 {captionsEnabled && interim && (
                                     <div style={{ marginBottom: '0.75rem', opacity: 0.7 }}>
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
@@ -582,10 +913,8 @@ const MeetingRoom = ({
                                 )}
 
                                 {transcripts.length === 0 && !interim && Object.keys(liveTexts).length === 0 && (
-                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                                        {captionsEnabled
-                                            ? 'Start speaking to see captions...'
-                                            : 'Enable captions to see live transcription'}
+                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem', fontSize: '0.875rem' }}>
+                                        {captionsEnabled ? 'Start speaking...' : 'Enable captions to record'}
                                     </div>
                                 )}
                             </div>
@@ -598,7 +927,7 @@ const MeetingRoom = ({
 
                             {!isSupported && (
                                 <div style={{ padding: '0.75rem', background: 'rgba(251,191,36,0.1)', color: 'var(--warning)', fontSize: '0.75rem' }}>
-                                    ⚠️ Your browser doesn't support live captions (try Chrome/Edge)
+                                    ⚠️ Use Chrome/Edge for captions
                                 </div>
                             )}
                         </div>
