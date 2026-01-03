@@ -19,33 +19,108 @@ const createThrottle = (ms) => {
 // Session storage key for participant tracking
 const getSessionKey = (roomId) => `meeting_participant_${roomId}`;
 
-// Guest lobby component
-const GuestLobby = ({ onJoin, onCancel, roomTitle }) => {
-    const [name, setName] = useState('');
+// Guest lobby component with audio visualizer and device selection
+const GuestLobby = ({ onJoin, onCancel, roomTitle, isLoggedIn, displayName: prefilledName }) => {
+    const [name, setName] = useState(prefilledName || '');
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [stream, setStream] = useState(null);
     const [waiting, setWaiting] = useState(false);
+    const [audioLevel, setAudioLevel] = useState(0);
+    const [devices, setDevices] = useState({ video: [], audio: [] });
+    const [selectedVideoDevice, setSelectedVideoDevice] = useState('');
+    const [selectedAudioDevice, setSelectedAudioDevice] = useState('');
     const videoRef = useRef(null);
+    const audioContextRef = useRef(null);
+    const analyserRef = useRef(null);
+    const animationRef = useRef(null);
 
     useEffect(() => {
+        loadDevices();
         startPreview();
         return () => {
-            if (stream) {
-                stream.getTracks().forEach(t => t.stop());
-            }
+            cleanup();
         };
     }, []);
 
-    const startPreview = async () => {
+    const cleanup = () => {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+        }
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+        }
+    };
+
+    const loadDevices = async () => {
         try {
-            const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const deviceList = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = deviceList.filter(d => d.kind === 'videoinput');
+            const audioDevices = deviceList.filter(d => d.kind === 'audioinput');
+            setDevices({ video: videoDevices, audio: audioDevices });
+            if (videoDevices.length > 0) setSelectedVideoDevice(videoDevices[0].deviceId);
+            if (audioDevices.length > 0) setSelectedAudioDevice(audioDevices[0].deviceId);
+        } catch (e) {
+            console.warn('Could not enumerate devices:', e);
+        }
+    };
+
+    const startPreview = async (videoId, audioId) => {
+        // Stop existing stream
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+        }
+
+        try {
+            const constraints = {
+                video: videoId ? { deviceId: { exact: videoId } } : true,
+                audio: audioId ? { deviceId: { exact: audioId } } : true
+            };
+            const s = await navigator.mediaDevices.getUserMedia(constraints);
             setStream(s);
             if (videoRef.current) {
                 videoRef.current.srcObject = s;
             }
+            // Start audio level monitoring
+            startAudioMonitoring(s);
         } catch (e) {
             console.warn('No camera access:', e);
+        }
+    };
+
+    const startAudioMonitoring = (mediaStream) => {
+        try {
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            analyserRef.current = audioContextRef.current.createAnalyser();
+            const source = audioContextRef.current.createMediaStreamSource(mediaStream);
+            source.connect(analyserRef.current);
+            analyserRef.current.fftSize = 256;
+            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+
+            const updateLevel = () => {
+                if (analyserRef.current) {
+                    analyserRef.current.getByteFrequencyData(dataArray);
+                    const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+                    setAudioLevel(avg / 255 * 100);
+                }
+                animationRef.current = requestAnimationFrame(updateLevel);
+            };
+            updateLevel();
+        } catch (e) {
+            console.warn('Audio monitoring failed:', e);
+        }
+    };
+
+    const handleDeviceChange = (type, deviceId) => {
+        if (type === 'video') {
+            setSelectedVideoDevice(deviceId);
+            startPreview(deviceId, selectedAudioDevice);
+        } else {
+            setSelectedAudioDevice(deviceId);
+            startPreview(selectedVideoDevice, deviceId);
         }
     };
 
@@ -70,24 +145,24 @@ const GuestLobby = ({ onJoin, onCancel, roomTitle }) => {
     };
 
     const handleJoin = () => {
-        if (!name.trim()) {
+        const joinName = isLoggedIn ? prefilledName : name.trim();
+        if (!joinName) {
             alert('Please enter your name');
             return;
         }
-        setWaiting(true);
-        // Stop preview stream - will get new one when admitted
-        if (stream) {
-            stream.getTracks().forEach(t => t.stop());
+        if (!isLoggedIn) {
+            setWaiting(true);
         }
-        onJoin(name.trim(), { videoEnabled, audioEnabled });
+        cleanup();
+        onJoin(joinName, { videoEnabled, audioEnabled, selectedVideoDevice, selectedAudioDevice });
     };
 
     return (
         <div className="modal-overlay active" style={{ background: 'rgba(0,0,0,0.95)' }}>
-            <div style={{ maxWidth: '500px', margin: 'auto', padding: '2rem' }}>
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            <div style={{ maxWidth: '550px', margin: 'auto', padding: '2rem' }}>
+                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                     <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Join: {roomTitle}</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Set up your camera and microphone before joining</p>
+                    <p style={{ color: 'var(--text-muted)' }}>Set up your camera and microphone</p>
                 </div>
 
                 {/* Video preview */}
@@ -102,10 +177,62 @@ const GuestLobby = ({ onJoin, onCancel, roomTitle }) => {
                     {(!videoEnabled || !stream) && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-tertiary)' }}>
                             <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', color: 'white' }}>
-                                {name ? name.charAt(0).toUpperCase() : '?'}
+                                {(isLoggedIn ? prefilledName : name)?.charAt(0)?.toUpperCase() || '?'}
                             </div>
                         </div>
                     )}
+                </div>
+
+                {/* Audio level indicator */}
+                <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>🎤 Microphone Level</span>
+                        <span style={{ fontSize: '0.7rem', color: audioLevel > 10 ? 'var(--success)' : 'var(--text-muted)' }}>
+                            {audioLevel > 10 ? '● Working' : '○ Speak to test'}
+                        </span>
+                    </div>
+                    <div style={{ height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{
+                            height: '100%',
+                            width: `${Math.min(audioLevel * 2, 100)}%`,
+                            background: audioLevel > 50 ? '#22c55e' : audioLevel > 20 ? '#84cc16' : '#6366f1',
+                            transition: 'width 0.1s ease-out'
+                        }} />
+                    </div>
+                </div>
+
+                {/* Device selection */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Camera</label>
+                        <select
+                            className="form-input"
+                            value={selectedVideoDevice}
+                            onChange={e => handleDeviceChange('video', e.target.value)}
+                            style={{ fontSize: '0.8rem', padding: '0.5rem' }}
+                        >
+                            {devices.video.map(d => (
+                                <option key={d.deviceId} value={d.deviceId}>
+                                    {d.label || `Camera ${devices.video.indexOf(d) + 1}`}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Microphone</label>
+                        <select
+                            className="form-input"
+                            value={selectedAudioDevice}
+                            onChange={e => handleDeviceChange('audio', e.target.value)}
+                            style={{ fontSize: '0.8rem', padding: '0.5rem' }}
+                        >
+                            {devices.audio.map(d => (
+                                <option key={d.deviceId} value={d.deviceId}>
+                                    {d.label || `Mic ${devices.audio.indexOf(d) + 1}`}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 {/* Controls */}
@@ -126,18 +253,20 @@ const GuestLobby = ({ onJoin, onCancel, roomTitle }) => {
                     </button>
                 </div>
 
-                {/* Name input */}
-                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                    <label className="form-label" style={{ color: 'white' }}>Your Name</label>
-                    <input
-                        type="text"
-                        className="form-input"
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        placeholder="Enter your name..."
-                        disabled={waiting}
-                    />
-                </div>
+                {/* Name input - only for guests */}
+                {!isLoggedIn && (
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                        <label className="form-label" style={{ color: 'white' }}>Your Name</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder="Enter your name..."
+                            disabled={waiting}
+                        />
+                    </div>
+                )}
 
                 {waiting ? (
                     <div style={{ textAlign: 'center', padding: '1rem', background: 'rgba(251, 191, 36, 0.1)', borderRadius: '8px', color: 'var(--warning)' }}>
@@ -149,7 +278,7 @@ const GuestLobby = ({ onJoin, onCancel, roomTitle }) => {
                             Cancel
                         </button>
                         <button className="btn btn-primary" onClick={handleJoin} style={{ flex: 2 }}>
-                            Ask to Join
+                            {isLoggedIn ? 'Join Meeting' : 'Ask to Join'}
                         </button>
                     </div>
                 )}
@@ -197,17 +326,18 @@ const MeetingRoom = ({
         ? (currentUser?.name || currentUser?.email?.split('@')[0] || 'User')
         : guestSettings?.name || 'Guest';
 
-    // Check if guest needs lobby
+    // Show lobby for device setup (guests and logged-in users)
     useEffect(() => {
-        if (isGuest && !guestSettings) {
+        // Show lobby for setup unless we already have settings
+        if (!guestSettings) {
             setShowLobby(true);
             setLoading(false);
         }
-    }, [isGuest, guestSettings]);
+    }, [guestSettings]);
 
     // Load room data
     useEffect(() => {
-        if (isGuest && !guestSettings) return; // Wait for lobby
+        if (!guestSettings) return; // Wait for lobby
         loadRoom();
         return () => {
             cleanup();
@@ -638,13 +768,15 @@ const MeetingRoom = ({
         setShowLobby(false);
     };
 
-    // Show guest lobby
+    // Show lobby for all users (device setup)
     if (showLobby) {
         return (
             <GuestLobby
                 roomTitle={roomSlug || 'Meeting'}
                 onJoin={handleGuestJoin}
                 onCancel={onClose}
+                isLoggedIn={isLoggedIn}
+                displayName={isLoggedIn ? (currentUser?.name || currentUser?.email?.split('@')[0] || 'User') : ''}
             />
         );
     }
