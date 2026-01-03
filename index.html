@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Campy - Team Management System for tracking clients, subscriptions, and project phases">
+  <title>Campy - Team Management</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-logo">
+        <span style="font-size: 2rem;">🏢</span>
+        <h1>CAMPY</h1>
+      </div>
+      <div class="header-actions">
+        <!-- Role Selector -->
+        <div class="role-selector">
+          <select class="form-select" id="roleSelector" style="min-width: 120px;">
+            <option value="user">👤 User</option>
+            <option value="admin">👑 Admin</option>
+          </select>
+        </div>
+        <!-- User Name (shown for User role) -->
+        <input type="text" class="form-input user-only" id="currentUserName" placeholder="Your Name"
+          style="width: 120px;">
+        <!-- Admin Settings Button -->
+        <button class="btn btn-secondary admin-only" id="adminSettingsBtn" title="Expense Settings">
+          ⚙️ Settings
+        </button>
+        <!-- Add Client (User only) -->
+        <button class="btn btn-primary user-only" id="addClientBtn">
+          <span>➕</span> Add Client
+        </button>
+        <button class="theme-toggle" id="themeToggle" title="Toggle Theme">
+          🌙
+        </button>
+      </div>
+    </header>
+
+    <!-- Stats Grid -->
+    <section class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value" id="statTotalClients">0</div>
+        <div class="stat-label">Total Clients</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-value" id="statPreparing">0</div>
+        <div class="stat-label">Preparing</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🧪</div>
+        <div class="stat-value" id="statTesting">0</div>
+        <div class="stat-label">Testing</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🚀</div>
+        <div class="stat-value" id="statRunning">0</div>
+        <div class="stat-label">Running</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-value" id="statRevenue">₱0</div>
+        <div class="stat-label">Monthly Revenue</div>
+      </div>
+      <!-- Admin Only Stats -->
+      <div class="stat-card admin-only">
+        <div class="stat-icon">📉</div>
+        <div class="stat-value" id="statExpenses">₱0</div>
+        <div class="stat-label">Total Expenses</div>
+      </div>
+      <div class="stat-card admin-only" style="border: 2px solid var(--success);">
+        <div class="stat-icon">📈</div>
+        <div class="stat-value" id="statProfit" style="color: var(--success);">₱0</div>
+        <div class="stat-label">Net Profit</div>
+      </div>
+    </section>
+
+    <!-- Filters Bar -->
+    <section class="filters-bar">
+      <div class="search-box">
+        <input type="text" class="form-input" id="searchInput" placeholder="Search clients, businesses...">
+      </div>
+      <select class="form-select filter-select" id="filterPhase">
+        <option value="">All Phases</option>
+        <option value="preparing">Preparing</option>
+        <option value="testing">Testing</option>
+        <option value="running">Running</option>
+      </select>
+      <select class="form-select filter-select" id="filterPackage">
+        <option value="">All Packages</option>
+        <option value="basic">🟢 ₱1,799</option>
+        <option value="star">⭐ ₱2,999</option>
+        <option value="fire">🔥 ₱3,499</option>
+        <option value="crown">👑 ₱5,799</option>
+        <option value="custom">🎨 Custom</option>
+      </select>
+      <select class="form-select filter-select" id="filterPayment">
+        <option value="">All Payment Status</option>
+        <option value="paid">Paid</option>
+        <option value="unpaid">Unpaid</option>
+        <option value="partial">Partial</option>
+      </select>
+    </section>
+
+    <!-- Phase Columns -->
+    <section class="phases-container" id="phasesContainer">
+      <!-- Preparing Column -->
+      <div class="phase-column" data-phase="preparing">
+        <div class="phase-header">
+          <div class="phase-title">
+            <span>⏳</span> PREPARING
+          </div>
+          <span class="phase-count" id="preparingCount">0</span>
+        </div>
+        <div class="phase-clients" id="preparingClients">
+          <div class="phase-empty">No clients in this phase</div>
+        </div>
+      </div>
+
+      <!-- Testing Column -->
+      <div class="phase-column" data-phase="testing">
+        <div class="phase-header">
+          <div class="phase-title">
+            <span>🧪</span> TESTING
+          </div>
+          <span class="phase-count" id="testingCount">0</span>
+        </div>
+        <div class="phase-clients" id="testingClients">
+          <div class="phase-empty">No clients in this phase</div>
+        </div>
+      </div>
+
+      <!-- Running Column -->
+      <div class="phase-column" data-phase="running">
+        <div class="phase-header">
+          <div class="phase-title">
+            <span>🚀</span> RUNNING
+          </div>
+          <span class="phase-count" id="runningCount">0</span>
+        </div>
+        <div class="phase-clients" id="runningClients">
+          <div class="phase-empty">No clients in this phase</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Add/Edit Client Modal -->
+  <div class="modal-overlay" id="clientModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">Add New Client</h3>
+        <button class="modal-close" id="closeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="clientForm">
+          <input type="hidden" id="clientId">
+
+          <!-- Tabs -->
+          <div class="tabs">
+            <button type="button" class="tab active" data-tab="basic">📝 Basic Info</button>
+            <button type="button" class="tab" data-tab="package">📦 Package</button>
+            <button type="button" class="tab" data-tab="payment">💳 Payment</button>
+            <button type="button" class="tab" data-tab="strategy">🤖 Strategy</button>
+            <button type="button" class="tab" data-tab="schedule">Schedule</button>
+          </div>
+
+          <!-- Basic Info Tab -->
+          <div class="tab-content active" id="tab-basic">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Project Name *</label>
+                <input type="text" class="form-input" id="projectName" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Client Name *</label>
+                <input type="text" class="form-input" id="clientName" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Business Name *</label>
+                <input type="text" class="form-input" id="businessName" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Contact Details</label>
+                <input type="text" class="form-input" id="contactDetails" placeholder="Phone, Email, etc.">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Page Link</label>
+              <input type="url" class="form-input" id="pageLink" placeholder="https://...">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Assigned To</label>
+                <input type="text" class="form-input" id="assignedTo" placeholder="Who is handling this client?">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Ads Expense (₱)</label>
+                <input type="number" class="form-input" id="adsExpense" placeholder="0" min="0">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="clientNotes"
+                placeholder="Additional notes about the client..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tags</label>
+              <input type="text" class="form-input" id="clientTags"
+                placeholder="Enter tags separated by commas (e.g., VIP, New, Priority)">
+            </div>
+          </div>
+
+          <!-- Package Tab -->
+          <div class="tab-content" id="tab-package">
+            <div class="form-group">
+              <label class="form-label">Select Package *</label>
+              <div class="package-selector" id="packageSelector">
+                <label class="package-option" data-package="basic">
+                  <input type="radio" name="package" value="basic">
+                  <div class="package-emoji">🟢</div>
+                  <div class="package-price">₱1,799</div>
+                  <div class="package-name">Basic</div>
+                </label>
+                <label class="package-option" data-package="star">
+                  <input type="radio" name="package" value="star">
+                  <div class="package-emoji">⭐</div>
+                  <div class="package-price">₱2,999</div>
+                  <div class="package-name">Star</div>
+                </label>
+                <label class="package-option" data-package="fire">
+                  <input type="radio" name="package" value="fire">
+                  <div class="package-emoji">🔥</div>
+                  <div class="package-price">₱3,499</div>
+                  <div class="package-name">Fire</div>
+                </label>
+                <label class="package-option" data-package="crown">
+                  <input type="radio" name="package" value="crown">
+                  <div class="package-emoji">👑</div>
+                  <div class="package-price">₱5,799</div>
+                  <div class="package-name">Crown</div>
+                </label>
+                <label class="package-option" data-package="custom">
+                  <input type="radio" name="package" value="custom">
+                  <div class="package-emoji">🎨</div>
+                  <div class="package-price">Custom</div>
+                  <div class="package-name">Custom</div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Custom Package Fields (shown when custom is selected) -->
+            <div class="custom-package-fields hidden" id="customPackageFields">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Custom Price (₱)</label>
+                  <input type="number" class="form-input" id="customPrice" placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">15-sec Videos</label>
+                  <input type="number" class="form-input" id="customVideos" placeholder="0" min="0">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Main Videos</label>
+                  <input type="number" class="form-input" id="customMainVideos" placeholder="0" min="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Photos</label>
+                  <input type="number" class="form-input" id="customPhotos" placeholder="0" min="0">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Weekly 1-on-1 (mins)</label>
+                  <input type="number" class="form-input" id="customMeetingMins" placeholder="0" min="0">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-checkbox">
+                  <input type="checkbox" id="customCAPI"> CAPI
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-checkbox">
+                  <input type="checkbox" id="customAdvancedCAPI"> Advanced CAPI
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-checkbox">
+                  <input type="checkbox" id="customDailyAds"> Daily Ads Monitoring
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-checkbox">
+                  <input type="checkbox" id="customUnlimitedSetup"> Unlimited Ad Setup
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-checkbox">
+                  <input type="checkbox" id="customLookalike"> Lookalike Audiences
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-checkbox">
+                  <input type="checkbox" id="customPriority"> Priority Handling
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Custom Features</label>
+                <textarea class="form-textarea" id="customFeatures"
+                  placeholder="List any additional custom features..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment Tab -->
+          <div class="tab-content" id="tab-payment">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Payment Status</label>
+                <select class="form-select" id="paymentStatus">
+                  <option value="unpaid">Unpaid</option>
+                  <option value="paid">Paid</option>
+                  <option value="partial">Partial Payment</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Payment Schedule</label>
+                <select class="form-select" id="paymentSchedule">
+                  <option value="monthly">Monthly</option>
+                  <option value="biweekly">Bi-Weekly</option>
+                  <option value="onetime">One-Time</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Months with Client</label>
+                <input type="number" class="form-input" id="monthsWithClient" value="0" min="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Start Date</label>
+                <input type="date" class="form-input" id="startDate">
+              </div>
+            </div>
+          </div>
+
+          <!-- Strategy Tab -->
+          <div class="tab-content" data-tab="strategy">
+            <div class="form-group">
+              <label>Business Niche</label>
+              <input type="text" id="aiNiche" placeholder="e.g. Dental Clinic, Real Estate">
+            </div>
+            <div class="form-group">
+              <label>Target Audience</label>
+              <input type="text" id="aiAudience" placeholder="e.g. Homeowners in Manila, Parents of toddlers">
+            </div>
+
+            <button type="button" id="generateStrategyBtn" class="btn btn-primary"
+              style="width: 100%; margin: 10px 0;">✨ Generate Strategy</button>
+
+            <div class="form-group">
+              <label>Recommended Ad Types</label>
+              <textarea id="aiAdTypes" rows="4" placeholder="Generated suggestions will appear here..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Campaign Structure & Budget</label>
+              <textarea id="aiStructure" rows="4" placeholder="Generated structure will appear here..."></textarea>
+            </div>
+          </div>
+
+          <!-- Schedule Tab -->
+          <div class="tab-content" id="tab-schedule">
+            <div class="form-group">
+              <label class="form-label">Current Phase</label>
+              <select class="form-select" id="currentPhase">
+                <option value="preparing">Preparing</option>
+                <option value="testing">Testing</option>
+                <option value="running">Running</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-checkbox">
+                <input type="checkbox" id="autoSwitch"> Enable Auto Phase Switch
+              </label>
+            </div>
+
+            <div class="auto-switch-fields" id="autoSwitchFields">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Days until next phase</label>
+                  <input type="number" class="form-input" id="autoSwitchDays" value="7" min="1">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Next Phase Date</label>
+                  <input type="date" class="form-input" id="nextPhaseDate">
+                </div>
+              </div>
+            </div>
+
+            <!-- Testing Phase Options -->
+            <div class="testing-options hidden" id="testingOptions">
+              <h4 style="margin: var(--space-lg) 0 var(--space-md); color: var(--phase-testing);">Testing Phase Settings
+              </h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Subscription Usage (%)</label>
+                  <input type="number" class="form-input" id="subscriptionUsage" value="0" min="0" max="100">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Testing Round</label>
+                  <input type="number" class="form-input" id="testingRound" value="1" min="1">
+                </div>
+              </div>
+              <div class="form-group">
+                <button type="button" class="btn btn-secondary" id="reTestBtn">
+                  🔄 Start New Testing Round
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button type="button" class="btn btn-danger hidden" id="deleteBtn">Delete Client</button>
+        <button type="button" class="btn btn-primary" id="saveBtn">Save Client</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Client Modal -->
+  <div class="modal-overlay" id="viewClientModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="viewClientTitle">Client Details</h3>
+        <button class="modal-close" id="closeViewModal">✕</button>
+      </div>
+      <div class="modal-body" id="viewClientBody">
+        <!-- Populated dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="closeViewBtn">Close</button>
+        <button type="button" class="btn btn-primary" id="editFromViewBtn">Edit Client</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Admin Settings Modal -->
+  <div class="modal-overlay" id="adminSettingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ Admin Settings - Package Expenses</h3>
+        <button class="modal-close" id="closeAdminSettings">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-muted); margin-bottom: var(--space-lg);">Set your expense per package to calculate
+          profit.</p>
+        <h3>Global Expense Settings</h3>
+        <div class="tabs">
+          <button class="tab active" data-tab="expenses">💰 Expenses</button>
+          <button class="tab" data-tab="ai-config">🤖 AI Config</button>
+        </div>
+
+        <div class="tab-content active" data-tab="expenses">
+          <div class="form-group">
+            <label>Basic Package Expense (₱)</label>
+            <input type="number" id="expenseBasic" placeholder="e.g. 500">
+          </div>
+          <div class="form-group">
+            <label>Star Package Expense (₱)</label>
+            <input type="number" id="expenseStar" placeholder="e.g. 1000">
+          </div>
+          <div class="form-group">
+            <label>Fire Package Expense (₱)</label>
+            <input type="number" id="expenseFire" placeholder="e.g. 1500">
+          </div>
+          <div class="form-group">
+            <label>Crown Package Expense (₱)</label>
+            <input type="number" id="expenseCrown" placeholder="e.g. 2000">
+          </div>
+          <div class="form-group">
+            <label>Custom Package Expense (₱)</label>
+            <input type="number" id="expenseCustom" placeholder="e.g. 0">
+          </div>
+        </div>
+
+        <div class="tab-content" data-tab="ai-config">
+          <div class="form-group">
+            <label>Ad Type Generation Prompt</label>
+            <p class="text-sm text-muted">Use definitions like {niche} and {audience} as placeholders.</p>
+            <textarea id="promptAdType" rows="4" style="width: 100%; font-family: monospace;"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Campaign Structure Prompt</label>
+            <p class="text-sm text-muted">Use definitions like {niche} and {audience} as placeholders.</p>
+            <textarea id="promptStructure" rows="4" style="width: 100%; font-family: monospace;"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="cancelAdminSettings" class="btn btn-secondary">Cancel</button>
+          <button id="saveAdminSettings" class="btn btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Client History Modal (Admin Only) -->
+    <div class="modal-overlay" id="historyModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 class="modal-title" id="historyModalTitle">📜 Client Stage History</h3>
+          <button class="modal-close" id="closeHistoryModal">✕</button>
+        </div>
+        <div class="modal-body" id="historyModalBody">
+          <!-- Populated dynamically -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="closeHistoryBtn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/clients.js"></script>
+    <script src="js/phases.js"></script>
+    <script src="js/priority.js"></script>
+    <script src="js/metrics.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
