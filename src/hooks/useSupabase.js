@@ -453,15 +453,20 @@ export const useSupabase = () => {
   // Add client to Supabase
   const addClientToSupabase = async (clientData) => {
     const client = getSupabaseClient();
-    if (!client || !currentUser) return null;
+    if (!client) return null;
 
     try {
+      // Build insert data - only include created_by if user is authenticated and profile exists
+      const insertData = mapClientToDb(clientData);
+
+      // Only set created_by if we have a current user with a valid profile
+      if (currentUser?.id && currentUserProfile?.id) {
+        insertData.created_by = currentUser.id;
+      }
+
       const { data, error } = await client
         .from('clients')
-        .insert({
-          ...mapClientToDb(clientData),
-          created_by: currentUser.id
-        })
+        .insert(insertData)
         .select(`
           *,
           assigned_user:assigned_to(id, name, email),
@@ -482,8 +487,8 @@ export const useSupabase = () => {
             client_id: data.id,
             from_phase: null,
             to_phase: data.phase,
-            changed_by: currentUser.id,
-            changed_by_name: getUserName()
+            changed_by: currentUser?.id || null,
+            changed_by_name: getUserName() || 'Unknown'
           });
       }
 
