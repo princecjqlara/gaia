@@ -134,34 +134,40 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, currentUserName
 
   if (!isOpen) return null;
 
+  const formatShortTime = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' ', '');
+
   return (
     <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? '100%' : '900px', width: isMobile ? '100%' : 'auto', height: isMobile ? '100vh' : 'auto', maxHeight: '90vh', margin: isMobile ? '0' : 'auto', borderRadius: isMobile ? '0' : '8px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <div className="modal-header" style={{ padding: isMobile ? '0.5rem 0.75rem' : '1rem', flexShrink: 0 }}>
-          <h3 style={{ fontSize: isMobile ? '1rem' : '1.25rem', margin: 0 }}>📅 Calendar</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? '100%' : '950px', width: isMobile ? '100%' : '90%', height: isMobile ? '100vh' : 'auto', maxHeight: '90vh', margin: isMobile ? '0' : 'auto', borderRadius: isMobile ? '0' : '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-header" style={{ padding: isMobile ? '0.75rem 1rem' : '1.25rem', flexShrink: 0 }}>
+          <h3 style={{ fontSize: isMobile ? '1.125rem' : '1.5rem', margin: 0, fontWeight: '600' }}>📅 Calendar</h3>
+          <button className="modal-close" onClick={onClose} style={{ fontSize: '1.25rem' }}>✕</button>
         </div>
-        <div className="modal-body" style={{ padding: isMobile ? '0.5rem' : '1rem', flex: 1, overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <button className="btn btn-secondary" onClick={() => navigateMonth(-1)} style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem' }}>←</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontWeight: '600', fontSize: isMobile ? '0.875rem' : '1rem' }}>{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</span>
-              <button className="btn btn-primary" onClick={() => handleScheduleMeeting(new Date())} style={{ padding: '0.4rem 0.6rem', fontSize: '0.7rem' }}>+</button>
+        <div className="modal-body" style={{ padding: isMobile ? '0.75rem' : '1.25rem', flex: 1, overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <button className="btn btn-secondary" onClick={() => navigateMonth(-1)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}>←</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontWeight: '600', fontSize: isMobile ? '1rem' : '1.25rem' }}>{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</span>
+              <button className="btn btn-primary" onClick={() => handleScheduleMeeting(new Date())} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}>+ New</button>
             </div>
-            <button className="btn btn-secondary" onClick={() => navigateMonth(1)} style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem' }}>→</button>
+            <button className="btn btn-secondary" onClick={() => navigateMonth(1)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}>→</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
-            {dayNames.map(d => <div key={d} style={{ padding: '0.3rem', textAlign: 'center', fontWeight: '600', background: 'var(--bg-secondary)', fontSize: '0.65rem' }}>{d}</div>)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', background: 'var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+            {dayNames.map(d => <div key={d} style={{ padding: isMobile ? '0.4rem' : '0.5rem', textAlign: 'center', fontWeight: '600', background: 'var(--bg-secondary)', fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{d}</div>)}
             {getDaysInMonth().map((date, i) => {
               const dayEvents = getEventsForDate(date);
               const isToday = date?.toDateString() === new Date().toDateString();
               return (
-                <div key={i} onClick={() => date && handleDayClick(date)} style={{ minHeight: isMobile ? '45px' : '60px', padding: '2px', background: isToday ? 'rgba(59,130,246,0.15)' : 'var(--bg-primary)', cursor: date ? 'pointer' : 'default' }}>
+                <div key={i} onClick={() => date && handleDayClick(date)} style={{ minHeight: isMobile ? '55px' : '80px', padding: '4px', background: isToday ? 'rgba(59,130,246,0.15)' : 'var(--bg-primary)', cursor: date ? 'pointer' : 'default', transition: 'background 0.15s' }}>
                   {date && <>
-                    <div style={{ fontWeight: isToday ? 'bold' : 'normal', fontSize: '0.65rem', color: isToday ? 'var(--primary)' : 'var(--text-primary)' }}>{date.getDate()}</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                      {dayEvents.slice(0, 2).map(e => <div key={e.id} style={{ fontSize: '0.5rem', padding: '1px', background: getEventColor(e), color: 'white', borderRadius: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isMobile ? '•' : e.title.substring(0, 8)}</div>)}
-                      {dayEvents.length > 2 && <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)' }}>+{dayEvents.length - 2}</div>}
+                    <div style={{ fontWeight: isToday ? 'bold' : 'normal', fontSize: isMobile ? '0.75rem' : '0.875rem', color: isToday ? 'var(--primary)' : 'var(--text-primary)', marginBottom: '2px' }}>{date.getDate()}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {dayEvents.slice(0, isMobile ? 2 : 3).map(e => (
+                        <div key={e.id} style={{ fontSize: isMobile ? '0.55rem' : '0.65rem', padding: '2px 4px', background: getEventColor(e), color: 'white', borderRadius: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {isMobile ? '•' : `${formatShortTime(e.start_time)} ${e.title.substring(0, 6)}`}
+                        </div>
+                      ))}
+                      {dayEvents.length > (isMobile ? 2 : 3) && <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: '500' }}>+{dayEvents.length - (isMobile ? 2 : 3)} more</div>}
                     </div>
                   </>}
                 </div>
@@ -193,11 +199,10 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
 
   const getWidth = (start, end) => {
     const s = new Date(start), e = new Date(end);
-    const duration = (e - s) / (1000 * 60 * 60); // hours
-    return Math.max(5, (duration / 13) * 100);
+    const duration = (e - s) / (1000 * 60 * 60);
+    return Math.max(8, (duration / 13) * 100);
   };
 
-  // Assign rows to avoid overlaps
   const assignRows = (meetings) => {
     const sorted = [...meetings].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
     const rows = [];
@@ -206,8 +211,9 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
       const end = new Date(meeting.end_time);
       let placed = false;
       for (let r = 0; r < rows.length; r++) {
-        const canPlace = rows[r].every(m => new Date(m.end_time) <= start || new Date(m.start_time) >= end);
-        if (canPlace) { rows[r].push(meeting); meeting.row = r; placed = true; break; }
+        if (rows[r].every(m => new Date(m.end_time) <= start || new Date(m.start_time) >= end)) {
+          rows[r].push(meeting); meeting.row = r; placed = true; break;
+        }
       }
       if (!placed) { meeting.row = rows.length; rows.push([meeting]); }
     });
@@ -219,39 +225,59 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
 
   return (
     <div className="modal-overlay active" onClick={onClose} style={{ zIndex: 1001 }}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? '100%' : '700px', width: isMobile ? '100%' : 'auto', height: isMobile ? '100vh' : 'auto', maxHeight: '90vh', margin: isMobile ? '0' : 'auto', borderRadius: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column' }}>
-        <div className="modal-header" style={{ padding: '0.75rem', background: 'var(--bg-secondary)' }}>
-          <h3 style={{ fontSize: '1rem', margin: 0 }}>{date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{
+        maxWidth: isMobile ? '100%' : '800px',
+        width: isMobile ? '100%' : '90%',
+        height: isMobile ? '100vh' : 'auto',
+        maxHeight: '90vh',
+        margin: isMobile ? '0' : 'auto',
+        borderRadius: isMobile ? '0' : '12px',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <div className="modal-header" style={{ padding: '1rem 1.25rem', background: 'var(--bg-secondary)' }}>
+          <h3 style={{ fontSize: '1.25rem', margin: 0, fontWeight: '600' }}>
+            {date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </h3>
+          <button className="modal-close" onClick={onClose} style={{ fontSize: '1.25rem' }}>✕</button>
         </div>
-        <div className="modal-body" style={{ padding: '0.75rem', flex: 1, overflow: 'auto' }}>
-          <button className="btn btn-primary" onClick={onSchedule} style={{ width: '100%', marginBottom: '1rem', fontSize: '0.875rem' }}>+ New Meeting</button>
+        <div className="modal-body" style={{ padding: '1.25rem', flex: 1, overflow: 'auto' }}>
+          <button className="btn btn-primary" onClick={onSchedule} style={{ width: '100%', marginBottom: '1.25rem', padding: '0.75rem', fontSize: '1rem' }}>
+            + New Meeting
+          </button>
 
           {otherEvents.length > 0 && (
-            <div style={{ marginBottom: '1rem' }}>
-              {otherEvents.map(e => <div key={e.id} style={{ padding: '0.5rem', background: getEventColor(e), color: 'white', borderRadius: '4px', marginBottom: '0.25rem', fontSize: '0.75rem' }}>{e.title}</div>)}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Other Events</div>
+              {otherEvents.map(e => (
+                <div key={e.id} style={{ padding: '0.75rem', background: getEventColor(e), color: 'white', borderRadius: '8px', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                  {e.title}
+                </div>
+              ))}
             </div>
           )}
 
-          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Schedule ({meetings.length} meetings)</div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontWeight: '500' }}>
+            📅 Schedule ({meetings.length} meeting{meetings.length !== 1 ? 's' : ''})
+          </div>
 
           {/* Gantt Timeline */}
-          <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', padding: '0.5rem', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '1rem', overflow: 'hidden' }}>
             {/* Hour labels */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
               {hours.map(h => (
-                <div key={h} style={{ flex: 1, fontSize: '0.55rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                  {h > 12 ? h - 12 : h}{h >= 12 ? 'p' : 'a'}
+                <div key={h} style={{ flex: 1, fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: '500' }}>
+                  {h > 12 ? h - 12 : h}{h >= 12 ? 'pm' : 'am'}
                 </div>
               ))}
             </div>
 
             {/* Timeline grid with meetings */}
-            <div style={{ position: 'relative', minHeight: Math.max(80, rowCount * 45 + 20) + 'px' }}>
+            <div style={{ position: 'relative', minHeight: Math.max(100, rowCount * 70 + 20) + 'px' }}>
               {/* Grid lines */}
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex' }}>
                 {hours.map((h, i) => (
-                  <div key={h} style={{ flex: 1, borderLeft: i > 0 ? '1px dashed var(--border-color)' : 'none', opacity: 0.5 }} />
+                  <div key={h} style={{ flex: 1, borderLeft: i > 0 ? '1px dashed var(--border-color)' : 'none', opacity: 0.4 }} />
                 ))}
               </div>
 
@@ -259,48 +285,56 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
               {meetings.map(meeting => {
                 const left = getPosition(meeting.start_time);
                 const width = getWidth(meeting.start_time, meeting.end_time);
-                const top = (meeting.row || 0) * 42 + 5;
+                const top = (meeting.row || 0) * 65 + 8;
 
                 return (
                   <div
                     key={meeting.id}
                     onClick={() => onEventClick(meeting)}
-                    title={`${meeting.title}\n${formatTime(meeting.start_time)} - ${formatTime(meeting.end_time)}`}
                     style={{
                       position: 'absolute',
                       left: `${left}%`,
                       width: `${Math.min(width, 100 - left)}%`,
                       top: `${top}px`,
-                      height: '36px',
+                      height: '55px',
                       background: `linear-gradient(135deg, ${getEventColor(meeting)}, ${getEventColor(meeting)}dd)`,
-                      borderRadius: '6px',
+                      borderRadius: '10px',
                       cursor: 'pointer',
-                      padding: '4px 8px',
+                      padding: '8px 12px',
                       overflow: 'hidden',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                      border: '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                      border: '1px solid rgba(255,255,255,0.15)',
                       transition: 'transform 0.15s, box-shadow 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.35)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)'; }}
                   >
-                    <div style={{ fontSize: '0.7rem', fontWeight: '600', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '4px' }}>
                       {meeting.title}
                     </div>
-                    <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap' }}>
-                      {formatTime(meeting.start_time)} {getClientName(meeting.client_id) && `• ${getClientName(meeting.client_id)}`}
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap' }}>
+                      🕐 {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
                     </div>
+                    {getClientName(meeting.client_id) && (
+                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px' }}>
+                        👤 {getClientName(meeting.client_id)}
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
               {meetings.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>No meetings</div>
+                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', fontSize: '1rem' }}>
+                  No meetings scheduled for this day
+                </div>
               )}
             </div>
           </div>
         </div>
-        <div className="modal-footer" style={{ padding: '0.5rem', flexShrink: 0 }}><button className="btn btn-secondary" onClick={onClose}>Close</button></div>
+        <div className="modal-footer" style={{ padding: '1rem', flexShrink: 0 }}>
+          <button className="btn btn-secondary" onClick={onClose} style={{ padding: '0.75rem 1.5rem', fontSize: '1rem' }}>Close</button>
+        </div>
       </div>
     </div>
   );
