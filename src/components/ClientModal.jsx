@@ -53,7 +53,24 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   useEffect(() => {
     const loadUsers = async () => {
       const client = getSupabaseClient();
-      if (!client) return;
+
+      // Try localStorage first as fallback
+      const cachedUsers = localStorage.getItem('campy_users_cache');
+      if (cachedUsers) {
+        try {
+          const parsed = JSON.parse(cachedUsers);
+          if (parsed && parsed.length > 0) {
+            setAvailableUsers(parsed);
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+
+      if (!client) {
+        console.log('Supabase client not available, using cached users');
+        return;
+      }
 
       try {
         const { data, error } = await client
@@ -63,15 +80,21 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
 
         if (error) {
           console.error('Error loading users:', error);
-          showToast('Error loading users: ' + error.message, 'error');
+          // Don't show toast for RLS errors when not authenticated
+          if (!error.message?.includes('permission') && !error.message?.includes('RLS')) {
+            showToast('Error loading users: ' + error.message, 'error');
+          }
           return;
         }
-        
+
         console.log('Loaded users for assignment:', data?.length || 0, data);
-        setAvailableUsers(data || []);
+        if (data && data.length > 0) {
+          setAvailableUsers(data);
+          // Cache to localStorage for offline access
+          localStorage.setItem('campy_users_cache', JSON.stringify(data));
+        }
       } catch (err) {
         console.error('Exception loading users:', err);
-        showToast('Error loading users', 'error');
       }
     };
 
@@ -110,7 +133,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
           }
         }
       }
-      
+
       setFormData({
         clientName: client.clientName || '',
         businessName: client.businessName || '',
@@ -184,7 +207,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
 
         // Upload to Supabase Storage
         setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
-        
+
         const { data, error } = await supabase.storage
           .from('client-media')
           .upload(filePath, file, {
@@ -239,14 +262,14 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         console.error('Error deleting file:', error);
       }
     }
-    
+
     // Remove from state
     setNotesMedia(notesMedia.filter(m => m.id !== mediaItem.id));
   };
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    
+
     // Validate required fields
     if (!formData.clientName || !formData.clientName.trim()) {
       showToast('Please enter a client name', 'warning');
@@ -256,9 +279,9 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       showToast('Please enter a business name', 'warning');
       return;
     }
-    
+
     const tags = formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [];
-    
+
     // Build custom package if selected
     let customPackage = null;
     if (formData.package === 'custom') {
@@ -390,7 +413,9 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     value={formData.assignedTo || ''}
                     onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
                   >
-                    <option value="">— Select User —</option>
+                    <option value="">
+                      {availableUsers.length === 0 ? '— No users available (log in to see team) —' : '— Select User —'}
+                    </option>
                     {availableUsers.map(user => (
                       <option key={user.id} value={user.id}>
                         {user.name} {user.email ? `(${user.email})` : ''}
@@ -407,7 +432,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     placeholder="Additional notes about the client..."
                     rows={4}
                   />
-                  
+
                   {/* Media Upload Section */}
                   <div style={{ marginTop: '0.75rem' }}>
                     <label className="form-label" style={{ fontSize: '0.875rem', marginBottom: '0.5rem', display: 'block' }}>
@@ -434,7 +459,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     >
                       {uploading ? '⏳ Uploading...' : '📎 Upload Files'}
                     </label>
-                    
+
                     {/* Upload Progress */}
                     {Object.keys(uploadProgress).length > 0 && (
                       <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -592,133 +617,133 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     </div>
                   </div>
 
-                {formData.package === 'custom' && (
-                  <div className="custom-package-fields" style={{ marginTop: 'var(--space-lg)' }}>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label className="form-label">Custom Price (₱)</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.customPrice || ''}
-                          onChange={(e) => setFormData({ ...formData, customPrice: parseInt(e.target.value) || 0 })}
-                          placeholder="0"
-                        />
+                  {formData.package === 'custom' && (
+                    <div className="custom-package-fields" style={{ marginTop: 'var(--space-lg)' }}>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label className="form-label">Custom Price (₱)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={formData.customPrice || ''}
+                            onChange={(e) => setFormData({ ...formData, customPrice: parseInt(e.target.value) || 0 })}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">15-sec Videos</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={formData.customVideos || ''}
+                            onChange={(e) => setFormData({ ...formData, customVideos: parseInt(e.target.value) || 0 })}
+                            placeholder="0"
+                            min="0"
+                          />
+                        </div>
+                      </div>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label className="form-label">Main Videos</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={formData.customMainVideos || ''}
+                            onChange={(e) => setFormData({ ...formData, customMainVideos: parseInt(e.target.value) || 0 })}
+                            placeholder="0"
+                            min="0"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Photos</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={formData.customPhotos || ''}
+                            onChange={(e) => setFormData({ ...formData, customPhotos: parseInt(e.target.value) || 0 })}
+                            placeholder="0"
+                            min="0"
+                          />
+                        </div>
+                      </div>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label className="form-label">Weekly 1-on-1 (mins)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={formData.customMeetingMins || ''}
+                            onChange={(e) => setFormData({ ...formData, customMeetingMins: parseInt(e.target.value) || 0 })}
+                            placeholder="0"
+                            min="0"
+                          />
+                        </div>
                       </div>
                       <div className="form-group">
-                        <label className="form-label">15-sec Videos</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.customVideos || ''}
-                          onChange={(e) => setFormData({ ...formData, customVideos: parseInt(e.target.value) || 0 })}
-                          placeholder="0"
-                          min="0"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label className="form-label">Main Videos</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.customMainVideos || ''}
-                          onChange={(e) => setFormData({ ...formData, customMainVideos: parseInt(e.target.value) || 0 })}
-                          placeholder="0"
-                          min="0"
-                        />
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={formData.customCAPI || false}
+                            onChange={(e) => setFormData({ ...formData, customCAPI: e.target.checked })}
+                          /> CAPI
+                        </label>
                       </div>
                       <div className="form-group">
-                        <label className="form-label">Photos</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.customPhotos || ''}
-                          onChange={(e) => setFormData({ ...formData, customPhotos: parseInt(e.target.value) || 0 })}
-                          placeholder="0"
-                          min="0"
-                        />
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={formData.customAdvancedCAPI || false}
+                            onChange={(e) => setFormData({ ...formData, customAdvancedCAPI: e.target.checked })}
+                          /> Advanced CAPI
+                        </label>
                       </div>
-                    </div>
-                    <div className="form-row">
                       <div className="form-group">
-                        <label className="form-label">Weekly 1-on-1 (mins)</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.customMeetingMins || ''}
-                          onChange={(e) => setFormData({ ...formData, customMeetingMins: parseInt(e.target.value) || 0 })}
-                          placeholder="0"
-                          min="0"
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={formData.customDailyAds || false}
+                            onChange={(e) => setFormData({ ...formData, customDailyAds: e.target.checked })}
+                          /> Daily Ads Monitoring
+                        </label>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={formData.customUnlimitedSetup || false}
+                            onChange={(e) => setFormData({ ...formData, customUnlimitedSetup: e.target.checked })}
+                          /> Unlimited Ad Setup
+                        </label>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={formData.customLookalike || false}
+                            onChange={(e) => setFormData({ ...formData, customLookalike: e.target.checked })}
+                          /> Lookalike Audiences
+                        </label>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={formData.customPriority || false}
+                            onChange={(e) => setFormData({ ...formData, customPriority: e.target.checked })}
+                          /> Priority Handling
+                        </label>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Custom Features</label>
+                        <textarea
+                          className="form-textarea"
+                          value={formData.customFeatures || ''}
+                          onChange={(e) => setFormData({ ...formData, customFeatures: e.target.value })}
+                          placeholder="List any additional custom features..."
                         />
                       </div>
                     </div>
-                    <div className="form-group">
-                      <label className="form-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={formData.customCAPI || false}
-                          onChange={(e) => setFormData({ ...formData, customCAPI: e.target.checked })}
-                        /> CAPI
-                      </label>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={formData.customAdvancedCAPI || false}
-                          onChange={(e) => setFormData({ ...formData, customAdvancedCAPI: e.target.checked })}
-                        /> Advanced CAPI
-                      </label>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={formData.customDailyAds || false}
-                          onChange={(e) => setFormData({ ...formData, customDailyAds: e.target.checked })}
-                        /> Daily Ads Monitoring
-                      </label>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={formData.customUnlimitedSetup || false}
-                          onChange={(e) => setFormData({ ...formData, customUnlimitedSetup: e.target.checked })}
-                        /> Unlimited Ad Setup
-                      </label>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={formData.customLookalike || false}
-                          onChange={(e) => setFormData({ ...formData, customLookalike: e.target.checked })}
-                        /> Lookalike Audiences
-                      </label>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={formData.customPriority || false}
-                          onChange={(e) => setFormData({ ...formData, customPriority: e.target.checked })}
-                        /> Priority Handling
-                      </label>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Custom Features</label>
-                      <textarea
-                        className="form-textarea"
-                        value={formData.customFeatures || ''}
-                        onChange={(e) => setFormData({ ...formData, customFeatures: e.target.value })}
-                        placeholder="List any additional custom features..."
-                      />
-                    </div>
-                  </div>
-                )}
+                  )}
                 </div>
               );
             })()}
@@ -852,17 +877,17 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
               <div className={`tab-content ${activeTab === 'schedule' ? 'active' : ''}`}>
                 <div className="form-group">
                   <label className="form-label">Current Phase</label>
-                    <select
-                      className="form-select"
-                      value={formData.phase}
-                      onChange={(e) => setFormData({ ...formData, phase: e.target.value })}
-                    >
-                      <option value="booked">📅 Booked</option>
-                      <option value="follow-up">📞 Follow Up</option>
-                      <option value="preparing">⏳ Preparing</option>
-                      <option value="testing">🧪 Testing</option>
-                      <option value="running">🚀 Running</option>
-                    </select>
+                  <select
+                    className="form-select"
+                    value={formData.phase}
+                    onChange={(e) => setFormData({ ...formData, phase: e.target.value })}
+                  >
+                    <option value="booked">📅 Booked</option>
+                    <option value="follow-up">📞 Follow Up</option>
+                    <option value="preparing">⏳ Preparing</option>
+                    <option value="testing">🧪 Testing</option>
+                    <option value="running">🚀 Running</option>
+                  </select>
                 </div>
 
                 <div className="form-group">
