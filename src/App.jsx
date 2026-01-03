@@ -20,6 +20,7 @@ import { useStorage } from './hooks/useStorage';
 import { useClients } from './hooks/useClients';
 import { usePhases } from './hooks/usePhases';
 import { useMetrics } from './hooks/useMetrics';
+import { showToast } from './utils/toast';
 import './css/styles.css';
 
 function App() {
@@ -219,6 +220,7 @@ function App() {
         } else {
           await updateClient(currentClientId, clientData);
         }
+        showToast('Client updated successfully', 'success');
       } else {
         // Create new client
         if (isOnlineMode) {
@@ -234,12 +236,15 @@ function App() {
         } else {
           await addClient(clientData);
         }
+        showToast('Client added successfully', 'success');
       }
       setShowClientModal(false);
       setCurrentClientId(null);
     } catch (error) {
       console.error('Error saving client:', error);
-      throw error;
+      const errorMessage = error?.message || 'Failed to save client. Please try again.';
+      showToast(`Error saving client: ${errorMessage}`, 'error');
+      throw error; // Re-throw so modal stays open
     }
   };
 

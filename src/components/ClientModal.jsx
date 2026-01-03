@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import TagSelector from './TagSelector';
 import { getSupabaseClient } from '../services/supabase';
 import { getPackages, formatPrice } from '../utils/clients';
+import { showToast } from '../utils/toast';
 
 const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   const [activeTab, setActiveTab] = useState('basic');
@@ -239,8 +240,19 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
     setNotesMedia(notesMedia.filter(m => m.id !== mediaItem.id));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.clientName || !formData.clientName.trim()) {
+      showToast('Please enter a client name', 'warning');
+      return;
+    }
+    if (!formData.businessName || !formData.businessName.trim()) {
+      showToast('Please enter a business name', 'warning');
+      return;
+    }
+    
     const tags = formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [];
     
     // Build custom package if selected
@@ -262,36 +274,41 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       };
     }
 
-    onSave({
-      clientName: formData.clientName,
-      businessName: formData.businessName,
-      contactDetails: formData.contactDetails,
-      pageLink: formData.pageLink,
-      assignedTo: formData.assignedTo,
-      adsExpense: formData.adsExpense || 0,
-      notes: formData.notes,
-      notesMedia: notesMedia,
-      tags,
-      package: formData.package,
-      customPackage,
-      paymentStatus: formData.paymentStatus,
-      paymentSchedule: formData.paymentSchedule,
-      monthsWithClient: formData.monthsWithClient || 0,
-      startDate: formData.startDate,
-      phase: formData.phase,
-      autoSwitch: formData.autoSwitch || false,
-      autoSwitchDays: formData.autoSwitchDays || 7,
-      nextPhaseDate: formData.nextPhaseDate,
-      subscriptionUsage: formData.subscriptionUsage || 0,
-      testingRound: formData.testingRound || 1,
-      subscriptionUsageDetail: {
-        videosUsed: formData.videosUsed || 0,
-        mainVideosUsed: formData.mainVideosUsed || 0,
-        photosUsed: formData.photosUsed || 0,
-        meetingMinutesUsed: formData.meetingMinutesUsed || 0
-      },
-      subscriptionStarted: formData.phase === 'testing' || formData.phase === 'running'
-    });
+    try {
+      await onSave({
+        clientName: formData.clientName,
+        businessName: formData.businessName,
+        contactDetails: formData.contactDetails,
+        pageLink: formData.pageLink,
+        assignedTo: formData.assignedTo,
+        adsExpense: formData.adsExpense || 0,
+        notes: formData.notes,
+        notesMedia: notesMedia,
+        tags,
+        package: formData.package,
+        customPackage,
+        paymentStatus: formData.paymentStatus,
+        paymentSchedule: formData.paymentSchedule,
+        monthsWithClient: formData.monthsWithClient || 0,
+        startDate: formData.startDate,
+        phase: formData.phase,
+        autoSwitch: formData.autoSwitch || false,
+        autoSwitchDays: formData.autoSwitchDays || 7,
+        nextPhaseDate: formData.nextPhaseDate,
+        subscriptionUsage: formData.subscriptionUsage || 0,
+        testingRound: formData.testingRound || 1,
+        subscriptionUsageDetail: {
+          videosUsed: formData.videosUsed || 0,
+          mainVideosUsed: formData.mainVideosUsed || 0,
+          photosUsed: formData.photosUsed || 0,
+          meetingMinutesUsed: formData.meetingMinutesUsed || 0
+        },
+        subscriptionStarted: formData.phase === 'testing' || formData.phase === 'running'
+      });
+    } catch (error) {
+      // Error handling is done in App.jsx, but we don't close the modal on error
+      console.error('Error in handleSubmit:', error);
+    }
   };
 
   return (
@@ -729,6 +746,23 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                       <option value="onetime">One-Time</option>
                     </select>
                   </div>
+                </div>
+                <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
+                  <label className="form-label">
+                    Ads Expense (₱) <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>(Optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={formData.adsExpense || ''}
+                    onChange={(e) => setFormData({ ...formData, adsExpense: parseFloat(e.target.value) || 0 })}
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
+                  />
+                  <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>
+                    Optional: Additional advertising expenses for this client
+                  </small>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
