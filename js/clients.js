@@ -101,7 +101,7 @@ const Clients = {
       startDate: formData.startDate || new Date().toISOString().split('T')[0],
 
       // Phase & Schedule
-      phase: formData.phase || 'preparing',
+      phase: formData.phase || 'booked',
       autoSwitch: formData.autoSwitch || false,
       autoSwitchDays: formData.autoSwitchDays || 7,
       nextPhaseDate: formData.nextPhaseDate || null,

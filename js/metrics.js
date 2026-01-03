@@ -14,6 +14,8 @@ const Metrics = {
 
         return {
             totalClients: clients.length,
+            totalClients: clients.length,
+            booked: clients.filter(c => c.phase === 'booked').length,
             preparing: clients.filter(c => c.phase === 'preparing').length,
             testing: clients.filter(c => c.phase === 'testing').length,
             running: clients.filter(c => c.phase === 'running').length,
@@ -53,6 +55,7 @@ const Metrics = {
         };
 
         update('statTotalClients', metrics.totalClients);
+        update('statBooked', metrics.booked);
         update('statPreparing', metrics.preparing);
         update('statTesting', metrics.testing);
         update('statRunning', metrics.running);

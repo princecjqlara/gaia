@@ -23,6 +23,10 @@ const App = {
                 this.initRole();
                 this.refreshUI();
                 Phases.processAutoSwitches();
+
+                // Subscribe to Realtime Notifications
+                this.subscribeToNotifications();
+
                 console.log('Campy initialized (online mode)');
             } else {
                 // Show login modal
@@ -148,6 +152,34 @@ const App = {
         const btn = document.getElementById('themeToggle');
         const isDark = document.documentElement.dataset.theme === 'dark';
         if (btn) btn.textContent = isDark ? '🌙' : '☀️';
+    },
+
+    // Subscribe to Realtime Notifications
+    subscribeToNotifications() {
+        if (!Supabase.client) return;
+
+        // Listen for INSERT on clients table
+        Supabase.client
+            .channel('public:clients')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clients' }, payload => {
+                const newClient = payload.new;
+                if (newClient.phase === 'booked') {
+                    // Start sound
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                    audio.play().catch(e => console.log('Audio play failed', e));
+
+                    // Show notification
+                    this.showToast(`📅 New Meeting Booked: ${newClient.client_name}!`, 'success');
+
+                    // Refresh data if we are online and sync
+                    if (this.isOnlineMode) {
+                        Supabase.syncAllData().then(() => this.refreshUI());
+                    }
+                }
+            })
+            .subscribe();
+
+        console.log('Listening for new bookings...');
     },
 
     // Bind all event listeners

@@ -4,7 +4,7 @@
 
 const Phases = {
     // Phase order for transitions
-    order: ['preparing', 'testing', 'running'],
+    order: ['booked', 'preparing', 'testing', 'running'],
 
     // Get next phase
     getNextPhase(currentPhase) {

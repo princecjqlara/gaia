@@ -61,6 +61,11 @@
         <div class="stat-label">Total Clients</div>
       </div>
       <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <div class="stat-value" id="statBooked">0</div>
+        <div class="stat-label">Booked</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-icon">⏳</div>
         <div class="stat-value" id="statPreparing">0</div>
         <div class="stat-label">Preparing</div>
@@ -100,6 +105,7 @@
       </div>
       <select class="form-select filter-select" id="filterPhase">
         <option value="">All Phases</option>
+        <option value="booked">Booked</option>
         <option value="preparing">Preparing</option>
         <option value="testing">Testing</option>
         <option value="running">Running</option>
@@ -122,6 +128,19 @@
 
     <!-- Phase Columns -->
     <section class="phases-container" id="phasesContainer">
+      <!-- Booked Column -->
+      <div class="phase-column" data-phase="booked">
+        <div class="phase-header">
+          <div class="phase-title">
+            <span>📅</span> BOOKED
+          </div>
+          <span class="phase-count" id="bookedCount">0</span>
+        </div>
+        <div class="phase-clients" id="bookedClients">
+          <div class="phase-empty">No clients in this phase</div>
+        </div>
+      </div>
+
       <!-- Preparing Column -->
       <div class="phase-column" data-phase="preparing">
         <div class="phase-header">
@@ -396,6 +415,7 @@
             <div class="form-group">
               <label class="form-label">Current Phase</label>
               <select class="form-select" id="currentPhase">
+                <option value="booked">📅 Booked Meeting</option>
                 <option value="preparing">Preparing</option>
                 <option value="testing">Testing</option>
                 <option value="running">Running</option>
