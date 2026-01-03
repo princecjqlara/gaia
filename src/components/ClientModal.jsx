@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import TagSelector from './TagSelector';
+import { getSupabaseClient } from '../services/supabase';
 
 const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   const [activeTab, setActiveTab] = useState('basic');
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [notesMedia, setNotesMedia] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({});
   const [formData, setFormData] = useState({
-    projectName: '',
     clientName: '',
     businessName: '',
     contactDetails: '',
@@ -37,19 +41,76 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
     nextPhaseDate: '',
     subscriptionUsage: 0,
     testingRound: 1,
-    remainingCredits: 0
+    videosUsed: 0,
+    mainVideosUsed: 0,
+    photosUsed: 0,
+    meetingMinutesUsed: 0
   });
+
+  // Load available users
+  useEffect(() => {
+    const loadUsers = async () => {
+      const client = getSupabaseClient();
+      if (!client) return;
+
+      try {
+        const { data, error } = await client
+          .from('users')
+          .select('id, name, email')
+          .order('name');
+
+        if (error) {
+          console.error('Error loading users:', error);
+          return;
+        }
+        setAvailableUsers(data || []);
+      } catch (err) {
+        console.error('Exception loading users:', err);
+      }
+    };
+
+    loadUsers();
+  }, []);
 
   useEffect(() => {
     if (client) {
       const customPkg = client.customPackage || {};
+      const usageDetail = client.subscriptionUsageDetail || {
+        videosUsed: 0,
+        mainVideosUsed: 0,
+        photosUsed: 0,
+        meetingMinutesUsed: 0
+      };
+      // Handle assignedTo - could be UUID or name string
+      let assignedToValue = client.assignedTo || '';
+      if (assignedToValue && availableUsers.length > 0) {
+        // Check if it's already a UUID that exists in our user list
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignedToValue);
+        if (isUUID) {
+          // Verify the UUID exists in available users
+          const userExists = availableUsers.some(u => u.id === assignedToValue);
+          if (!userExists) {
+            assignedToValue = ''; // Clear if user doesn't exist
+          }
+        } else {
+          // It's a name string, try to find matching user
+          const matchingUser = availableUsers.find(
+            u => u.name === assignedToValue || u.email === assignedToValue
+          );
+          if (matchingUser) {
+            assignedToValue = matchingUser.id;
+          } else {
+            assignedToValue = ''; // Clear if no match found
+          }
+        }
+      }
+      
       setFormData({
-        projectName: client.projectName || '',
         clientName: client.clientName || '',
         businessName: client.businessName || '',
         contactDetails: client.contactDetails || '',
         pageLink: client.pageLink || '',
-        assignedTo: client.assignedTo || '',
+        assignedTo: assignedToValue,
         adsExpense: client.adsExpense || 0,
         notes: client.notes || '',
         tags: (client.tags || []).join(', '),
@@ -77,13 +138,104 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         nextPhaseDate: client.nextPhaseDate || '',
         subscriptionUsage: client.subscriptionUsage || 0,
         testingRound: client.testingRound || 1,
-        remainingCredits: client.remainingCredits || 0
+        videosUsed: usageDetail.videosUsed || 0,
+        mainVideosUsed: usageDetail.mainVideosUsed || 0,
+        photosUsed: usageDetail.photosUsed || 0,
+        meetingMinutesUsed: usageDetail.meetingMinutesUsed || 0
       });
+      // Load notes media
+      setNotesMedia(client.notesMedia || []);
     } else {
       // Reset form when creating new client
       setActiveTab('basic');
+      setNotesMedia([]);
     }
   }, [client]);
+
+  const handleFileUpload = async (files) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      alert('Supabase not initialized. Please refresh the page.');
+      return;
+    }
+
+    setUploading(true);
+    const uploadedFiles = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+          continue;
+        }
+
+        // Generate unique filename
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `client-notes/${clientId || 'new'}/${fileName}`;
+
+        // Upload to Supabase Storage
+        setUploadProgress({ ...uploadProgress, [file.name]: 0 });
+        
+        const { data, error } = await supabase.storage
+          .from('client-media')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error('Upload error:', error);
+          alert(`Failed to upload ${file.name}: ${error.message}`);
+          continue;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('client-media')
+          .getPublicUrl(filePath);
+
+        uploadedFiles.push({
+          id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+          filename: file.name,
+          url: urlData.publicUrl,
+          path: filePath,
+          type: file.type,
+          size: file.size,
+          uploadedAt: new Date().toISOString()
+        });
+
+        setUploadProgress({ ...uploadProgress, [file.name]: 100 });
+      }
+
+      // Add uploaded files to notesMedia
+      setNotesMedia([...notesMedia, ...uploadedFiles]);
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      alert('Error uploading files. Please try again.');
+    } finally {
+      setUploading(false);
+      setUploadProgress({});
+    }
+  };
+
+  const handleRemoveMedia = async (mediaItem) => {
+    const supabase = getSupabaseClient();
+    if (supabase && mediaItem.path) {
+      try {
+        // Delete from storage
+        await supabase.storage
+          .from('client-media')
+          .remove([mediaItem.path]);
+      } catch (error) {
+        console.error('Error deleting file:', error);
+      }
+    }
+    
+    // Remove from state
+    setNotesMedia(notesMedia.filter(m => m.id !== mediaItem.id));
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -109,7 +261,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
     }
 
     onSave({
-      projectName: formData.projectName,
       clientName: formData.clientName,
       businessName: formData.businessName,
       contactDetails: formData.contactDetails,
@@ -117,6 +268,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       assignedTo: formData.assignedTo,
       adsExpense: formData.adsExpense || 0,
       notes: formData.notes,
+      notesMedia: notesMedia,
       tags,
       package: formData.package,
       customPackage,
@@ -130,7 +282,12 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       nextPhaseDate: formData.nextPhaseDate,
       subscriptionUsage: formData.subscriptionUsage || 0,
       testingRound: formData.testingRound || 1,
-      remainingCredits: formData.remainingCredits || 0,
+      subscriptionUsageDetail: {
+        videosUsed: formData.videosUsed || 0,
+        mainVideosUsed: formData.mainVideosUsed || 0,
+        photosUsed: formData.photosUsed || 0,
+        meetingMinutesUsed: formData.meetingMinutesUsed || 0
+      },
       subscriptionStarted: formData.phase === 'testing' || formData.phase === 'running'
     });
   };
@@ -163,16 +320,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
               <div className={`tab-content ${activeTab === 'basic' ? 'active' : ''}`}>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Project Name *</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      required
-                      value={formData.projectName}
-                      onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
                     <label className="form-label">Client Name *</label>
                     <input
                       type="text"
@@ -182,8 +329,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                       onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
                     />
                   </div>
-                </div>
-                <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Business Name *</label>
                     <input
@@ -194,6 +339,8 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                       onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
                     />
                   </div>
+                </div>
+                <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Contact Details</label>
                     <input
@@ -215,13 +362,18 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Assigned To</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.assignedTo}
+                  <select
+                    className="form-select"
+                    value={formData.assignedTo || ''}
                     onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
-                    placeholder="Who is handling this client?"
-                  />
+                  >
+                    <option value="">— Select User —</option>
+                    {availableUsers.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} {user.email ? `(${user.email})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Notes</label>
@@ -230,16 +382,156 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     placeholder="Additional notes about the client..."
+                    rows={4}
                   />
+                  
+                  {/* Media Upload Section */}
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.875rem', marginBottom: '0.5rem', display: 'block' }}>
+                      Attach Media (Images, Videos, Documents)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+                      onChange={(e) => handleFileUpload(e.target.files)}
+                      disabled={uploading}
+                      style={{ display: 'none' }}
+                      id="notes-media-upload"
+                    />
+                    <label
+                      htmlFor="notes-media-upload"
+                      className="btn btn-secondary"
+                      style={{
+                        display: 'inline-block',
+                        cursor: uploading ? 'not-allowed' : 'pointer',
+                        opacity: uploading ? 0.6 : 1,
+                        marginBottom: '0.75rem'
+                      }}
+                    >
+                      {uploading ? '⏳ Uploading...' : '📎 Upload Files'}
+                    </label>
+                    
+                    {/* Upload Progress */}
+                    {Object.keys(uploadProgress).length > 0 && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {Object.entries(uploadProgress).map(([filename, progress]) => (
+                          <div key={filename} style={{ marginBottom: '0.25rem' }}>
+                            {filename}: {progress}%
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Media Preview */}
+                    {notesMedia.length > 0 && (
+                      <div style={{
+                        marginTop: '0.75rem',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                        gap: '0.75rem'
+                      }}>
+                        {notesMedia.map((media) => (
+                          <div
+                            key={media.id}
+                            style={{
+                              position: 'relative',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '4px',
+                              overflow: 'hidden',
+                              background: 'var(--bg-secondary)'
+                            }}
+                          >
+                            {media.type?.startsWith('image/') ? (
+                              <img
+                                src={media.url}
+                                alt={media.filename}
+                                style={{
+                                  width: '100%',
+                                  height: '100px',
+                                  objectFit: 'cover',
+                                  display: 'block'
+                                }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : (
+                              <div style={{
+                                width: '100%',
+                                height: '100px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'var(--bg-tertiary)',
+                                fontSize: '2rem'
+                              }}>
+                                {media.type?.startsWith('video/') ? '🎥' : '📄'}
+                              </div>
+                            )}
+                            <div style={{
+                              padding: '0.5rem',
+                              fontSize: '0.75rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {media.filename}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMedia(media)}
+                              style={{
+                                position: 'absolute',
+                                top: '0.25rem',
+                                right: '0.25rem',
+                                background: 'rgba(0, 0, 0, 0.7)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '24px',
+                                height: '24px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.875rem'
+                              }}
+                              title="Remove"
+                            >
+                              ×
+                            </button>
+                            <a
+                              href={media.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                position: 'absolute',
+                                bottom: '0.25rem',
+                                right: '0.25rem',
+                                background: 'rgba(0, 0, 0, 0.7)',
+                                color: 'white',
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                textDecoration: 'none'
+                              }}
+                              title="Open in new tab"
+                            >
+                              🔗
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Tags</label>
-                  <input
-                    type="text"
-                    className="form-input"
+                  <TagSelector
                     value={formData.tags}
-                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="Enter tags separated by commas (e.g., VIP, New, Priority)"
+                    onChange={(tags) => setFormData({ ...formData, tags })}
                   />
                 </div>
               </div>
@@ -460,19 +752,61 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Remaining Subscription Credits</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={formData.remainingCredits}
-                    onChange={(e) => setFormData({ ...formData, remainingCredits: parseInt(e.target.value) || 0 })}
-                    min="0"
-                    placeholder="0"
-                  />
-                  <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem', display: 'block' }}>
-                    Number of credits remaining in the client's subscription
+                <div className="form-group" style={{ marginTop: 'var(--space-lg)' }}>
+                  <label className="form-label" style={{ fontSize: '1rem', fontWeight: '600', marginBottom: 'var(--space-md)' }}>
+                    Subscription Usage (Items Used)
+                  </label>
+                  <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: 'var(--space-md)', display: 'block' }}>
+                    Track how many items the client has already used from their subscription
                   </small>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">15-sec Videos Used</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={formData.videosUsed}
+                        onChange={(e) => setFormData({ ...formData, videosUsed: parseInt(e.target.value) || 0 })}
+                        min="0"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Main Videos Used</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={formData.mainVideosUsed}
+                        onChange={(e) => setFormData({ ...formData, mainVideosUsed: parseInt(e.target.value) || 0 })}
+                        min="0"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Photos Used</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={formData.photosUsed}
+                        onChange={(e) => setFormData({ ...formData, photosUsed: parseInt(e.target.value) || 0 })}
+                        min="0"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Meeting Minutes Used</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={formData.meetingMinutesUsed}
+                        onChange={(e) => setFormData({ ...formData, meetingMinutesUsed: parseInt(e.target.value) || 0 })}
+                        min="0"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
