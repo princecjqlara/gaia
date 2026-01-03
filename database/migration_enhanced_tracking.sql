@@ -2,7 +2,7 @@
 -- Run this in Supabase SQL Editor
 
 -- ============================================
--- 1. Add status and notes columns to calendar_events
+-- 1. Add missing columns to calendar_events
 -- ============================================
 ALTER TABLE calendar_events 
 ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'scheduled' 
@@ -10,6 +10,12 @@ ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'scheduled'
 
 ALTER TABLE calendar_events 
 ADD COLUMN IF NOT EXISTS notes TEXT;
+
+ALTER TABLE calendar_events 
+ADD COLUMN IF NOT EXISTS attendees UUID[] DEFAULT '{}';
+
+ALTER TABLE calendar_events 
+ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;
 
 -- ============================================
 -- 2. Add subscription tracking to clients
