@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const LoginModal = ({ onLogin, onSignUp, onOfflineMode }) => {
-  const [isSignUp, setIsSignUp] = useState(false);
+const LoginModal = ({ onLogin, onSignUp, isSignUpMode = false, onClose }) => {
+  const [isSignUp, setIsSignUp] = useState(isSignUpMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Sync with prop
+  useEffect(() => {
+    setIsSignUp(isSignUpMode);
+  }, [isSignUpMode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,8 +49,9 @@ const LoginModal = ({ onLogin, onSignUp, onOfflineMode }) => {
       <div className="modal" style={{ maxWidth: '400px' }}>
         <div className="modal-header">
           <h3 className="modal-title">
-            {isSignUp ? '📝 Sign Up for Campy' : '🔐 Sign In to Campy'}
+            {isSignUp ? '📝 Create Account' : '🔐 Sign In'}
           </h3>
+          {onClose && <button className="modal-close" onClick={onClose}>✕</button>}
         </div>
         <div className="modal-body">
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
@@ -141,20 +147,15 @@ const LoginModal = ({ onLogin, onSignUp, onOfflineMode }) => {
                 {success}
               </div>
             )}
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
+            <button
+              type="submit"
+              className="btn btn-primary"
               style={{ width: '100%' }}
               disabled={loading}
             >
               {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
             </button>
           </form>
-          {!isSignUp && (
-            <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-              Use offline mode? <a href="#" onClick={(e) => { e.preventDefault(); onOfflineMode(); }} style={{ color: 'var(--accent)' }}>Continue without login</a>
-            </p>
-          )}
         </div>
       </div>
     </div>

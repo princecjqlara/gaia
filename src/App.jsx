@@ -13,6 +13,7 @@ import ReportsDashboard from './components/ReportsDashboard';
 import CalendarView from './components/CalendarView';
 import HistoryModal from './components/HistoryModal';
 import LoginModal from './components/LoginModal';
+import LandingPage from './components/LandingPage';
 import ToastContainer from './components/ToastContainer';
 import MeetingRoom from './components/MeetingRoom';
 import { useSupabase } from './hooks/useSupabase';
@@ -28,7 +29,9 @@ function App() {
   const [theme, setTheme] = useState('dark');
   const [role, setRole] = useState('user');
   const [currentUserName, setCurrentUserName] = useState('User 1');
+  const [showLandingPage, setShowLandingPage] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAdminSettings, setShowAdminSettings] = useState(false);
@@ -109,14 +112,12 @@ function App() {
           if (users) setAllUsers(users);
           // Role will be set by the useEffect that watches currentUserProfile
         } else {
-          setShowLoginModal(true);
+          // Not logged in - show landing page
+          setShowLandingPage(true);
         }
       } else {
-        // Offline mode
-        setShowLoginModal(false);
-        const savedRole = settings.role || 'user';
-        setRole(savedRole);
-        document.documentElement.dataset.role = savedRole;
+        // No Supabase - show landing page
+        setShowLandingPage(true);
       }
     };
 
@@ -470,11 +471,31 @@ function App() {
         />
       )}
 
+      {showLandingPage && !currentUser && !showMeetingRoom && (
+        <LandingPage
+          onLogin={() => {
+            setIsSignUpMode(false);
+            setShowLoginModal(true);
+          }}
+          onSignUp={() => {
+            setIsSignUpMode(true);
+            setShowLoginModal(true);
+          }}
+        />
+      )}
+
       {showLoginModal && (
         <LoginModal
-          onLogin={handleLogin}
-          onSignUp={handleSignUp}
-          onOfflineMode={handleEnterOfflineMode}
+          onLogin={async (email, password) => {
+            await handleLogin(email, password);
+            setShowLoginModal(false);
+            setShowLandingPage(false);
+          }}
+          onSignUp={async (email, password, name) => {
+            await handleSignUp(email, password, name);
+          }}
+          isSignUpMode={isSignUpMode}
+          onClose={() => setShowLoginModal(false)}
         />
       )}
 
