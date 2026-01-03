@@ -196,9 +196,10 @@ const MeetingRoom = ({
         }
     };
 
-    // Start local video
+    // Start local video (camera is optional)
     const startLocalVideo = async () => {
         try {
+            // Try to get both video and audio
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: true,
                 audio: true
@@ -208,8 +209,21 @@ const MeetingRoom = ({
                 localVideoRef.current.srcObject = stream;
             }
         } catch (e) {
-            console.error('Failed to get media:', e);
-            setError('Camera/microphone access denied');
+            console.warn('Failed to get video, trying audio only:', e);
+            // Try audio only if video fails
+            try {
+                const audioStream = await navigator.mediaDevices.getUserMedia({
+                    video: false,
+                    audio: true
+                });
+                localStreamRef.current = audioStream;
+                setIsVideoOff(true); // Mark video as off
+            } catch (audioError) {
+                console.warn('No media devices available:', audioError);
+                // Allow user to join without any media - just captions/presence
+                setIsVideoOff(true);
+                setIsMuted(true);
+            }
         }
     };
 
@@ -224,9 +238,12 @@ const MeetingRoom = ({
         if (localStreamRef.current) {
             const audioTrack = localStreamRef.current.getAudioTracks()[0];
             if (audioTrack) {
-                audioTrack.enabled = isMuted;
-                setIsMuted(!isMuted);
+                // Fix: toggle to the opposite of current muted state
+                audioTrack.enabled = !audioTrack.enabled;
+                setIsMuted(!audioTrack.enabled);
             }
+        } else {
+            setIsMuted(!isMuted);
         }
     };
 
@@ -235,9 +252,15 @@ const MeetingRoom = ({
         if (localStreamRef.current) {
             const videoTrack = localStreamRef.current.getVideoTracks()[0];
             if (videoTrack) {
-                videoTrack.enabled = isVideoOff;
-                setIsVideoOff(!isVideoOff);
+                // Fix: toggle to the opposite of current state
+                videoTrack.enabled = !videoTrack.enabled;
+                setIsVideoOff(!videoTrack.enabled);
+            } else {
+                // No video track available
+                setIsVideoOff(true);
             }
+        } else {
+            setIsVideoOff(!isVideoOff);
         }
     };
 
