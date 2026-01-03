@@ -17,46 +17,29 @@ export const notificationService = {
 
       try {
         const startDate = new Date(clientRecord.startDate);
-        if (isNaN(startDate.getTime())) continue; // Invalid date
-        
+        if (isNaN(startDate.getTime())) continue;
+
         const monthsWithClient = clientRecord.monthsWithClient || 0;
-        
-        // Calculate next payment date (simplified for monthly)
+
         if (clientRecord.paymentSchedule === 'monthly') {
           const nextPaymentDate = new Date(startDate);
           nextPaymentDate.setMonth(nextPaymentDate.getMonth() + monthsWithClient + 1);
-          
+
           const daysUntilDue = Math.ceil((nextPaymentDate - now) / (1000 * 60 * 60 * 24));
-          
-          // Create notification if payment is due in 3 days or less
+
           if (daysUntilDue <= 3) {
             const isOverdue = daysUntilDue < 0;
             const notificationType = isOverdue ? 'payment_overdue' : 'payment_due';
             const priority = isOverdue ? 'urgent' : 'high';
-            
-            // Get user ID from assignedTo (could be user ID or name)
+
             let targetUserId = defaultUserId;
             if (clientRecord.assignedTo) {
-              // If assignedTo is a UUID, use it; otherwise try to find user by name
               const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
               if (uuidRegex.test(clientRecord.assignedTo)) {
                 targetUserId = clientRecord.assignedTo;
-              } else {
-                // Try to find user by name/email
-                const { data: users } = await client
-                  .from('users')
-                  .select('id')
-                  .or(`name.eq.${clientRecord.assignedTo},email.eq.${clientRecord.assignedTo}`)
-                  .limit(1)
-                  .maybeSingle()
-                  .catch(() => ({ data: null }));
-                
-                if (users?.id) {
-                  targetUserId = users.id;
-                }
               }
             }
-            
+
             if (targetUserId) {
               await this.createNotification({
                 user_id: targetUserId,
@@ -74,6 +57,104 @@ export const notificationService = {
       } catch (error) {
         console.error('Error processing payment notification for client:', clientRecord.id, error);
       }
+    }
+  },
+
+  // Notify about meeting reschedule
+  async notifyMeetingRescheduled(meeting, clientName, assignedUserId, reschedulerName) {
+    if (!assignedUserId) return;
+
+    const meetingTime = new Date(meeting.start_time).toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    await this.createNotification({
+      user_id: assignedUserId,
+      type: 'meeting_rescheduled',
+      title: `Meeting Rescheduled: ${meeting.title}`,
+      message: `Meeting "${meeting.title}" for ${clientName} has been rescheduled by ${reschedulerName}. New time: ${meetingTime}`,
+      related_client_id: meeting.client_id,
+      related_entity_type: 'meeting',
+      priority: 'high',
+      action_url: `#calendar`
+    });
+  },
+
+  // Notify about meeting cancelled
+  async notifyMeetingCancelled(meeting, clientName, assignedUserId, cancellerName) {
+    if (!assignedUserId) return;
+
+    await this.createNotification({
+      user_id: assignedUserId,
+      type: 'meeting_cancelled',
+      title: `Meeting Cancelled: ${meeting.title}`,
+      message: `Meeting "${meeting.title}" for ${clientName} has been cancelled by ${cancellerName}.`,
+      related_client_id: meeting.client_id,
+      related_entity_type: 'meeting',
+      priority: 'normal',
+      action_url: `#calendar`
+    });
+  },
+
+  // Notify about meeting completed
+  async notifyMeetingCompleted(meeting, clientName, assignedUserId, notes) {
+    if (!assignedUserId) return;
+
+    await this.createNotification({
+      user_id: assignedUserId,
+      type: 'meeting_done',
+      title: `Meeting Completed: ${meeting.title}`,
+      message: notes ? `Meeting notes: ${notes.substring(0, 100)}${notes.length > 100 ? '...' : ''}` : `Meeting "${meeting.title}" for ${clientName} has been marked as done.`,
+      related_client_id: meeting.client_id,
+      related_entity_type: 'meeting',
+      priority: 'normal',
+      action_url: `#calendar`
+    });
+  },
+
+  // Admin send message to user
+  async sendAdminMessage(targetUserId, title, message, senderId) {
+    await this.createNotification({
+      user_id: targetUserId,
+      type: 'admin_message',
+      title: title,
+      message: message,
+      related_entity_type: 'message',
+      related_entity_id: senderId,
+      priority: 'high',
+      action_url: `#notifications`
+    }, true); // Force create even if similar exists
+  },
+
+  // User reply to notification
+  async replyToNotification(originalNotificationId, replyMessage, senderId, recipientId) {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    try {
+      // Get original notification
+      const { data: original } = await client
+        .from('notifications')
+        .select('title')
+        .eq('id', originalNotificationId)
+        .single();
+
+      await this.createNotification({
+        user_id: recipientId,
+        type: 'message_reply',
+        title: `Reply: ${original?.title || 'Message'}`,
+        message: replyMessage,
+        related_entity_type: 'message',
+        related_entity_id: originalNotificationId,
+        priority: 'normal',
+        action_url: `#notifications`
+      }, true);
+
+      return true;
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      return false;
     }
   },
 
@@ -120,30 +201,31 @@ export const notificationService = {
   },
 
   // Generic notification creator
-  async createNotification(notificationData) {
+  async createNotification(notificationData, forceCreate = false) {
     const client = getSupabaseClient();
     if (!client) return false;
 
     try {
       // Check if notifications table exists (graceful degradation)
-      const { data: existing } = await client
-        .from('notifications')
-        .select('id')
-        .eq('user_id', notificationData.user_id)
-        .eq('type', notificationData.type)
-        .eq('related_client_id', notificationData.related_client_id)
-        .eq('read', false)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-        .catch(() => ({ data: null })); // If table doesn't exist, continue
+      if (!forceCreate) {
+        const { data: existing } = await client
+          .from('notifications')
+          .select('id, created_at')
+          .eq('user_id', notificationData.user_id)
+          .eq('type', notificationData.type)
+          .eq('related_client_id', notificationData.related_client_id || '')
+          .eq('read', false)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .catch(() => ({ data: null }));
 
-      // Only create if no recent unread notification exists
-      if (existing?.data) {
-        const existingDate = new Date(existing.data.created_at);
-        const hoursSince = (new Date() - existingDate) / (1000 * 60 * 60);
-        if (hoursSince < 24) {
-          return false; // Don't create duplicate within 24 hours
+        if (existing) {
+          const existingDate = new Date(existing.created_at);
+          const hoursSince = (new Date() - existingDate) / (1000 * 60 * 60);
+          if (hoursSince < 24) {
+            return false;
+          }
         }
       }
 
@@ -152,16 +234,14 @@ export const notificationService = {
         .insert(notificationData);
 
       if (error) {
-        // If table doesn't exist, just log and continue
         if (error.code === '42P01') {
-          console.warn('Notifications table not found. Run database migration.');
+          console.warn('Notifications table not found.');
           return false;
         }
         throw error;
       }
       return true;
     } catch (error) {
-      // Gracefully handle errors (table might not exist yet)
       if (error.code !== '42P01') {
         console.error('Error creating notification:', error);
       }
@@ -169,4 +249,3 @@ export const notificationService = {
     }
   }
 };
-

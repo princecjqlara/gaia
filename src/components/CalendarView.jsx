@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabaseClient } from '../services/supabase';
+import { notificationService } from '../services/notificationService';
 
-const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) => {
+const CalendarView = ({ clients, isOpen, onClose, currentUserId, currentUserName, users = [] }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,6 +10,7 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
   const [showMeetingDetails, setShowMeetingDetails] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [meetingForm, setMeetingForm] = useState({
     title: '',
     description: '',
@@ -23,6 +25,12 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
     if (isOpen) {
       loadEvents();
     }
@@ -32,7 +40,7 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
     if (isOpen && clients) {
       const clientEvents = generateClientEvents();
       setEvents(prev => {
-        const dbEvents = prev.filter(e => !e.id?.startsWith?.('payment-') && !e.id?.startsWith?.('phase-') && !e.id?.startsWith?.('milestone-'));
+        const dbEvents = prev.filter(e => !e.id?.startsWith?.('payment-') && !e.id?.startsWith?.('phase-'));
         return [...dbEvents, ...clientEvents];
       });
     }
@@ -54,15 +62,7 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
         .lte('start_time', endOfMonth.toISOString())
         .order('start_time');
 
-      if (error) {
-        if (error.code === '42P01') {
-          console.warn('Calendar events table not found.');
-          setEvents([]);
-        } else {
-          console.error('Error loading calendar events:', error);
-          setEvents([]);
-        }
-      } else {
+      if (!error) {
         setEvents(data || []);
       }
     } catch (error) {
@@ -77,55 +77,32 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
     if (!clients || !Array.isArray(clients)) return clientEvents;
 
     clients.forEach(client => {
-      if (!client) return;
+      if (!client?.startDate) return;
+      const startDate = new Date(client.startDate);
+      if (isNaN(startDate.getTime())) return;
 
-      if (client.startDate) {
-        const startDate = new Date(client.startDate);
-        if (isNaN(startDate.getTime())) return;
+      if (client.paymentSchedule === 'monthly') {
+        const dueDate = new Date(startDate);
+        dueDate.setMonth(dueDate.getMonth() + (client.monthsWithClient || 0) + 1);
 
-        if (client.paymentSchedule === 'monthly') {
-          for (let i = 0; i < 12; i++) {
-            const dueDate = new Date(startDate);
-            dueDate.setMonth(dueDate.getMonth() + i);
-
-            if (dueDate.getMonth() === currentDate.getMonth() &&
-              dueDate.getFullYear() === currentDate.getFullYear()) {
-              clientEvents.push({
-                id: `payment-${client.id}-${i}`,
-                title: `💰 Payment: ${client.clientName || 'Unknown'}`,
-                start_time: dueDate.toISOString(),
-                event_type: 'payment_due',
-                client_id: client.id,
-                color: client.paymentStatus === 'paid' ? '#22c55e' : client.paymentStatus === 'partial' ? '#f59e0b' : '#ef4444'
-              });
-            }
-          }
-        }
-
-        if (client.nextPhaseDate) {
-          const phaseDate = new Date(client.nextPhaseDate);
-          if (!isNaN(phaseDate.getTime()) &&
-            phaseDate.getMonth() === currentDate.getMonth() &&
-            phaseDate.getFullYear() === currentDate.getFullYear()) {
-            clientEvents.push({
-              id: `phase-${client.id}`,
-              title: `🔄 Phase: ${client.clientName || 'Unknown'}`,
-              start_time: phaseDate.toISOString(),
-              event_type: 'phase_transition',
-              client_id: client.id,
-              color: '#3b82f6'
-            });
-          }
+        if (dueDate.getMonth() === currentDate.getMonth() &&
+          dueDate.getFullYear() === currentDate.getFullYear()) {
+          clientEvents.push({
+            id: `payment-${client.id}`,
+            title: `💰 ${client.clientName || 'Payment'}`,
+            start_time: dueDate.toISOString(),
+            event_type: 'payment_due',
+            client_id: client.id,
+            color: client.paymentStatus === 'paid' ? '#22c55e' : '#ef4444'
+          });
         }
       }
     });
-
     return clientEvents;
   };
 
   const handleScheduleMeeting = (date) => {
     const dateStr = date.toISOString().split('T')[0];
-    setSelectedDate(date);
     setMeetingForm({
       title: '',
       description: '',
@@ -140,26 +117,15 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
     setShowMeetingForm(true);
   };
 
-  const handleViewMeeting = (event) => {
-    setSelectedMeeting(event);
-    setShowMeetingDetails(true);
-  };
-
   const handleSaveMeeting = async () => {
     const client = getSupabaseClient();
-    if (!client) {
-      alert('Not connected to database');
-      return;
-    }
-
-    if (!meetingForm.title.trim()) {
+    if (!client || !meetingForm.title.trim()) {
       alert('Please enter a meeting title');
       return;
     }
 
     try {
       setSaving(true);
-
       const eventData = {
         title: meetingForm.title,
         description: meetingForm.description,
@@ -168,8 +134,8 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
         start_time: new Date(meetingForm.start_time).toISOString(),
         end_time: new Date(meetingForm.end_time).toISOString(),
         event_type: 'meeting',
-        status: meetingForm.status || 'scheduled',
-        notes: meetingForm.notes || '',
+        status: 'scheduled',
+        notes: '',
         created_by: currentUserId
       };
 
@@ -179,19 +145,14 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
         .select()
         .single();
 
-      if (error) {
-        console.error('Error saving meeting:', error);
-        alert('Failed to save meeting: ' + error.message);
-        return;
-      }
+      if (error) throw error;
 
       setEvents(prev => [...prev, { ...data, color: '#3b82f6' }]);
       setShowMeetingForm(false);
-      alert('Meeting scheduled!');
 
     } catch (error) {
       console.error('Error saving meeting:', error);
-      alert('Failed to save meeting');
+      alert('Failed to save meeting: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -203,58 +164,56 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
 
     try {
       setSaving(true);
+      const oldStatus = selectedMeeting.status;
 
       const { error } = await client
         .from('calendar_events')
-        .update({
-          status: status,
-          notes: notes,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status, notes, updated_at: new Date().toISOString() })
         .eq('id', selectedMeeting.id);
 
-      if (error) {
-        console.error('Error updating meeting:', error);
-        alert('Failed to update meeting');
-        return;
+      if (error) throw error;
+
+      // Get assigned user for the client
+      const meetingClient = clients?.find(c => c.id === selectedMeeting.client_id);
+      const assignedUserId = meetingClient?.assignedTo;
+      const clientName = meetingClient?.clientName || 'Unknown';
+
+      // Send notifications based on status change
+      if (status === 'rescheduled' && oldStatus !== 'rescheduled') {
+        await notificationService.notifyMeetingRescheduled(
+          selectedMeeting, clientName, assignedUserId, currentUserName || 'Admin'
+        );
+      } else if (status === 'cancelled' && oldStatus !== 'cancelled') {
+        await notificationService.notifyMeetingCancelled(
+          selectedMeeting, clientName, assignedUserId, currentUserName || 'Admin'
+        );
+      } else if (status === 'done' && oldStatus !== 'done') {
+        await notificationService.notifyMeetingCompleted(
+          selectedMeeting, clientName, assignedUserId, notes
+        );
       }
 
-      // Update local state
-      setEvents(prev => prev.map(e =>
-        e.id === selectedMeeting.id ? { ...e, status, notes } : e
-      ));
+      setEvents(prev => prev.map(e => e.id === selectedMeeting.id ? { ...e, status, notes } : e));
       setShowMeetingDetails(false);
       setSelectedMeeting(null);
-      alert('Meeting updated!');
 
     } catch (error) {
       console.error('Error updating meeting:', error);
+      alert('Failed to update meeting');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteEvent = async (eventId) => {
-    if (!eventId || typeof eventId === 'string' && (eventId.startsWith('payment-') || eventId.startsWith('phase-') || eventId.startsWith('milestone-'))) {
-      return;
-    }
-
-    if (!confirm('Delete this event?')) return;
+    if (!eventId || (typeof eventId === 'string' && eventId.startsWith('payment-'))) return;
+    if (!confirm('Delete this meeting?')) return;
 
     const client = getSupabaseClient();
     if (!client) return;
 
     try {
-      const { error } = await client
-        .from('calendar_events')
-        .delete()
-        .eq('id', eventId);
-
-      if (error) {
-        console.error('Error deleting event:', error);
-        return;
-      }
-
+      await client.from('calendar_events').delete().eq('id', eventId);
       setEvents(prev => prev.filter(e => e.id !== eventId));
       setShowMeetingDetails(false);
     } catch (error) {
@@ -262,48 +221,30 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
     }
   };
 
-  const getClientName = (clientId) => {
-    const client = clients?.find(c => c.id === clientId);
-    return client?.clientName || client?.businessName || 'Unknown';
-  };
-
-  const getUserName = (userId) => {
-    const user = users?.find(u => u.id === userId);
-    return user?.name || 'Unknown';
-  };
+  const getClientName = (clientId) => clients?.find(c => c.id === clientId)?.clientName || 'Unknown';
 
   const getDaysInMonth = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = [];
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null);
-    }
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day));
-    }
+    for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+    for (let day = 1; day <= daysInMonth; day++) days.push(new Date(year, month, day));
     return days;
   };
 
   const getEventsForDate = (date) => {
     if (!date) return [];
     const dateStr = date.toISOString().split('T')[0];
-    return events.filter(event => {
-      const eventDate = new Date(event.start_time).toISOString().split('T')[0];
-      return eventDate === dateStr;
-    });
+    return events.filter(e => new Date(e.start_time).toISOString().split('T')[0] === dateStr);
   };
 
-  const navigateMonth = (direction) => {
+  const navigateMonth = (dir) => {
     setCurrentDate(prev => {
-      const newDate = new Date(prev);
-      newDate.setMonth(prev.getMonth() + direction);
-      return newDate;
+      const d = new Date(prev);
+      d.setMonth(prev.getMonth() + dir);
+      return d;
     });
   };
 
@@ -312,99 +253,81 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
     if (event.status === 'cancelled') return '#6b7280';
     if (event.status === 'rescheduled') return '#f59e0b';
     if (event.color) return event.color;
-    if (event.event_type === 'meeting') return '#3b82f6';
-    return '#6b7280';
+    return '#3b82f6';
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'done': return { bg: '#22c55e', text: 'Done' };
-      case 'rescheduled': return { bg: '#f59e0b', text: 'Rescheduled' };
-      case 'cancelled': return { bg: '#6b7280', text: 'Cancelled' };
-      default: return { bg: '#3b82f6', text: 'Scheduled' };
-    }
-  };
-
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dayNames = isMobile ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   if (!isOpen) return null;
 
-  const days = getDaysInMonth();
-
   return (
     <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1100px', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div className="modal-header">
-          <h3 className="modal-title">📅 Calendar</h3>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{
+        maxWidth: isMobile ? '100%' : '900px',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        margin: isMobile ? '0' : '2rem auto',
+        borderRadius: isMobile ? '0' : '8px',
+        width: isMobile ? '100%' : 'auto',
+        height: isMobile ? '100%' : 'auto'
+      }}>
+        <div className="modal-header" style={{ padding: isMobile ? '0.75rem' : '1rem' }}>
+          <h3 className="modal-title" style={{ fontSize: isMobile ? '1rem' : '1.25rem' }}>📅 Calendar</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body" style={{ padding: isMobile ? '0.5rem' : '1rem' }}>
           {/* Navigation */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <button className="btn btn-secondary" onClick={() => navigateMonth(-1)}>← Prev</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <h4 style={{ margin: 0 }}>{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h4>
-              <button className="btn btn-primary" onClick={() => handleScheduleMeeting(new Date())}>+ Meeting</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem' }}>
+            <button className="btn btn-secondary" onClick={() => navigateMonth(-1)} style={{ padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>←</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span style={{ fontWeight: '600', fontSize: isMobile ? '0.875rem' : '1rem' }}>
+                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+              </span>
+              <button className="btn btn-primary" onClick={() => handleScheduleMeeting(new Date())} style={{ padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', fontSize: isMobile ? '0.7rem' : '0.875rem' }}>
+                {isMobile ? '+' : '+ Meeting'}
+              </button>
             </div>
-            <button className="btn btn-secondary" onClick={() => navigateMonth(1)}>Next →</button>
+            <button className="btn btn-secondary" onClick={() => navigateMonth(1)} style={{ padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>→</button>
           </div>
 
           {/* Calendar Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
             {dayNames.map(day => (
-              <div key={day} style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', background: 'var(--bg-secondary)', fontSize: '0.75rem' }}>{day}</div>
+              <div key={day} style={{ padding: isMobile ? '0.25rem' : '0.5rem', textAlign: 'center', fontWeight: '600', background: 'var(--bg-secondary)', fontSize: isMobile ? '0.65rem' : '0.75rem' }}>{day}</div>
             ))}
-            {days.map((date, index) => {
+            {getDaysInMonth().map((date, i) => {
               const dayEvents = getEventsForDate(date);
               const isToday = date && date.toDateString() === new Date().toDateString();
-
               return (
                 <div
-                  key={index}
+                  key={i}
                   onClick={() => date && handleScheduleMeeting(date)}
                   style={{
-                    minHeight: '80px',
-                    padding: '0.25rem',
-                    background: isToday ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-primary)',
-                    cursor: date ? 'pointer' : 'default',
-                    borderTop: '1px solid var(--border-color)'
+                    minHeight: isMobile ? '50px' : '70px',
+                    padding: '2px',
+                    background: isToday ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-primary)',
+                    cursor: date ? 'pointer' : 'default'
                   }}
                 >
                   {date && (
                     <>
-                      <div style={{ fontWeight: isToday ? 'bold' : 'normal', fontSize: '0.75rem', marginBottom: '0.25rem', color: isToday ? 'var(--primary)' : 'var(--text-primary)' }}>
+                      <div style={{ fontWeight: isToday ? 'bold' : 'normal', fontSize: isMobile ? '0.65rem' : '0.75rem', color: isToday ? 'var(--primary)' : 'var(--text-primary)', marginBottom: '1px' }}>
                         {date.getDate()}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                        {dayEvents.slice(0, 3).map(event => (
+                        {dayEvents.slice(0, isMobile ? 2 : 3).map(event => (
                           <div
                             key={event.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (event.event_type === 'meeting') {
-                                handleViewMeeting(event);
-                              }
-                            }}
-                            style={{
-                              fontSize: '0.6rem',
-                              padding: '1px 3px',
-                              background: getEventColor(event),
-                              color: 'white',
-                              borderRadius: '2px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              cursor: 'pointer'
-                            }}
+                            onClick={e => { e.stopPropagation(); if (event.event_type === 'meeting') { setSelectedMeeting(event); setShowMeetingDetails(true); } }}
+                            style={{ fontSize: isMobile ? '0.5rem' : '0.6rem', padding: '1px 2px', background: getEventColor(event), color: 'white', borderRadius: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                             title={event.title}
                           >
-                            {event.title}
+                            {isMobile ? '•' : event.title.substring(0, 12)}
                           </div>
                         ))}
-                        {dayEvents.length > 3 && (
-                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>+{dayEvents.length - 3}</div>
+                        {dayEvents.length > (isMobile ? 2 : 3) && (
+                          <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)' }}>+{dayEvents.length - (isMobile ? 2 : 3)}</div>
                         )}
                       </div>
                     </>
@@ -414,7 +337,7 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
             })}
           </div>
         </div>
-        <div className="modal-footer">
+        <div className="modal-footer" style={{ padding: isMobile ? '0.5rem' : '1rem' }}>
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
       </div>
@@ -422,62 +345,37 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
       {/* Meeting Form Modal */}
       {showMeetingForm && (
         <div className="modal-overlay active" onClick={() => setShowMeetingForm(false)} style={{ zIndex: 1001 }}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? '95%' : '450px', margin: 'auto' }}>
             <div className="modal-header">
-              <h3 className="modal-title">📅 Schedule Meeting</h3>
+              <h3 className="modal-title">📅 New Meeting</h3>
               <button className="modal-close" onClick={() => setShowMeetingForm(false)}>✕</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
                 <label className="form-label">Title *</label>
-                <input type="text" className="form-input" value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })} placeholder="Meeting title" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Description</label>
-                <textarea className="form-input" value={meetingForm.description} onChange={(e) => setMeetingForm({ ...meetingForm, description: e.target.value })} rows={2} />
+                <input type="text" className="form-input" value={meetingForm.title} onChange={e => setMeetingForm({ ...meetingForm, title: e.target.value })} placeholder="Meeting title" />
               </div>
               <div className="form-group">
                 <label className="form-label">Client</label>
-                <select className="form-select" value={meetingForm.client_id} onChange={(e) => setMeetingForm({ ...meetingForm, client_id: e.target.value })}>
-                  <option value="">— Select Client —</option>
+                <select className="form-select" value={meetingForm.client_id} onChange={e => setMeetingForm({ ...meetingForm, client_id: e.target.value })}>
+                  <option value="">— Select —</option>
                   {clients?.map(c => <option key={c.id} value={c.id}>{c.clientName || c.businessName}</option>)}
                 </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <div className="form-group">
                   <label className="form-label">Start</label>
-                  <input type="datetime-local" className="form-input" value={meetingForm.start_time} onChange={(e) => setMeetingForm({ ...meetingForm, start_time: e.target.value })} />
+                  <input type="datetime-local" className="form-input" value={meetingForm.start_time} onChange={e => setMeetingForm({ ...meetingForm, start_time: e.target.value })} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">End</label>
-                  <input type="datetime-local" className="form-input" value={meetingForm.end_time} onChange={(e) => setMeetingForm({ ...meetingForm, end_time: e.target.value })} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Attendees</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {users?.map(user => (
-                    <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={meetingForm.attendees.includes(user.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMeetingForm({ ...meetingForm, attendees: [...meetingForm.attendees, user.id] });
-                          } else {
-                            setMeetingForm({ ...meetingForm, attendees: meetingForm.attendees.filter(id => id !== user.id) });
-                          }
-                        }}
-                      />
-                      {user.name}
-                    </label>
-                  ))}
+                  <input type="datetime-local" className="form-input" value={meetingForm.end_time} onChange={e => setMeetingForm({ ...meetingForm, end_time: e.target.value })} />
                 </div>
               </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowMeetingForm(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveMeeting} disabled={saving}>{saving ? 'Saving...' : 'Schedule'}</button>
+              <button className="btn btn-primary" onClick={handleSaveMeeting} disabled={saving}>{saving ? '...' : 'Save'}</button>
             </div>
           </div>
         </div>
@@ -491,120 +389,74 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, users = [] }) =
           onUpdate={handleUpdateMeeting}
           onDelete={() => handleDeleteEvent(selectedMeeting.id)}
           getClientName={getClientName}
-          getUserName={getUserName}
           saving={saving}
+          isMobile={isMobile}
         />
       )}
     </div>
   );
 };
 
-// Meeting Details Modal Component
-const MeetingDetailsModal = ({ meeting, onClose, onUpdate, onDelete, getClientName, getUserName, saving }) => {
+const MeetingDetailsModal = ({ meeting, onClose, onUpdate, onDelete, getClientName, saving, isMobile }) => {
   const [notes, setNotes] = useState(meeting.notes || '');
   const [status, setStatus] = useState(meeting.status || 'scheduled');
 
-  const formatDateTime = (dateStr) => {
-    const date = new Date(dateStr);
-    return date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  };
+  const formatDateTime = (dateStr) => new Date(dateStr).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
 
-  const statusBadge = {
-    scheduled: { bg: '#3b82f6', text: 'Scheduled' },
-    done: { bg: '#22c55e', text: 'Done' },
-    rescheduled: { bg: '#f59e0b', text: 'Rescheduled' },
-    cancelled: { bg: '#6b7280', text: 'Cancelled' }
-  };
+  const statusOptions = [
+    { key: 'scheduled', label: 'Scheduled', color: '#3b82f6' },
+    { key: 'done', label: 'Done', color: '#22c55e' },
+    { key: 'rescheduled', label: 'Rescheduled', color: '#f59e0b' },
+    { key: 'cancelled', label: 'Cancelled', color: '#6b7280' }
+  ];
 
   return (
     <div className="modal-overlay active" onClick={onClose} style={{ zIndex: 1001 }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? '95%' : '450px', margin: 'auto' }}>
         <div className="modal-header">
-          <h3 className="modal-title">📅 Meeting Details</h3>
+          <h3 className="modal-title" style={{ fontSize: isMobile ? '1rem' : '1.125rem' }}>📅 {meeting.title}</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <div style={{ marginBottom: '1rem' }}>
-            <h4 style={{ margin: '0 0 0.5rem' }}>{meeting.title}</h4>
-            <span style={{
-              display: 'inline-block',
-              padding: '0.25rem 0.5rem',
-              background: statusBadge[status]?.bg || '#6b7280',
-              color: 'white',
-              borderRadius: '4px',
-              fontSize: '0.75rem'
-            }}>
-              {statusBadge[status]?.text || 'Unknown'}
-            </span>
+          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{formatDateTime(meeting.start_time)}</span>
+            {meeting.client_id && <span style={{ fontSize: '0.75rem', background: 'var(--bg-secondary)', padding: '0.125rem 0.5rem', borderRadius: '4px' }}>{getClientName(meeting.client_id)}</span>}
           </div>
-
-          {meeting.description && (
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Description</label>
-              <p style={{ margin: '0.25rem 0' }}>{meeting.description}</p>
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Start</label>
-              <p style={{ margin: '0.25rem 0', fontSize: '0.875rem' }}>{formatDateTime(meeting.start_time)}</p>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>End</label>
-              <p style={{ margin: '0.25rem 0', fontSize: '0.875rem' }}>{formatDateTime(meeting.end_time)}</p>
-            </div>
-          </div>
-
-          {meeting.client_id && (
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Client</label>
-              <p style={{ margin: '0.25rem 0' }}>{getClientName(meeting.client_id)}</p>
-            </div>
-          )}
 
           <div className="form-group">
             <label className="form-label">Meeting Notes</label>
-            <textarea
-              className="form-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              placeholder="What was discussed? Key decisions, action items..."
-            />
+            <textarea className="form-input" value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="What was discussed? Action items..." style={{ fontSize: isMobile ? '0.875rem' : '1rem' }} />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Update Status</label>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {['scheduled', 'done', 'rescheduled', 'cancelled'].map(s => (
+            <label className="form-label">Status</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+              {statusOptions.map(s => (
                 <button
-                  key={s}
+                  key={s.key}
                   type="button"
-                  onClick={() => setStatus(s)}
+                  onClick={() => setStatus(s.key)}
                   style={{
-                    padding: '0.5rem 1rem',
-                    background: status === s ? statusBadge[s].bg : 'var(--bg-secondary)',
-                    color: status === s ? 'white' : 'var(--text-primary)',
+                    padding: '0.5rem',
+                    background: status === s.key ? s.color : 'var(--bg-secondary)',
+                    color: status === s.key ? 'white' : 'var(--text-primary)',
                     border: '1px solid var(--border-color)',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '0.875rem'
+                    fontSize: isMobile ? '0.75rem' : '0.875rem'
                   }}
                 >
-                  {statusBadge[s].text}
+                  {s.label}
                 </button>
               ))}
             </div>
           </div>
         </div>
         <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <button className="btn btn-secondary" onClick={onDelete} style={{ background: '#ef4444', color: 'white' }}>Delete</button>
+          <button className="btn" onClick={onDelete} style={{ background: '#ef4444', color: 'white', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>Delete</button>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={() => onUpdate(status, notes)} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+            <button className="btn btn-secondary" onClick={onClose} style={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>Cancel</button>
+            <button className="btn btn-primary" onClick={() => onUpdate(status, notes)} disabled={saving} style={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>{saving ? '...' : 'Save'}</button>
           </div>
         </div>
       </div>

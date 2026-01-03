@@ -417,6 +417,7 @@ function App() {
           isOpen={showCalendar}
           onClose={() => setShowCalendar(false)}
           currentUserId={currentUser?.id}
+          currentUserName={currentUserProfile?.name || userName}
           users={allUsers}
         />
       )}
