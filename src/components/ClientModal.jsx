@@ -58,16 +58,20 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       try {
         const { data, error } = await client
           .from('users')
-          .select('id, name, email')
+          .select('id, name, email, role')
           .order('name');
 
         if (error) {
           console.error('Error loading users:', error);
+          showToast('Error loading users: ' + error.message, 'error');
           return;
         }
+        
+        console.log('Loaded users for assignment:', data?.length || 0, data);
         setAvailableUsers(data || []);
       } catch (err) {
         console.error('Exception loading users:', err);
+        showToast('Error loading users', 'error');
       }
     };
 

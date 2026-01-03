@@ -1,9 +1,7 @@
-import { useStorage } from './useStorage';
 import { notificationService } from '../services/notificationService';
 import { getSupabaseClient } from '../services/supabase';
 
-export const usePhases = (clients, filters, currentUser = null) => {
-  const { updateClient } = useStorage();
+export const usePhases = (clients, filters, currentUser = null, updateClient = null) => {
 
   const getClientsByPhase = (phase) => {
     let filtered = clients.filter(c => c.phase === phase);
@@ -144,7 +142,7 @@ export const usePhases = (clients, filters, currentUser = null) => {
 
         // Create notification for phase transition
         let targetUserId = client.assignedTo;
-        
+
         // If assignedTo is not a UUID, try to find user by name
         if (targetUserId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId)) {
           const { data: user } = await supabaseClient
@@ -154,7 +152,7 @@ export const usePhases = (clients, filters, currentUser = null) => {
             .limit(1)
             .maybeSingle()
             .catch(() => ({ data: null }));
-          
+
           if (user?.id) {
             targetUserId = user.id;
           } else {
@@ -162,7 +160,7 @@ export const usePhases = (clients, filters, currentUser = null) => {
             return targetPhase;
           }
         }
-        
+
         if (targetUserId) {
           await notificationService.notifyPhaseTransition(
             clientId,

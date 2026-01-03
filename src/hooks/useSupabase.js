@@ -50,7 +50,7 @@ export const useSupabase = () => {
       if (!data || error?.code === 'PGRST116') {
         console.log('User profile not found, attempting to create new profile...');
         const { data: { user: authUser } } = await client.auth.getUser();
-        
+
         if (authUser) {
           // Try to create the profile
           const { data: newProfile, error: createError } = await client
@@ -74,7 +74,7 @@ export const useSupabase = () => {
               .select('*')
               .eq('id', userId)
               .maybeSingle();
-            
+
             if (retryData) {
               setCurrentUserProfile(retryData);
               return retryData;
@@ -597,7 +597,7 @@ export const useSupabase = () => {
       }
 
       console.log('Sync complete');
-      
+
       // Trigger a custom event so useStorage can reload (storage event only fires for other tabs)
       window.dispatchEvent(new Event('syncComplete'));
     } catch (err) {
@@ -626,7 +626,10 @@ export const useSupabase = () => {
     savePackageDetails,
     refreshUserProfile,
     getAllUsers,
-    syncAllData
+    syncAllData,
+    addClientToSupabase,
+    updateClientInSupabase,
+    deleteClientFromSupabase
   };
 };
 

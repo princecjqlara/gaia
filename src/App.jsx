@@ -58,7 +58,7 @@ function App() {
     filterPhase,
     filterPackage,
     filterPayment
-  }, currentUser);
+  }, currentUser, updateClient);
 
   useEffect(() => {
     // Initialize theme
@@ -96,10 +96,10 @@ function App() {
   useEffect(() => {
     if (isOnlineMode && currentUserProfile) {
       const userRole = currentUserProfile.role === 'admin' ? 'admin' : 'user';
-      console.log('User profile loaded:', { 
-        email: currentUserProfile.email, 
-        role: currentUserProfile.role, 
-        detectedRole: userRole 
+      console.log('User profile loaded:', {
+        email: currentUserProfile.email,
+        role: currentUserProfile.role,
+        detectedRole: userRole
       });
       setRole(userRole);
       document.documentElement.dataset.role = userRole;

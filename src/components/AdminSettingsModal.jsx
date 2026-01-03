@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import TagManagementModal from './TagManagementModal';
+import EmployeeSalaryManagement from './EmployeeSalaryManagement';
 
 const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, onTeamPerformance }) => {
   const [showTagManagement, setShowTagManagement] = useState(false);
+  const [activeMainTab, setActiveMainTab] = useState('packages'); // packages, employees
   const [prices, setPrices] = useState({
     basic: 1799,
     star: 2999,
@@ -185,12 +187,48 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1000px', maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="modal-header">
           <h3 className="modal-title">⚙️ Admin Settings</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
+          {/* Main Tabs */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '2px solid var(--border)' }}>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('packages')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'packages' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'packages' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'packages' ? '600' : '400'
+              }}
+            >
+              📦 Packages & Settings
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('employees')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'employees' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'employees' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'employees' ? '600' : '400'
+              }}
+            >
+              👥 Employees & Salary
+            </button>
+          </div>
+
+          {activeMainTab === 'packages' && (
+            <>
           <div style={{ marginBottom: '2rem' }}>
             <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💵 Package Prices (Revenue)</h4>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
@@ -498,6 +536,12 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
               </small>
             </div>
           </div>
+          </>
+          )}
+
+          {activeMainTab === 'employees' && (
+            <EmployeeSalaryManagement />
+          )}
 
           {message.text && (
             <div style={{

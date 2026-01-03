@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getSupabaseClient } from '../services/supabase';
 
 const TagSelector = ({ value, onChange }) => {
@@ -8,26 +8,46 @@ const TagSelector = ({ value, onChange }) => {
   const [selectedTags, setSelectedTags] = useState([]);
   const inputRef = useRef(null);
   const containerRef = useRef(null);
+  const prevValueRef = useRef(value);
+  const isInternalChange = useRef(false);
 
   useEffect(() => {
     loadAvailableTags();
-    // Parse initial value
-    if (value) {
-      if (typeof value === 'string') {
-        const tags = value.split(',').map(t => t.trim()).filter(t => t);
-        setSelectedTags(tags);
-      } else if (Array.isArray(value)) {
-        setSelectedTags(value);
+  }, []);
+
+  // Only sync from parent value when it actually changes from external source
+  useEffect(() => {
+    // Skip if this is an internal change we triggered
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+
+    // Only update if value changed
+    if (value !== prevValueRef.current) {
+      prevValueRef.current = value;
+      if (value) {
+        if (typeof value === 'string') {
+          const tags = value.split(',').map(t => t.trim()).filter(t => t);
+          setSelectedTags(tags);
+        } else if (Array.isArray(value)) {
+          setSelectedTags(value);
+        }
+      } else {
+        setSelectedTags([]);
       }
     }
   }, [value]);
 
-  useEffect(() => {
-    // Update parent when selected tags change
+  // Notify parent of changes
+  const notifyParent = useCallback((tags) => {
     if (onChange) {
-      onChange(selectedTags.join(', '));
+      const newValue = tags.join(', ');
+      isInternalChange.current = true;
+      prevValueRef.current = newValue;
+      onChange(newValue);
     }
-  }, [selectedTags, onChange]);
+  }, [onChange]);
 
   const loadAvailableTags = async () => {
     const client = getSupabaseClient();
@@ -53,7 +73,7 @@ const TagSelector = ({ value, onChange }) => {
 
       if (error) throw error;
       setAvailableTags((data || []).map(t => t.name));
-      
+
       // Also save to localStorage
       localStorage.setItem('campy_tags', JSON.stringify(data || []));
     } catch (error) {
@@ -84,14 +104,18 @@ const TagSelector = ({ value, onChange }) => {
 
   const handleAddTag = (tag) => {
     if (tag && !selectedTags.includes(tag)) {
-      setSelectedTags([...selectedTags, tag]);
+      const newTags = [...selectedTags, tag];
+      setSelectedTags(newTags);
+      notifyParent(newTags);
       setInputValue('');
       setShowSuggestions(false);
     }
   };
 
   const handleRemoveTag = (tagToRemove) => {
-    setSelectedTags(selectedTags.filter(t => t !== tagToRemove));
+    const newTags = selectedTags.filter(t => t !== tagToRemove);
+    setSelectedTags(newTags);
+    notifyParent(newTags);
   };
 
   const handleKeyDown = (e) => {
