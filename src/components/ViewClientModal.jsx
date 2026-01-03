@@ -45,18 +45,142 @@ const ViewClientModal = ({ client, onClose, onEdit, onViewCommunication }) => {
                 <div style={{ fontWeight: '500' }}>{client.contactDetails}</div>
               </div>
             )}
-            {client.remainingCredits !== undefined && (
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Remaining Credits</div>
-                <div style={{ fontWeight: '500' }}>{client.remainingCredits}</div>
-              </div>
-            )}
           </div>
+          {client.subscriptionUsageDetail && (
+            <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '4px' }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+                Subscription Usage
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.875rem' }}>
+                {client.subscriptionUsageDetail.videosUsed > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>15-sec Videos Used:</span>{' '}
+                    <span style={{ fontWeight: '500' }}>{client.subscriptionUsageDetail.videosUsed}</span>
+                  </div>
+                )}
+                {client.subscriptionUsageDetail.mainVideosUsed > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Main Videos Used:</span>{' '}
+                    <span style={{ fontWeight: '500' }}>{client.subscriptionUsageDetail.mainVideosUsed}</span>
+                  </div>
+                )}
+                {client.subscriptionUsageDetail.photosUsed > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Photos Used:</span>{' '}
+                    <span style={{ fontWeight: '500' }}>{client.subscriptionUsageDetail.photosUsed}</span>
+                  </div>
+                )}
+                {client.subscriptionUsageDetail.meetingMinutesUsed > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Meeting Minutes Used:</span>{' '}
+                    <span style={{ fontWeight: '500' }}>{client.subscriptionUsageDetail.meetingMinutesUsed}</span>
+                  </div>
+                )}
+                {(!client.subscriptionUsageDetail.videosUsed && 
+                  !client.subscriptionUsageDetail.mainVideosUsed && 
+                  !client.subscriptionUsageDetail.photosUsed && 
+                  !client.subscriptionUsageDetail.meetingMinutesUsed) && (
+                  <div style={{ color: 'var(--text-muted)', gridColumn: '1 / -1' }}>
+                    No items used yet
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {client.notes && (
             <div style={{ marginTop: '1rem' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Notes</div>
               <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
                 {client.notes}
+              </div>
+            </div>
+          )}
+          {client.notesMedia && client.notesMedia.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Attached Media</div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                gap: '0.75rem'
+              }}>
+                {client.notesMedia.map((media) => (
+                  <div
+                    key={media.id || media.filename}
+                    style={{
+                      position: 'relative',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      background: 'var(--bg-secondary)'
+                    }}
+                  >
+                    {media.type?.startsWith('image/') ? (
+                      <img
+                        src={media.url}
+                        alt={media.filename}
+                        style={{
+                          width: '100%',
+                          height: '120px',
+                          objectFit: 'cover',
+                          display: 'block',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => window.open(media.url, '_blank')}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.nextSibling) {
+                            e.target.nextSibling.style.display = 'flex';
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '120px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'var(--bg-tertiary)',
+                          fontSize: '2.5rem',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => window.open(media.url, '_blank')}
+                      >
+                        {media.type?.startsWith('video/') ? '🎥' : '📄'}
+                      </div>
+                    )}
+                    <div style={{
+                      padding: '0.5rem',
+                      fontSize: '0.75rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      textAlign: 'center'
+                    }}>
+                      {media.filename}
+                    </div>
+                    <a
+                      href={media.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        position: 'absolute',
+                        bottom: '0.25rem',
+                        right: '0.25rem',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        color: 'white',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        textDecoration: 'none'
+                      }}
+                      title="Open in new tab"
+                    >
+                      🔗
+                    </a>
+                  </div>
+                ))}
               </div>
             </div>
           )}

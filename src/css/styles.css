@@ -1374,6 +1374,77 @@ a:hover {
 }
 
 /* ============================================
+   TABLE VIEW
+   ============================================ */
+
+.clients-table-container {
+  width: 100%;
+  margin-top: var(--space-lg);
+}
+
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table thead {
+  background: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.data-table th {
+  padding: var(--space-md) var(--space-lg);
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border-light);
+  transition: background var(--transition-fast);
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-tertiary);
+}
+
+.data-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.data-table td {
+  padding: var(--space-md) var(--space-lg);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.data-table .client-table-row {
+  cursor: pointer;
+}
+
+.data-table .client-table-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.clients-table-section {
+  width: 100%;
+  margin-top: var(--space-lg);
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
 
@@ -1403,6 +1474,19 @@ a:hover {
   .modal {
     width: 95%;
     max-height: 85vh;
+  }
+
+  .data-table {
+    font-size: 0.75rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .table-responsive {
+    border-radius: var(--radius-md);
   }
 }
 

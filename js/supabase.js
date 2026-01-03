@@ -282,12 +282,12 @@ const Supabase = {
     // Map JS camelCase to DB snake_case
     mapClientToDb(client) {
         return {
-            project_name: client.projectName,
             client_name: client.clientName,
             business_name: client.businessName,
             contact_details: client.contactDetails,
             page_link: client.pageLink,
             notes: client.notes,
+            notes_media: client.notesMedia || [],
             tags: client.tags,
             package: client.package,
             custom_package: client.customPackage,
@@ -303,7 +303,12 @@ const Supabase = {
             subscription_usage: client.subscriptionUsage,
             testing_round: client.testingRound,
             subscription_started: client.subscriptionStarted,
-            remaining_credits: client.remainingCredits,
+            subscription_usage_detail: client.subscriptionUsageDetail || {
+                videosUsed: 0,
+                mainVideosUsed: 0,
+                photosUsed: 0,
+                meetingMinutesUsed: 0
+            },
             resubscription_count: client.resubscriptionCount,
             ads_expense: client.adsExpense,
             assigned_to: client.assignedTo || null
@@ -314,12 +319,12 @@ const Supabase = {
     mapClientFromDb(row) {
         return {
             id: row.id,
-            projectName: row.project_name,
             clientName: row.client_name,
             businessName: row.business_name,
             contactDetails: row.contact_details,
             pageLink: row.page_link,
             notes: row.notes,
+            notesMedia: row.notes_media || [],
             tags: row.tags || [],
             package: row.package,
             customPackage: row.custom_package,
@@ -335,7 +340,12 @@ const Supabase = {
             subscriptionUsage: row.subscription_usage,
             testingRound: row.testing_round,
             subscriptionStarted: row.subscription_started,
-            remainingCredits: row.remaining_credits,
+            subscriptionUsageDetail: row.subscription_usage_detail || {
+                videosUsed: 0,
+                mainVideosUsed: 0,
+                photosUsed: 0,
+                meetingMinutesUsed: 0
+            },
             resubscriptionCount: row.resubscription_count,
             adsExpense: row.ads_expense,
             assignedTo: row.assigned_to,

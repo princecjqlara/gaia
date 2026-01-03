@@ -568,7 +568,6 @@ const App = {
 
         // Populate form
         document.getElementById('clientId').value = id;
-        document.getElementById('projectName').value = client.projectName || '';
         document.getElementById('clientName').value = client.clientName || '';
         document.getElementById('businessName').value = client.businessName || '';
         document.getElementById('contactDetails').value = client.contactDetails || '';
@@ -678,7 +677,6 @@ const App = {
 
             // Prepare Data Object
             const data = {
-                projectName: document.getElementById('projectName').value,
                 clientName: document.getElementById('clientName').value,
                 businessName: document.getElementById('businessName').value,
                 contactDetails: document.getElementById('contactDetails').value,

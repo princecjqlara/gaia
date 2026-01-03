@@ -34,13 +34,13 @@ const StatsGrid = ({ metrics, role }) => {
         <div className="stat-value">{metrics.running}</div>
         <div className="stat-label">Running</div>
       </div>
-      <div className="stat-card">
-        <div className="stat-icon">💰</div>
-        <div className="stat-value">{formatPrice(metrics.monthlyRevenue)}</div>
-        <div className="stat-label">Monthly Revenue</div>
-      </div>
       {role === 'admin' && (
         <>
+          <div className="stat-card admin-only">
+            <div className="stat-icon">💰</div>
+            <div className="stat-value">{formatPrice(metrics.monthlyRevenue)}</div>
+            <div className="stat-label">Monthly Revenue</div>
+          </div>
           <div className="stat-card admin-only">
             <div className="stat-icon">📉</div>
             <div className="stat-value">{formatPrice(metrics.totalExpenses)}</div>

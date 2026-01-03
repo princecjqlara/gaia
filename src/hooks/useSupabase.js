@@ -261,6 +261,96 @@ export const useSupabase = () => {
     }
   };
 
+  const getPackageDetails = async () => {
+    const details = await getSetting('package_details');
+    if (details) {
+      // Also save to localStorage for offline access
+      localStorage.setItem('campy_package_details', JSON.stringify(details));
+      return details;
+    }
+    // Fallback to localStorage or default values
+    const stored = localStorage.getItem('campy_package_details');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+    // Default package details
+    return {
+      basic: {
+        name: 'Basic',
+        emoji: '🟢',
+        videos: 2,
+        mainVideos: 1,
+        photos: 2,
+        capi: true,
+        advancedCapi: false,
+        dailyAds: true,
+        customAudience: true,
+        unlimitedSetup: false,
+        weeklyMeeting: 0,
+        lookalike: false,
+        priority: false
+      },
+      star: {
+        name: 'Star',
+        emoji: '⭐',
+        videos: 5,
+        mainVideos: 1,
+        photos: 5,
+        capi: true,
+        advancedCapi: false,
+        dailyAds: true,
+        customAudience: true,
+        unlimitedSetup: true,
+        weeklyMeeting: 30,
+        lookalike: false,
+        priority: false
+      },
+      fire: {
+        name: 'Fire',
+        emoji: '🔥',
+        videos: 5,
+        mainVideos: 2,
+        photos: 10,
+        capi: true,
+        advancedCapi: false,
+        dailyAds: true,
+        customAudience: true,
+        unlimitedSetup: true,
+        weeklyMeeting: 45,
+        lookalike: false,
+        priority: false
+      },
+      crown: {
+        name: 'Crown',
+        emoji: '👑',
+        videos: 10,
+        mainVideos: 3,
+        photos: 17,
+        capi: true,
+        advancedCapi: true,
+        dailyAds: true,
+        customAudience: true,
+        unlimitedSetup: true,
+        weeklyMeeting: 60,
+        lookalike: true,
+        priority: true
+      },
+      custom: {
+        name: 'Custom',
+        emoji: '🎨'
+      }
+    };
+  };
+
+  const savePackageDetails = async (details) => {
+    // Save to localStorage immediately
+    localStorage.setItem('campy_package_details', JSON.stringify(details));
+    // Save to Supabase if online
+    if (isOnlineMode) {
+      await saveSetting('package_details', details);
+    }
+  };
+
   const getAllUsers = async () => {
     const client = getSupabaseClient();
     if (!client) return [];
@@ -282,6 +372,239 @@ export const useSupabase = () => {
     }
   };
 
+  // Map DB snake_case to JS camelCase (same as vanilla JS version)
+  const mapClientFromDb = (row) => {
+    return {
+      id: row.id,
+      clientName: row.client_name,
+      businessName: row.business_name,
+      contactDetails: row.contact_details,
+      pageLink: row.page_link,
+      notes: row.notes,
+      notesMedia: row.notes_media || [],
+      tags: row.tags || [],
+      package: row.package,
+      customPackage: row.custom_package,
+      paymentStatus: row.payment_status,
+      paymentSchedule: row.payment_schedule,
+      monthsWithClient: row.months_with_client,
+      startDate: row.start_date,
+      phase: row.phase,
+      priority: row.priority,
+      autoSwitch: row.auto_switch,
+      autoSwitchDays: row.auto_switch_days,
+      nextPhaseDate: row.next_phase_date,
+      subscriptionUsage: row.subscription_usage,
+      testingRound: row.testing_round,
+      subscriptionStarted: row.subscription_started,
+      subscriptionUsageDetail: row.subscription_usage_detail || {
+        videosUsed: 0,
+        mainVideosUsed: 0,
+        photosUsed: 0,
+        meetingMinutesUsed: 0
+      },
+      resubscriptionCount: row.resubscription_count,
+      adsExpense: row.ads_expense,
+      assignedTo: row.assigned_to,
+      assignedUser: row.assigned_user,
+      createdBy: row.created_by,
+      createdUser: row.created_user,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  };
+
+  // Map JS camelCase to DB snake_case
+  const mapClientToDb = (client) => {
+    return {
+      client_name: client.clientName,
+      business_name: client.businessName,
+      contact_details: client.contactDetails,
+      page_link: client.pageLink,
+      notes: client.notes,
+      notes_media: client.notesMedia || [],
+      tags: client.tags,
+      package: client.package,
+      custom_package: client.customPackage,
+      payment_status: client.paymentStatus,
+      payment_schedule: client.paymentSchedule,
+      months_with_client: client.monthsWithClient,
+      start_date: client.startDate || null,
+      phase: client.phase,
+      priority: client.priority,
+      auto_switch: client.autoSwitch,
+      auto_switch_days: client.autoSwitchDays,
+      next_phase_date: client.nextPhaseDate || null,
+      subscription_usage: client.subscriptionUsage,
+      testing_round: client.testingRound,
+      subscription_started: client.subscriptionStarted,
+      subscription_usage_detail: client.subscriptionUsageDetail || {
+        videosUsed: 0,
+        mainVideosUsed: 0,
+        photosUsed: 0,
+        meetingMinutesUsed: 0
+      },
+      resubscription_count: client.resubscriptionCount,
+      ads_expense: client.adsExpense,
+      assigned_to: client.assignedTo || null
+    };
+  };
+
+  // Add client to Supabase
+  const addClientToSupabase = async (clientData) => {
+    const client = getSupabaseClient();
+    if (!client || !currentUser) return null;
+
+    try {
+      const { data, error } = await client
+        .from('clients')
+        .insert({
+          ...mapClientToDb(clientData),
+          created_by: currentUser.id
+        })
+        .select(`
+          *,
+          assigned_user:assigned_to(id, name, email),
+          created_user:created_by(id, name, email)
+        `)
+        .single();
+
+      if (error) {
+        console.error('Error adding client to Supabase:', error);
+        throw error;
+      }
+
+      // Create stage history
+      if (data) {
+        await client
+          .from('stage_history')
+          .insert({
+            client_id: data.id,
+            from_phase: null,
+            to_phase: data.phase,
+            changed_by: currentUser.id,
+            changed_by_name: getUserName()
+          });
+      }
+
+      return mapClientFromDb(data);
+    } catch (err) {
+      console.error('Exception adding client to Supabase:', err);
+      throw err;
+    }
+  };
+
+  // Update client in Supabase
+  const updateClientInSupabase = async (id, updates) => {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    try {
+      const { data, error } = await client
+        .from('clients')
+        .update(mapClientToDb(updates))
+        .eq('id', id)
+        .select(`
+          *,
+          assigned_user:assigned_to(id, name, email),
+          created_user:created_by(id, name, email)
+        `)
+        .single();
+
+      if (error) {
+        console.error('Error updating client in Supabase:', error);
+        throw error;
+      }
+
+      return data ? mapClientFromDb(data) : null;
+    } catch (err) {
+      console.error('Exception updating client in Supabase:', err);
+      throw err;
+    }
+  };
+
+  // Delete client from Supabase
+  const deleteClientFromSupabase = async (id) => {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    try {
+      const { error } = await client
+        .from('clients')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting client from Supabase:', error);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Exception deleting client from Supabase:', err);
+      return false;
+    }
+  };
+
+  // Sync all data from Supabase to localStorage
+  const syncAllData = async () => {
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    try {
+      console.log('Syncing data from Supabase...');
+
+      // 1. Sync Clients
+      const { data: clients, error: clientsError } = await client
+        .from('clients')
+        .select(`
+          *,
+          assigned_user:assigned_to(id, name, email),
+          created_user:created_by(id, name, email)
+        `)
+        .order('priority', { ascending: true });
+
+      if (clientsError) {
+        console.error('Error fetching clients:', clientsError);
+      } else if (clients) {
+        // Convert to local format
+        const localClients = clients.map(c => mapClientFromDb(c));
+        // Save to localStorage
+        localStorage.setItem('campy_clients', JSON.stringify(localClients));
+        console.log(`Synced ${localClients.length} clients from Supabase`);
+      }
+
+      // 2. Sync Settings (Expenses & Prompts)
+      const expenses = await getExpenses();
+      const prompts = await getAIPrompts();
+
+      // 3. Sync History
+      const { data: history, error: historyError } = await client
+        .from('stage_history')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (!historyError && history) {
+        const localHistory = history.map(h => ({
+          id: h.id,
+          clientId: h.client_id,
+          fromPhase: h.from_phase,
+          toPhase: h.to_phase,
+          changedBy: h.changed_by_name || 'System',
+          timestamp: h.timestamp
+        }));
+        localStorage.setItem('campy_history', JSON.stringify(localHistory));
+      }
+
+      console.log('Sync complete');
+      
+      // Trigger a custom event so useStorage can reload (storage event only fires for other tabs)
+      window.dispatchEvent(new Event('syncComplete'));
+    } catch (err) {
+      console.error('Sync failed:', err);
+    }
+  };
+
   return {
     isOnlineMode,
     currentUser,
@@ -299,8 +622,11 @@ export const useSupabase = () => {
     saveAIPrompts,
     getPackagePrices,
     savePackagePrices,
+    getPackageDetails,
+    savePackageDetails,
     refreshUserProfile,
-    getAllUsers
+    getAllUsers,
+    syncAllData
   };
 };
 

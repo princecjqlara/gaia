@@ -14,7 +14,6 @@ const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveC
         const searchable = [
           client.clientName,
           client.businessName,
-          client.projectName,
           client.contactDetails,
           ...(client.tags || [])
         ].join(' ').toLowerCase();

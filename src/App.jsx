@@ -48,7 +48,7 @@ function App() {
     return settings.viewMode || 'kanban';
   }); // 'kanban' or 'table'
 
-  const { isOnlineMode, initSupabase, signIn, signUp, signOut, getSession, isAdmin, getUserName, currentUser, currentUserProfile, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, refreshUserProfile, getAllUsers } = useSupabase();
+  const { isOnlineMode, initSupabase, signIn, signUp, signOut, getSession, isAdmin, getUserName, currentUser, currentUserProfile, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, refreshUserProfile, getAllUsers, syncAllData, addClientToSupabase, updateClientInSupabase, deleteClientFromSupabase } = useSupabase();
   const { unreadCount: notificationUnreadCount } = useNotifications(currentUser?.id);
   const { clients, addClient, updateClient, deleteClient, getClient } = useClients();
   const { metrics, updateMetrics } = useMetrics(clients);
@@ -72,8 +72,9 @@ function App() {
       if (supabaseAvailable) {
         const session = await getSession();
         if (session) {
-          // Already logged in
+          // Already logged in - sync data from Supabase
           setShowLoginModal(false);
+          await syncAllData();
           // Role will be set by the useEffect that watches currentUserProfile
         } else {
           setShowLoginModal(true);
@@ -144,6 +145,8 @@ function App() {
     try {
       await signIn(email, password);
       setShowLoginModal(false);
+      // Sync data after login
+      await syncAllData();
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -202,9 +205,35 @@ function App() {
   const handleSaveClient = async (clientData) => {
     try {
       if (currentClientId) {
-        await updateClient(currentClientId, clientData);
+        // Update existing client
+        if (isOnlineMode) {
+          // Update in Supabase first
+          const updated = await updateClientInSupabase(currentClientId, clientData);
+          // Then update local storage with the mapped data
+          if (updated) {
+            await updateClient(currentClientId, updated);
+          } else {
+            // Fallback: update local storage with provided data
+            await updateClient(currentClientId, clientData);
+          }
+        } else {
+          await updateClient(currentClientId, clientData);
+        }
       } else {
-        await addClient(clientData);
+        // Create new client
+        if (isOnlineMode) {
+          // Create in Supabase first to get the real UUID
+          const created = await addClientToSupabase(clientData);
+          // Then add to local storage with the mapped data
+          if (created) {
+            await addClient(created);
+          } else {
+            // Fallback: add to local storage with provided data
+            await addClient(clientData);
+          }
+        } else {
+          await addClient(clientData);
+        }
       }
       setShowClientModal(false);
       setCurrentClientId(null);
@@ -290,6 +319,11 @@ function App() {
           }}
           onSave={handleSaveClient}
           onDelete={async (id) => {
+            // Delete from Supabase first if online
+            if (isOnlineMode) {
+              await deleteClientFromSupabase(id);
+            }
+            // Then delete from local storage
             await deleteClient(id);
             setShowClientModal(false);
             setCurrentClientId(null);
@@ -323,6 +357,8 @@ function App() {
           saveAIPrompts={saveAIPrompts}
           getPackagePrices={getPackagePrices}
           savePackagePrices={savePackagePrices}
+          getPackageDetails={getPackageDetails}
+          savePackageDetails={savePackageDetails}
           onTeamPerformance={() => {
             setShowAdminSettings(false);
             setShowTeamPerformance(true);

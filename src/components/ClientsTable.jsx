@@ -13,7 +13,6 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
         const searchable = [
           client.clientName,
           client.businessName,
-          client.projectName,
           client.contactDetails,
           ...(client.tags || [])
         ].join(' ').toLowerCase();
@@ -107,7 +106,7 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
                   <tr key={client.id} className="client-table-row">
                     <td>
                       <span className="priority-badge" style={{ 
-                        background: client.priority === 1 ? 'var(--error)' : 
+                        background: client.priority === 1 ? 'var(--danger)' : 
                                    client.priority === 2 ? 'var(--warning)' : 
                                    'var(--text-muted)',
                         color: 'white',
@@ -121,11 +120,6 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
                     </td>
                     <td>
                       <div style={{ fontWeight: '500' }}>{client.clientName || '—'}</div>
-                      {client.projectName && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          {client.projectName}
-                        </div>
-                      )}
                     </td>
                     <td>{client.businessName || '—'}</td>
                     <td>

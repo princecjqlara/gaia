@@ -202,7 +202,6 @@ const Phases = {
                 const searchable = [
                     client.clientName,
                     client.businessName,
-                    client.projectName,
                     client.contactDetails,
                     ...(client.tags || [])
                 ].join(' ').toLowerCase();

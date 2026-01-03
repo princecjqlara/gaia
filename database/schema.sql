@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS clients (
   subscription_usage INTEGER DEFAULT 0,
   testing_round INTEGER DEFAULT 1,
   subscription_started BOOLEAN DEFAULT false,
-  remaining_credits INTEGER DEFAULT 0,
+  subscription_usage_detail JSONB DEFAULT '{"videosUsed": 0, "mainVideosUsed": 0, "photosUsed": 0, "meetingMinutesUsed": 0}',
   
   -- Resubscription
   resubscription_count INTEGER DEFAULT 0,

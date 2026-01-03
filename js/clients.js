@@ -80,7 +80,6 @@ const Clients = {
   createClient(formData) {
     return {
       // Basic Info
-      projectName: formData.projectName || '',
       clientName: formData.clientName || '',
       businessName: formData.businessName || '',
       contactDetails: formData.contactDetails || '',
@@ -88,6 +87,7 @@ const Clients = {
       assignedTo: formData.assignedTo || '',
       adsExpense: formData.adsExpense || 0,
       notes: formData.notes || '',
+      notesMedia: formData.notesMedia || [],
       tags: formData.tags || [],
 
       // Package
@@ -110,7 +110,12 @@ const Clients = {
       subscriptionUsage: formData.subscriptionUsage || 0,
       testingRound: formData.testingRound || 1,
       subscriptionStarted: formData.subscriptionStarted || false,
-      remainingCredits: formData.remainingCredits || 0,
+      subscriptionUsageDetail: formData.subscriptionUsageDetail || {
+        videosUsed: formData.videosUsed || 0,
+        mainVideosUsed: formData.mainVideosUsed || 0,
+        photosUsed: formData.photosUsed || 0,
+        meetingMinutesUsed: formData.meetingMinutesUsed || 0
+      },
 
       // Resubscription
       resubscriptionCount: formData.resubscriptionCount || 0,
@@ -287,7 +292,6 @@ const Clients = {
       <div class="client-details">
         <div class="detail-section">
           <h4>Basic Information</h4>
-          <p><strong>Project:</strong> ${this.escapeHtml(client.projectName)}</p>
           <p><strong>Client:</strong> ${this.escapeHtml(client.clientName)}</p>
           <p><strong>Business:</strong> ${this.escapeHtml(client.businessName)}</p>
           <p><strong>Contact:</strong> ${this.escapeHtml(client.contactDetails) || 'N/A'}</p>

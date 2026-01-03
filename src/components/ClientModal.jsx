@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import TagSelector from './TagSelector';
 import { getSupabaseClient } from '../services/supabase';
+import { getPackages, formatPrice } from '../utils/clients';
 
 const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   const [activeTab, setActiveTab] = useState('basic');
@@ -161,6 +162,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
 
     setUploading(true);
     const uploadedFiles = [];
+    const tempId = clientId || `temp-${Date.now()}`;
 
     try {
       for (const file of Array.from(files)) {
@@ -173,10 +175,10 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         // Generate unique filename
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `client-notes/${clientId || 'new'}/${fileName}`;
+        const filePath = `client-notes/${tempId}/${fileName}`;
 
         // Upload to Supabase Storage
-        setUploadProgress({ ...uploadProgress, [file.name]: 0 });
+        setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
         
         const { data, error } = await supabase.storage
           .from('client-media')
@@ -206,7 +208,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
           uploadedAt: new Date().toISOString()
         });
 
-        setUploadProgress({ ...uploadProgress, [file.name]: 100 });
+        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
       }
 
       // Add uploaded files to notesMedia
@@ -537,41 +539,37 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
               </div>
             )}
 
-            {activeTab === 'package' && (
-              <div className={`tab-content ${activeTab === 'package' ? 'active' : ''}`}>
-                <div className="form-group">
-                  <label className="form-label">Select Package *</label>
-                  <div className="package-selector">
-                    {['basic', 'star', 'fire', 'crown', 'custom'].map(pkg => {
-                      const packages = {
-                        basic: { emoji: '🟢', price: '₱1,799', name: 'Basic' },
-                        star: { emoji: '⭐', price: '₱2,999', name: 'Star' },
-                        fire: { emoji: '🔥', price: '₱3,499', name: 'Fire' },
-                        crown: { emoji: '👑', price: '₱5,799', name: 'Crown' },
-                        custom: { emoji: '🎨', price: 'Custom', name: 'Custom' }
-                      };
-                      const pkgInfo = packages[pkg];
-                      return (
-                        <label
-                          key={pkg}
-                          className={`package-option ${formData.package === pkg ? 'selected' : ''}`}
-                          onClick={() => setFormData({ ...formData, package: pkg })}
-                        >
-                          <input
-                            type="radio"
-                            name="package"
-                            value={pkg}
-                            checked={formData.package === pkg}
-                            onChange={() => setFormData({ ...formData, package: pkg })}
-                          />
-                          <div className="package-emoji">{pkgInfo.emoji}</div>
-                          <div className="package-price">{pkgInfo.price}</div>
-                          <div className="package-name">{pkgInfo.name}</div>
-                        </label>
-                      );
-                    })}
+            {activeTab === 'package' && (() => {
+              const packages = getPackages();
+              return (
+                <div className={`tab-content ${activeTab === 'package' ? 'active' : ''}`}>
+                  <div className="form-group">
+                    <label className="form-label">Select Package *</label>
+                    <div className="package-selector">
+                      {['basic', 'star', 'fire', 'crown', 'custom'].map(pkg => {
+                        const pkgInfo = packages[pkg];
+                        const displayPrice = pkg === 'custom' ? 'Custom' : formatPrice(pkgInfo.price || 0);
+                        return (
+                          <label
+                            key={pkg}
+                            className={`package-option ${formData.package === pkg ? 'selected' : ''}`}
+                            onClick={() => setFormData({ ...formData, package: pkg })}
+                          >
+                            <input
+                              type="radio"
+                              name="package"
+                              value={pkg}
+                              checked={formData.package === pkg}
+                              onChange={() => setFormData({ ...formData, package: pkg })}
+                            />
+                            <div className="package-emoji">{pkgInfo.emoji || '📦'}</div>
+                            <div className="package-price">{displayPrice}</div>
+                            <div className="package-name">{pkgInfo.name || pkg}</div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
 
                 {formData.package === 'custom' && (
                   <div className="custom-package-fields" style={{ marginTop: 'var(--space-lg)' }}>
@@ -700,8 +698,9 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {activeTab === 'payment' && (
               <div className={`tab-content ${activeTab === 'payment' ? 'active' : ''}`}>

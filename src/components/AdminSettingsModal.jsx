@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import TagManagementModal from './TagManagementModal';
 
-const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, onTeamPerformance }) => {
+const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, onTeamPerformance }) => {
   const [showTagManagement, setShowTagManagement] = useState(false);
   const [prices, setPrices] = useState({
     basic: 1799,
@@ -21,6 +21,73 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     adType: '',
     campaignStructure: ''
   });
+  const [packageDetails, setPackageDetails] = useState({
+    basic: {
+      name: 'Basic',
+      emoji: '🟢',
+      videos: 2,
+      mainVideos: 1,
+      photos: 2,
+      capi: true,
+      advancedCapi: false,
+      dailyAds: true,
+      customAudience: true,
+      unlimitedSetup: false,
+      weeklyMeeting: 0,
+      lookalike: false,
+      priority: false
+    },
+    star: {
+      name: 'Star',
+      emoji: '⭐',
+      videos: 5,
+      mainVideos: 1,
+      photos: 5,
+      capi: true,
+      advancedCapi: false,
+      dailyAds: true,
+      customAudience: true,
+      unlimitedSetup: true,
+      weeklyMeeting: 30,
+      lookalike: false,
+      priority: false
+    },
+    fire: {
+      name: 'Fire',
+      emoji: '🔥',
+      videos: 5,
+      mainVideos: 2,
+      photos: 10,
+      capi: true,
+      advancedCapi: false,
+      dailyAds: true,
+      customAudience: true,
+      unlimitedSetup: true,
+      weeklyMeeting: 45,
+      lookalike: false,
+      priority: false
+    },
+    crown: {
+      name: 'Crown',
+      emoji: '👑',
+      videos: 10,
+      mainVideos: 3,
+      photos: 17,
+      capi: true,
+      advancedCapi: true,
+      dailyAds: true,
+      customAudience: true,
+      unlimitedSetup: true,
+      weeklyMeeting: 60,
+      lookalike: true,
+      priority: true
+    },
+    custom: {
+      name: 'Custom',
+      emoji: '🎨'
+    }
+  });
+  const [activePackageTab, setActivePackageTab] = useState('basic');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -32,9 +99,11 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         const loadedPrices = await getPackagePrices();
         const loadedExpenses = await getExpenses();
         const loadedPrompts = await getAIPrompts();
+        const loadedDetails = await getPackageDetails();
         setPrices(loadedPrices);
         setExpenses(loadedExpenses);
         setPrompts(loadedPrompts);
+        setPackageDetails(loadedDetails);
       } catch (error) {
         console.error('Error loading settings:', error);
         setMessage({ type: 'error', text: 'Failed to load settings' });
@@ -67,6 +136,16 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     }));
   };
 
+  const handlePackageDetailChange = (packageType, field, value) => {
+    setPackageDetails(prev => ({
+      ...prev,
+      [packageType]: {
+        ...prev[packageType],
+        [field]: typeof value === 'boolean' ? value : (field === 'name' || field === 'emoji' ? value : parseInt(value) || 0)
+      }
+    }));
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -74,6 +153,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       await savePackagePrices(prices);
       await saveExpenses(expenses);
       await saveAIPrompts(prompts);
+      await savePackageDetails(packageDetails);
       setMessage({ type: 'success', text: 'Settings saved successfully! Page will reload in 1 second...' });
       // Reload the page to update package prices throughout the app
       setTimeout(() => {
@@ -105,7 +185,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="modal-header">
           <h3 className="modal-title">⚙️ Admin Settings</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
@@ -227,6 +307,164 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                 />
               </div>
             </div>
+          </div>
+
+          <div style={{ marginBottom: '2rem' }}>
+            <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📦 Package Details</h4>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Configure quantities and features for each package
+            </p>
+            
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {['basic', 'star', 'fire', 'crown'].map(pkg => (
+                <button
+                  key={pkg}
+                  type="button"
+                  onClick={() => setActivePackageTab(pkg)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    background: activePackageTab === pkg ? 'var(--primary)' : 'transparent',
+                    color: activePackageTab === pkg ? 'white' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {packageDetails[pkg]?.emoji} {packageDetails[pkg]?.name || pkg}
+                </button>
+              ))}
+            </div>
+
+            {['basic', 'star', 'fire', 'crown'].map(pkg => {
+              if (activePackageTab !== pkg) return null;
+              const pkgData = packageDetails[pkg] || {};
+              return (
+                <div key={pkg} style={{ 
+                  padding: '1rem', 
+                  border: '1px solid var(--border)', 
+                  borderRadius: '4px',
+                  backgroundColor: 'var(--bg-secondary)'
+                }}>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">Package Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={pkgData.name || ''}
+                      onChange={(e) => handlePackageDetailChange(pkg, 'name', e.target.value)}
+                      style={{ marginBottom: '0.5rem' }}
+                    />
+                    <label className="form-label">Emoji</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={pkgData.emoji || ''}
+                      onChange={(e) => handlePackageDetailChange(pkg, 'emoji', e.target.value)}
+                      placeholder="🟢"
+                      maxLength="2"
+                    />
+                  </div>
+
+                  <h5 style={{ marginTop: '1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Quantities</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group">
+                      <label className="form-label">15-sec Videos</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={pkgData.videos || 0}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'videos', e.target.value)}
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Main Videos</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={pkgData.mainVideos || 0}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'mainVideos', e.target.value)}
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Photos</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={pkgData.photos || 0}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'photos', e.target.value)}
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Weekly Meeting (minutes)</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={pkgData.weeklyMeeting || 0}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'weeklyMeeting', e.target.value)}
+                        min="0"
+                      />
+                    </div>
+                  </div>
+
+                  <h5 style={{ marginTop: '1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Features</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.capi || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'capi', e.target.checked)}
+                      /> CAPI
+                    </label>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.advancedCapi || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'advancedCapi', e.target.checked)}
+                      /> Advanced CAPI
+                    </label>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.dailyAds || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'dailyAds', e.target.checked)}
+                      /> Daily Ads Monitoring
+                    </label>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.customAudience || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'customAudience', e.target.checked)}
+                      /> Custom Audience
+                    </label>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.unlimitedSetup || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'unlimitedSetup', e.target.checked)}
+                      /> Unlimited Ad Setup
+                    </label>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.lookalike || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'lookalike', e.target.checked)}
+                      /> Lookalike Audiences
+                    </label>
+                    <label className="form-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={pkgData.priority || false}
+                        onChange={(e) => handlePackageDetailChange(pkg, 'priority', e.target.checked)}
+                      /> Priority Handling
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div style={{ marginBottom: '2rem' }}>

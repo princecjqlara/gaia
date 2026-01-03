@@ -11,6 +11,11 @@ const KEYS = {
 export const useStorage = () => {
   const [clients, setClients] = useState([]);
 
+  const loadClients = () => {
+    const storedClients = JSON.parse(localStorage.getItem(KEYS.CLIENTS) || '[]');
+    setClients(storedClients);
+  };
+
   useEffect(() => {
     // Initialize storage
     if (!localStorage.getItem(KEYS.CLIENTS)) {
@@ -25,8 +30,20 @@ export const useStorage = () => {
     }
 
     // Load clients
-    const storedClients = JSON.parse(localStorage.getItem(KEYS.CLIENTS) || '[]');
-    setClients(storedClients);
+    loadClients();
+
+    // Listen for storage changes (from syncAllData or other tabs)
+    const handleStorageChange = () => {
+      loadClients();
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Also listen for custom event for same-tab updates
+    window.addEventListener('syncComplete', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('syncComplete', handleStorageChange);
+    };
   }, []);
 
   const saveClients = (newClients) => {
