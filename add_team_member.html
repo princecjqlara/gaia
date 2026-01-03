@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campy - Add Team Member</title>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a1a;
+            color: #fff;
+            font-family: system-ui, sans-serif;
+            padding: 2rem;
+            margin: 0;
+        }
+
+        .card {
+            background: #2a2a2a;
+            padding: 1.5rem;
+            border-radius: 8px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            display: block;
+            width: 100%;
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: #22c55e;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        .log {
+            background: #111;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            font-family: monospace;
+            white-space: pre-wrap;
+            min-height: 80px;
+            font-size: 0.875rem;
+        }
+
+        .success {
+            color: #4ade80;
+        }
+
+        .error {
+            color: #ef4444;
+        }
+
+        .warning {
+            color: #facc15;
+        }
+
+        .info {
+            color: #60a5fa;
+        }
+
+        .help-text {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h2>👥 Add Team Member</h2>
+        <p>Create a new team member account that can be assigned to clients.</p>
+
+        <div class="form-group">
+            <label for="name">Display Name *</label>
+            <input type="text" id="name" placeholder="e.g. John Doe" required>
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email *</label>
+            <input type="email" id="email" placeholder="e.g. john@example.com" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password *</label>
+            <input type="password" id="password" placeholder="Minimum 6 characters" required>
+            <div class="help-text">This will be their login password</div>
+        </div>
+
+        <div class="form-group">
+            <label for="role">Role</label>
+            <select id="role">
+                <option value="user">User (Regular Team Member)</option>
+                <option value="admin">Admin (Full Access)</option>
+            </select>
+        </div>
+
+        <button id="createBtn" class="btn">Create Team Member</button>
+
+        <div id="log" class="log">Ready to create team member...</div>
+    </div>
+
+    <!-- Load App Scripts -->
+    <script src="js/supabase.js"></script>
+
+    <script>
+        const logEl = document.getElementById('log');
+
+        const log = (msg, type = '') => {
+            logEl.innerHTML += `<div class="${type}">> ${msg}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        const clearLog = () => {
+            logEl.innerHTML = '';
+        };
+
+        document.getElementById('createBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('createBtn');
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('role').value;
+
+            // Validate
+            if (!name) {
+                alert('Please enter a display name');
+                return;
+            }
+            if (!email) {
+                alert('Please enter an email');
+                return;
+            }
+            if (!password || password.length < 6) {
+                alert('Password must be at least 6 characters');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            clearLog();
+
+            // Init Supabase
+            if (!Supabase.init()) {
+                log('Error: Could not initialize Supabase. Check config.', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Create Team Member';
+                return;
+            }
+
+            try {
+                log(`Creating account for ${email}...`, 'info');
+
+                // Sign up the user
+                await Supabase.signUp(email, password, name, role);
+
+                log(`✅ Account created successfully!`, 'success');
+                log(`   Name: ${name}`, 'success');
+                log(`   Email: ${email}`, 'success');
+                log(`   Role: ${role}`, 'success');
+                log('');
+                log('The user can now log in to Campy.', 'info');
+                log('They will appear in the "Assigned To" dropdown.', 'info');
+
+                // Clear form
+                document.getElementById('name').value = '';
+                document.getElementById('email').value = '';
+                document.getElementById('password').value = '';
+                document.getElementById('role').value = 'user';
+
+                btn.textContent = 'Create Another';
+                btn.className = 'btn btn-success';
+
+            } catch (err) {
+                if (err.message.includes('already registered')) {
+                    log(`⚠️ User ${email} already exists.`, 'warning');
+                } else {
+                    log(`❌ Error: ${err.message}`, 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                if (btn.textContent === 'Creating...') {
+                    btn.textContent = 'Create Team Member';
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
