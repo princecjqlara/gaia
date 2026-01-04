@@ -63,6 +63,28 @@ const StatsGrid = ({ metrics, role }) => {
               Pipeline: {formatPrice(metrics.pipelineValue || 0)}
             </div>
           </div>
+          <div className="stat-card admin-only" style={{ border: '2px solid var(--warning)' }}>
+            <div className="stat-icon">💎</div>
+            <div className="stat-value" style={{ color: 'var(--warning)' }}>
+              {formatPrice(metrics.expectedValue || 0)}
+            </div>
+            <div className="stat-label">Expected Value</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              All active clients combined
+            </div>
+          </div>
+          <div className="stat-card admin-only" style={{ border: '2px solid #f97316' }}>
+            <div className="stat-icon">⏳</div>
+            <div className="stat-value" style={{ color: '#f97316' }}>
+              {metrics.totalClients > 0
+                ? Math.round(((metrics.booked + metrics.followUp + metrics.preparing) / metrics.totalClients) * 100)
+                : 0}%
+            </div>
+            <div className="stat-label">Pre-Testing</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              Not in Testing/Running yet
+            </div>
+          </div>
         </>
       )}
     </section>
