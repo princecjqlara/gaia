@@ -360,6 +360,9 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
               <button type="button" className={`tab ${activeTab === 'schedule' ? 'active' : ''}`} onClick={() => setActiveTab('schedule')}>
                 Schedule
               </button>
+              <button type="button" className={`tab ${activeTab === 'booking' ? 'active' : ''}`} onClick={() => setActiveTab('booking')}>
+                📅 Booking
+              </button>
             </div>
 
             {activeTab === 'basic' && (
@@ -955,6 +958,134 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Booking Tab */}
+            {activeTab === 'booking' && (
+              <div className={`tab-content ${activeTab === 'booking' ? 'active' : ''}`}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>
+                  📅 Schedule a Meeting with {formData.clientName || 'Client'}
+                </h4>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Meeting Title</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      id="bookingTitle"
+                      defaultValue={`Meeting with ${formData.clientName || 'Client'}`}
+                      placeholder="e.g., Onboarding Call"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Date</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      id="bookingDate"
+                      defaultValue={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Time</label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      id="bookingTime"
+                      defaultValue="09:00"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Duration (minutes)</label>
+                  <select className="form-select" id="bookingDuration" defaultValue="30">
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">1 hour</option>
+                    <option value="90">1.5 hours</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: '100%' }}
+                    onClick={async () => {
+                      const title = document.getElementById('bookingTitle')?.value || 'Meeting';
+                      const date = document.getElementById('bookingDate')?.value;
+                      const time = document.getElementById('bookingTime')?.value || '09:00';
+                      const duration = parseInt(document.getElementById('bookingDuration')?.value || '30');
+
+                      if (!date) {
+                        alert('Please select a date');
+                        return;
+                      }
+
+                      const startTime = new Date(`${date}T${time}`);
+                      const endTime = new Date(startTime.getTime() + duration * 60000);
+
+                      const supabase = getSupabaseClient();
+                      if (!supabase) {
+                        alert('Database not connected');
+                        return;
+                      }
+
+                      try {
+                        // Create calendar event
+                        const { data: eventData, error: eventError } = await supabase
+                          .from('calendar_events')
+                          .insert({
+                            title: title,
+                            start_time: startTime.toISOString(),
+                            end_time: endTime.toISOString(),
+                            client_id: clientId,
+                            event_type: 'meeting'
+                          })
+                          .select()
+                          .single();
+
+                        if (eventError) throw eventError;
+
+                        // Create meeting room
+                        const roomSlug = Math.random().toString(36).substring(2, 10);
+                        const { error: roomError } = await supabase
+                          .from('meeting_rooms')
+                          .insert({
+                            room_slug: roomSlug,
+                            title: title,
+                            calendar_event_id: eventData.id,
+                            scheduled_at: startTime.toISOString()
+                          });
+
+                        if (roomError) throw roomError;
+
+                        const roomLink = `${window.location.origin}/room/${roomSlug}`;
+                        showToast(`Meeting scheduled! Room: ${roomLink}`, 'success');
+
+                        // Copy link to clipboard
+                        navigator.clipboard.writeText(roomLink);
+                        alert(`Meeting scheduled!\n\nRoom link copied to clipboard:\n${roomLink}`);
+                      } catch (err) {
+                        console.error('Error creating meeting:', err);
+                        alert('Error creating meeting: ' + err.message);
+                      }
+                    }}
+                  >
+                    🎥 Create Meeting Room
+                  </button>
+                </div>
+
+                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                  💡 This will create a video meeting room linked to this client. The room link will be copied to your clipboard.
+                </div>
               </div>
             )}
           </form>
