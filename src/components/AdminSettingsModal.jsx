@@ -17,7 +17,8 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     star: 800,
     fire: 1000,
     crown: 1500,
-    custom: 0
+    custom: 0,
+    dailyAdsExpense: 0 // Global daily ads expense
   });
   const [prompts, setPrompts] = useState({
     adType: '',
@@ -229,314 +230,333 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
 
           {activeMainTab === 'packages' && (
             <>
-          <div style={{ marginBottom: '2rem' }}>
-            <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💵 Package Prices (Revenue)</h4>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Set how much you earn per package per month
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">Basic Package (₱)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={prices.basic}
-                  onChange={(e) => handlePriceChange('basic', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Star Package (₱)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={prices.star}
-                  onChange={(e) => handlePriceChange('star', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Fire Package (₱)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={prices.fire}
-                  onChange={(e) => handlePriceChange('fire', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Crown Package (₱)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={prices.crown}
-                  onChange={(e) => handlePriceChange('crown', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                <label className="form-label">Custom Package (₱)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={prices.custom}
-                  onChange={(e) => handlePriceChange('custom', e.target.value)}
-                  min="0"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '2rem' }}>
-            <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💰 Package Expenses</h4>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Set your costs per package per month
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">Basic Package</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={expenses.basic}
-                  onChange={(e) => handleExpenseChange('basic', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Star Package</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={expenses.star}
-                  onChange={(e) => handleExpenseChange('star', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Fire Package</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={expenses.fire}
-                  onChange={(e) => handleExpenseChange('fire', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Crown Package</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={expenses.crown}
-                  onChange={(e) => handleExpenseChange('crown', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                <label className="form-label">Custom Package</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={expenses.custom}
-                  onChange={(e) => handleExpenseChange('custom', e.target.value)}
-                  min="0"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '2rem' }}>
-            <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📦 Package Details</h4>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Configure quantities and features for each package
-            </p>
-            
-            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {['basic', 'star', 'fire', 'crown'].map(pkg => (
-                <button
-                  key={pkg}
-                  type="button"
-                  onClick={() => setActivePackageTab(pkg)}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    border: '1px solid var(--border)',
-                    borderRadius: '4px',
-                    background: activePackageTab === pkg ? 'var(--primary)' : 'transparent',
-                    color: activePackageTab === pkg ? 'white' : 'var(--text-primary)',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  {packageDetails[pkg]?.emoji} {packageDetails[pkg]?.name || pkg}
-                </button>
-              ))}
-            </div>
-
-            {['basic', 'star', 'fire', 'crown'].map(pkg => {
-              if (activePackageTab !== pkg) return null;
-              const pkgData = packageDetails[pkg] || {};
-              return (
-                <div key={pkg} style={{ 
-                  padding: '1rem', 
-                  border: '1px solid var(--border)', 
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--bg-secondary)'
-                }}>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label className="form-label">Package Name</label>
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💵 Package Prices (Revenue)</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Set how much you earn per package per month
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Basic Package (₱)</label>
                     <input
-                      type="text"
+                      type="number"
                       className="form-input"
-                      value={pkgData.name || ''}
-                      onChange={(e) => handlePackageDetailChange(pkg, 'name', e.target.value)}
-                      style={{ marginBottom: '0.5rem' }}
-                    />
-                    <label className="form-label">Emoji</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={pkgData.emoji || ''}
-                      onChange={(e) => handlePackageDetailChange(pkg, 'emoji', e.target.value)}
-                      placeholder="🟢"
-                      maxLength="2"
+                      value={prices.basic}
+                      onChange={(e) => handlePriceChange('basic', e.target.value)}
+                      min="0"
                     />
                   </div>
-
-                  <h5 style={{ marginTop: '1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Quantities</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                    <div className="form-group">
-                      <label className="form-label">15-sec Videos</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={pkgData.videos || 0}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'videos', e.target.value)}
-                        min="0"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Main Videos</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={pkgData.mainVideos || 0}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'mainVideos', e.target.value)}
-                        min="0"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Photos</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={pkgData.photos || 0}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'photos', e.target.value)}
-                        min="0"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Weekly Meeting (minutes)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={pkgData.weeklyMeeting || 0}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'weeklyMeeting', e.target.value)}
-                        min="0"
-                      />
-                    </div>
+                  <div className="form-group">
+                    <label className="form-label">Star Package (₱)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={prices.star}
+                      onChange={(e) => handlePriceChange('star', e.target.value)}
+                      min="0"
+                    />
                   </div>
-
-                  <h5 style={{ marginTop: '1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Features</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.capi || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'capi', e.target.checked)}
-                      /> CAPI
-                    </label>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.advancedCapi || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'advancedCapi', e.target.checked)}
-                      /> Advanced CAPI
-                    </label>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.dailyAds || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'dailyAds', e.target.checked)}
-                      /> Daily Ads Monitoring
-                    </label>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.customAudience || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'customAudience', e.target.checked)}
-                      /> Custom Audience
-                    </label>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.unlimitedSetup || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'unlimitedSetup', e.target.checked)}
-                      /> Unlimited Ad Setup
-                    </label>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.lookalike || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'lookalike', e.target.checked)}
-                      /> Lookalike Audiences
-                    </label>
-                    <label className="form-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={pkgData.priority || false}
-                        onChange={(e) => handlePackageDetailChange(pkg, 'priority', e.target.checked)}
-                      /> Priority Handling
-                    </label>
+                  <div className="form-group">
+                    <label className="form-label">Fire Package (₱)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={prices.fire}
+                      onChange={(e) => handlePriceChange('fire', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Crown Package (₱)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={prices.crown}
+                      onChange={(e) => handlePriceChange('crown', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label className="form-label">Custom Package (₱)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={prices.custom}
+                      onChange={(e) => handlePriceChange('custom', e.target.value)}
+                      min="0"
+                    />
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          <div style={{ marginBottom: '2rem' }}>
-            <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🤖 AI Prompts</h4>
-            <div className="form-group">
-              <label className="form-label">Ad Type Prompt</label>
-              <textarea
-                className="form-input"
-                rows="3"
-                value={prompts.adType}
-                onChange={(e) => handlePromptChange('adType', e.target.value)}
-                placeholder="Analyze the business niche '{niche}' and target audience '{audience}'. Suggest the top 3 most effective Facebook ad formats."
-                style={{ resize: 'vertical' }}
-              />
-              <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                Use {'{niche}'} and {'{audience}'} as placeholders
-              </small>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Campaign Structure Prompt</label>
-              <textarea
-                className="form-input"
-                rows="3"
-                value={prompts.campaignStructure}
-                onChange={(e) => handlePromptChange('campaignStructure', e.target.value)}
-                placeholder="For a local service business in niche '{niche}' with a budget of ₱150-300/day, outline a recommended campaign structure."
-                style={{ resize: 'vertical' }}
-              />
-              <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                Use {'{niche}'} and {'{audience}'} as placeholders
-              </small>
-            </div>
-          </div>
-          </>
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💰 Package Expenses</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Set your costs per package per month
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Basic Package</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={expenses.basic}
+                      onChange={(e) => handleExpenseChange('basic', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Star Package</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={expenses.star}
+                      onChange={(e) => handleExpenseChange('star', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fire Package</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={expenses.fire}
+                      onChange={(e) => handleExpenseChange('fire', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Crown Package</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={expenses.crown}
+                      onChange={(e) => handleExpenseChange('crown', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label className="form-label">Custom Package</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={expenses.custom}
+                      onChange={(e) => handleExpenseChange('custom', e.target.value)}
+                      min="0"
+                    />
+                  </div>
+
+                  {/* Daily Ads Expense */}
+                  <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: '1rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                    <label className="form-label" style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
+                      📊 Daily Ads Expense (₱)
+                    </label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={expenses.dailyAdsExpense || 0}
+                      onChange={(e) => handleExpenseChange('dailyAdsExpense', e.target.value)}
+                      min="0"
+                      step="0.01"
+                      placeholder="Enter daily ads spending..."
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block', marginTop: '0.5rem' }}>
+                      This is the global daily advertising expense applied across all clients. Enter your daily ad spend budget here instead of per-client.
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📦 Package Details</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Configure quantities and features for each package
+                </p>
+
+                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {['basic', 'star', 'fire', 'crown'].map(pkg => (
+                    <button
+                      key={pkg}
+                      type="button"
+                      onClick={() => setActivePackageTab(pkg)}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        background: activePackageTab === pkg ? 'var(--primary)' : 'transparent',
+                        color: activePackageTab === pkg ? 'white' : 'var(--text-primary)',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      {packageDetails[pkg]?.emoji} {packageDetails[pkg]?.name || pkg}
+                    </button>
+                  ))}
+                </div>
+
+                {['basic', 'star', 'fire', 'crown'].map(pkg => {
+                  if (activePackageTab !== pkg) return null;
+                  const pkgData = packageDetails[pkg] || {};
+                  return (
+                    <div key={pkg} style={{
+                      padding: '1rem',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--bg-secondary)'
+                    }}>
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label className="form-label">Package Name</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={pkgData.name || ''}
+                          onChange={(e) => handlePackageDetailChange(pkg, 'name', e.target.value)}
+                          style={{ marginBottom: '0.5rem' }}
+                        />
+                        <label className="form-label">Emoji</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={pkgData.emoji || ''}
+                          onChange={(e) => handlePackageDetailChange(pkg, 'emoji', e.target.value)}
+                          placeholder="🟢"
+                          maxLength="2"
+                        />
+                      </div>
+
+                      <h5 style={{ marginTop: '1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Quantities</h5>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">15-sec Videos</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={pkgData.videos || 0}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'videos', e.target.value)}
+                            min="0"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Main Videos</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={pkgData.mainVideos || 0}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'mainVideos', e.target.value)}
+                            min="0"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Photos</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={pkgData.photos || 0}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'photos', e.target.value)}
+                            min="0"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Weekly Meeting (minutes)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={pkgData.weeklyMeeting || 0}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'weeklyMeeting', e.target.value)}
+                            min="0"
+                          />
+                        </div>
+                      </div>
+
+                      <h5 style={{ marginTop: '1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Features</h5>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.capi || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'capi', e.target.checked)}
+                          /> CAPI
+                        </label>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.advancedCapi || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'advancedCapi', e.target.checked)}
+                          /> Advanced CAPI
+                        </label>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.dailyAds || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'dailyAds', e.target.checked)}
+                          /> Daily Ads Monitoring
+                        </label>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.customAudience || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'customAudience', e.target.checked)}
+                          /> Custom Audience
+                        </label>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.unlimitedSetup || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'unlimitedSetup', e.target.checked)}
+                          /> Unlimited Ad Setup
+                        </label>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.lookalike || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'lookalike', e.target.checked)}
+                          /> Lookalike Audiences
+                        </label>
+                        <label className="form-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={pkgData.priority || false}
+                            onChange={(e) => handlePackageDetailChange(pkg, 'priority', e.target.checked)}
+                          /> Priority Handling
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🤖 AI Prompts</h4>
+                <div className="form-group">
+                  <label className="form-label">Ad Type Prompt</label>
+                  <textarea
+                    className="form-input"
+                    rows="3"
+                    value={prompts.adType}
+                    onChange={(e) => handlePromptChange('adType', e.target.value)}
+                    placeholder="Analyze the business niche '{niche}' and target audience '{audience}'. Suggest the top 3 most effective Facebook ad formats."
+                    style={{ resize: 'vertical' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    Use {'{niche}'} and {'{audience}'} as placeholders
+                  </small>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Campaign Structure Prompt</label>
+                  <textarea
+                    className="form-input"
+                    rows="3"
+                    value={prompts.campaignStructure}
+                    onChange={(e) => handlePromptChange('campaignStructure', e.target.value)}
+                    placeholder="For a local service business in niche '{niche}' with a budget of ₱150-300/day, outline a recommended campaign structure."
+                    style={{ resize: 'vertical' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    Use {'{niche}'} and {'{audience}'} as placeholders
+                  </small>
+                </div>
+              </div>
+            </>
           )}
 
           {activeMainTab === 'employees' && (
@@ -557,18 +577,18 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         </div>
         <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={() => setShowTagManagement(true)}
               disabled={saving}
             >
               🏷️ Manage Tags
             </button>
             {onTeamPerformance && (
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
+              <button
+                type="button"
+                className="btn btn-secondary"
                 onClick={() => {
                   onClose();
                   onTeamPerformance();

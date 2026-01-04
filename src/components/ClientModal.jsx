@@ -776,23 +776,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     </select>
                   </div>
                 </div>
-                <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
-                  <label className="form-label">
-                    Ads Expense (₱) <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>(Optional)</span>
-                  </label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={formData.adsExpense || ''}
-                    onChange={(e) => setFormData({ ...formData, adsExpense: parseFloat(e.target.value) || 0 })}
-                    placeholder="0"
-                    min="0"
-                    step="0.01"
-                  />
-                  <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>
-                    Optional: Additional advertising expenses for this client
-                  </small>
-                </div>
+                {/* Ads expense moved to admin settings */}
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Months with Client</label>
