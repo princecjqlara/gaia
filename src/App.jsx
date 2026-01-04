@@ -479,7 +479,27 @@ function App() {
         </>
       )}
 
-      {/* Landing page - shown when not logged in */}
+      {/* Meeting room - ALWAYS renders first for anyone with /room/:slug */}
+      {showMeetingRoom && meetingRoomSlug && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
+          <MeetingRoom
+            roomSlug={meetingRoomSlug}
+            currentUser={currentUser || { id: null, email: null, name: currentUserName }}
+            onClose={() => {
+              setShowMeetingRoom(false);
+              setMeetingRoomSlug(null);
+              window.history.pushState({}, '', '/');
+            }}
+            onRoomNotFound={() => {
+              setShowMeetingRoom(false);
+              setMeetingRoomSlug(null);
+              window.history.pushState({}, '', '/');
+            }}
+          />
+        </div>
+      )}
+
+      {/* Landing page - shown when not logged in AND not in meeting */}
       {!isLoggedIn && !showMeetingRoom && (
         <LandingPage
           onLogin={() => {
@@ -506,24 +526,6 @@ function App() {
           }}
           isSignUpMode={isSignUpMode}
           onClose={() => setShowLoginModal(false)}
-        />
-      )}
-
-      {/* Meeting room - can show for anyone */}
-      {showMeetingRoom && meetingRoomSlug && (
-        <MeetingRoom
-          roomSlug={meetingRoomSlug}
-          currentUser={currentUser || { id: null, email: null, name: currentUserName }}
-          onClose={() => {
-            setShowMeetingRoom(false);
-            setMeetingRoomSlug(null);
-            window.history.pushState({}, '', '/');
-          }}
-          onRoomNotFound={() => {
-            setShowMeetingRoom(false);
-            setMeetingRoomSlug(null);
-            window.history.pushState({}, '', '/');
-          }}
         />
       )}
 
