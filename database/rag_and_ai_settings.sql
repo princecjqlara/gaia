@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS rag_chunks (
     chunk_index INTEGER NOT NULL,
     start_pos INTEGER,
     end_pos INTEGER,
-    embedding VECTOR(1536), -- For future vector search
+    -- embedding VECTOR(1536), -- Uncomment after enabling pgvector extension
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
