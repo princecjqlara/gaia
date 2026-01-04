@@ -1535,3 +1535,25 @@ a:hover {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ============================================
+   Tags - Client Card Tags
+   ============================================ */
+
+.client-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--primary);
+  color: #000;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
