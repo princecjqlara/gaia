@@ -201,9 +201,9 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     className="custom-scrollbar"
                     style={{
                         flex: 1,
-                        overflowY: 'auto',
+                        overflowY: 'scroll',
                         scrollbarWidth: 'thin',
-                        scrollbarColor: 'var(--primary) transparent'
+                        scrollbarColor: '#a855f7 #1a1a2e'
                     }}
                 >
                     {filteredConversations.length === 0 ? (
@@ -411,13 +411,13 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             className="messages-scrollbar"
                             style={{
                                 flex: 1,
-                                overflowY: 'auto',
+                                overflowY: 'scroll',
                                 padding: '1rem',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '0.5rem',
                                 scrollbarWidth: 'thin',
-                                scrollbarColor: 'rgba(124, 58, 237, 0.5) var(--bg-secondary)'
+                                scrollbarColor: '#a855f7 #1a1a2e'
                             }}
                         >
                             {/* Load More History - at top */}
