@@ -54,6 +54,29 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    // Auto-refresh messages every 10 seconds when conversation is selected
+    useEffect(() => {
+        if (!selectedConversation) return;
+
+        const refreshInterval = setInterval(() => {
+            // Refresh messages for current conversation
+            if (selectedConversation?.conversation_id) {
+                selectConversation(selectedConversation);
+            }
+        }, 10000); // 10 seconds
+
+        return () => clearInterval(refreshInterval);
+    }, [selectedConversation?.id]);
+
+    // Auto-refresh conversation list every 30 seconds
+    useEffect(() => {
+        const refreshInterval = setInterval(() => {
+            loadConversations?.(null, true);
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(refreshInterval);
+    }, []);
+
     // Filter and optionally sort conversations
     const filteredConversations = conversations
         .filter(conv => {

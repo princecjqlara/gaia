@@ -58,7 +58,7 @@ export function useFacebookMessenger() {
             setLoading(true);
 
             const page = reset ? 1 : conversationPage;
-            const result = await facebookService.getConversationsWithPagination(pageId, page, 20);
+            const result = await facebookService.getConversationsWithPagination(pageId, page, 8);
 
             if (reset) {
                 setConversations(result.conversations);
@@ -92,7 +92,7 @@ export function useFacebookMessenger() {
             setLoading(true);
             const nextPage = conversationPage + 1;
 
-            const result = await facebookService.getConversationsWithPagination(pageId, nextPage, 20);
+            const result = await facebookService.getConversationsWithPagination(pageId, nextPage, 8);
 
             setConversations(prev => [...prev, ...result.conversations]);
             setConversationPage(nextPage);
