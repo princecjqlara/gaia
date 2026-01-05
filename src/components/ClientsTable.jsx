@@ -35,6 +35,15 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
       filtered = filtered.filter(c => c.paymentStatus === filters.filterPayment);
     }
 
+    // Assigned To filter
+    if (filters.filterAssignedTo) {
+      if (filters.filterAssignedTo === 'unassigned') {
+        filtered = filtered.filter(c => !c.assignedTo);
+      } else {
+        filtered = filtered.filter(c => c.assignedTo === filters.filterAssignedTo);
+      }
+    }
+
     // Sort by priority, then by name
     filtered.sort((a, b) => {
       const priorityDiff = (a.priority || 999) - (b.priority || 999);

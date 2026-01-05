@@ -4,7 +4,7 @@ import ClientsTable from './ClientsTable';
 
 const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveClient, viewMode = 'kanban' }) => {
   const phases = ['booked', 'follow-up', 'preparing', 'testing', 'running'];
-  
+
   const getClientsByPhase = (phase) => {
     let filtered = clients.filter(c => c.phase === phase);
 
@@ -27,6 +27,15 @@ const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveC
 
     if (filters.filterPayment) {
       filtered = filtered.filter(c => c.paymentStatus === filters.filterPayment);
+    }
+
+    // Filter by assigned user
+    if (filters.filterAssignedTo) {
+      if (filters.filterAssignedTo === 'unassigned') {
+        filtered = filtered.filter(c => !c.assignedTo);
+      } else {
+        filtered = filtered.filter(c => c.assignedTo === filters.filterAssignedTo);
+      }
     }
 
     filtered.sort((a, b) => (a.priority || 999) - (b.priority || 999));

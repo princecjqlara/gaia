@@ -16,6 +16,7 @@ import LoginModal from './components/LoginModal';
 import LandingPage from './components/LandingPage';
 import ToastContainer from './components/ToastContainer';
 import MeetingRoom from './components/MeetingRoom';
+import MessengerInbox from './components/MessengerInbox';
 import { useSupabase } from './hooks/useSupabase';
 import { useNotifications } from './hooks/useNotifications';
 import { useStorage } from './hooks/useStorage';
@@ -28,6 +29,7 @@ import './css/styles.css';
 function App() {
   const [theme, setTheme] = useState('dark');
   const [role, setRole] = useState('user');
+  const [activeMainTab, setActiveMainTab] = useState('clients'); // 'clients' or 'messenger'
   const [currentUserName, setCurrentUserName] = useState('User 1');
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -50,6 +52,7 @@ function App() {
   const [filterPhase, setFilterPhase] = useState('');
   const [filterPackage, setFilterPackage] = useState('');
   const [filterPayment, setFilterPayment] = useState('');
+  const [filterAssignedTo, setFilterAssignedTo] = useState('');
   const [viewMode, setViewMode] = useState(() => {
     const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
     return settings.viewMode || 'kanban';
@@ -318,39 +321,106 @@ function App() {
             unreadNotificationCount={unreadNotificationCount}
           />
 
-          <StatsGrid metrics={metrics} role={role} />
+          {/* Main Tab Navigation */}
+          <div style={{
+            display: 'flex',
+            gap: '0',
+            padding: '0 1.5rem',
+            marginBottom: '1rem',
+            borderBottom: '2px solid var(--border-color)'
+          }}>
+            <button
+              onClick={() => setActiveMainTab('clients')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'clients' ? '2px solid var(--primary)' : '2px solid transparent',
+                marginBottom: '-2px',
+                color: activeMainTab === 'clients' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'clients' ? '600' : '400',
+                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              👥 Clients
+            </button>
+            <button
+              onClick={() => setActiveMainTab('messenger')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'messenger' ? '2px solid var(--primary)' : '2px solid transparent',
+                marginBottom: '-2px',
+                color: activeMainTab === 'messenger' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'messenger' ? '600' : '400',
+                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              💬 Messenger
+            </button>
+          </div>
 
-          <FiltersBar
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            filterPhase={filterPhase}
-            onPhaseFilterChange={setFilterPhase}
-            filterPackage={filterPackage}
-            onPackageFilterChange={setFilterPackage}
-            filterPayment={filterPayment}
-            onPaymentFilterChange={setFilterPayment}
-            viewMode={viewMode}
-            onViewModeChange={(mode) => {
-              setViewMode(mode);
-              const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
-              localStorage.setItem('campy_settings', JSON.stringify({ ...settings, viewMode: mode }));
-            }}
-          />
+          {/* Clients Tab Content */}
+          {activeMainTab === 'clients' && (
+            <>
+              <StatsGrid metrics={metrics} role={role} />
 
-          <PhasesContainer
-            clients={clients}
-            filters={{ searchTerm, filterPhase, filterPackage, filterPayment }}
-            viewMode={viewMode}
-            onViewClient={handleOpenViewModal}
-            onEditClient={handleOpenEditModal}
-            onMoveClient={async (clientId, targetPhase) => {
-              try {
-                await moveClientToPhase(clientId, targetPhase);
-              } catch (error) {
-                console.error('Error moving client to phase:', error);
-              }
-            }}
-          />
+              <FiltersBar
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                filterPhase={filterPhase}
+                onPhaseFilterChange={setFilterPhase}
+                filterPackage={filterPackage}
+                onPackageFilterChange={setFilterPackage}
+                filterPayment={filterPayment}
+                onPaymentFilterChange={setFilterPayment}
+                filterAssignedTo={filterAssignedTo}
+                onAssignedToFilterChange={setFilterAssignedTo}
+                users={allUsers}
+                viewMode={viewMode}
+                onViewModeChange={(mode) => {
+                  setViewMode(mode);
+                  const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
+                  localStorage.setItem('campy_settings', JSON.stringify({ ...settings, viewMode: mode }));
+                }}
+              />
+
+              <PhasesContainer
+                clients={clients}
+                filters={{ searchTerm, filterPhase, filterPackage, filterPayment, filterAssignedTo }}
+                viewMode={viewMode}
+                onViewClient={handleOpenViewModal}
+                onEditClient={handleOpenEditModal}
+                onMoveClient={async (clientId, targetPhase) => {
+                  try {
+                    await moveClientToPhase(clientId, targetPhase);
+                  } catch (error) {
+                    console.error('Error moving client to phase:', error);
+                  }
+                }}
+              />
+            </>
+          )}
+
+          {/* Messenger Tab Content */}
+          {activeMainTab === 'messenger' && (
+            <div style={{ padding: '0 1.5rem' }}>
+              <MessengerInbox
+                clients={clients}
+                users={allUsers}
+                currentUserId={currentUser?.id}
+              />
+            </div>
+          )}
 
           {showClientModal && (
             <ClientModal

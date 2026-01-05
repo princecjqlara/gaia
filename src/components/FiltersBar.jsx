@@ -9,6 +9,9 @@ const FiltersBar = ({
   onPackageFilterChange,
   filterPayment,
   onPaymentFilterChange,
+  filterAssignedTo,
+  onAssignedToFilterChange,
+  users = [],
   viewMode,
   onViewModeChange
 }) => {
@@ -81,6 +84,22 @@ const FiltersBar = ({
         <option value="unpaid">Unpaid</option>
         <option value="partial">Partial</option>
       </select>
+      {onAssignedToFilterChange && (
+        <select
+          className="form-select filter-select"
+          id="filterAssignedTo"
+          value={filterAssignedTo || ''}
+          onChange={(e) => onAssignedToFilterChange(e.target.value)}
+        >
+          <option value="">All Team Members</option>
+          <option value="unassigned">Unassigned</option>
+          {users.map(user => (
+            <option key={user.id} value={user.id}>
+              {user.name || user.email}
+            </option>
+          ))}
+        </select>
+      )}
     </section>
   );
 };

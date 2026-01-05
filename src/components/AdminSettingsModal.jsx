@@ -226,6 +226,21 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             >
               👥 Employees & Salary
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('facebook')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'facebook' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'facebook' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'facebook' ? '600' : '400'
+              }}
+            >
+              📘 Facebook Integration
+            </button>
           </div>
 
           {activeMainTab === 'packages' && (
@@ -561,6 +576,118 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
 
           {activeMainTab === 'employees' && (
             <EmployeeSalaryManagement />
+          )}
+
+          {activeMainTab === 'facebook' && (
+            <div>
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📘 Facebook Page Connection</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Connect your Facebook Page to sync messages and conversations.
+                </p>
+
+                <div style={{
+                  padding: '1.5rem',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📘</div>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    To connect your Facebook Page, you'll need to set up a Facebook App in the Meta Developer Console.
+                  </p>
+                  <a
+                    href="https://developers.facebook.com/apps"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary"
+                    style={{ marginRight: '0.5rem' }}
+                  >
+                    Open Meta Developer Console
+                  </a>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      // Facebook OAuth flow would go here
+                      alert('Facebook OAuth integration requires App ID and App Secret configuration. Please set these up in your environment variables.');
+                    }}
+                  >
+                    Connect Facebook Page
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📊 Ad Spend Sync</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Automatically sync ad spend from Meta Ads Manager and deduct from profit calculations.
+                </p>
+
+                <div style={{
+                  padding: '1rem',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="checkbox"
+                      style={{ width: '20px', height: '20px' }}
+                      onChange={(e) => {
+                        // This would save to facebook_settings table
+                        console.log('Auto ad spend sync:', e.target.checked);
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: '500' }}>Enable Auto Ad Spend Sync</div>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                        Automatically fetch daily ad spend from connected ad accounts and update client expenses
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🔔 Webhook Configuration</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Configure webhooks to receive real-time message updates from Facebook.
+                </p>
+
+                <div className="form-group">
+                  <label className="form-label">Webhook URL</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="https://your-domain.com/api/facebook/webhook"
+                    readOnly
+                    value={window.location.origin + '/api/facebook/webhook'}
+                    style={{ background: 'var(--bg-tertiary)' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    Use this URL when setting up webhooks in the Facebook App settings
+                  </small>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1rem' }}>
+                  <label className="form-label">Verify Token</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Enter a custom verify token"
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    This token is used to verify webhook requests from Facebook
+                  </small>
+                </div>
+              </div>
+            </div>
           )}
 
           {message.text && (
