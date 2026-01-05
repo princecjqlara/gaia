@@ -195,7 +195,15 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                 </div>
 
                 {/* Conversations List */}
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div
+                    className="custom-scrollbar"
+                    style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: 'var(--primary) transparent'
+                    }}
+                >
                     {filteredConversations.length === 0 ? (
                         <div style={{
                             padding: '2rem 1rem',
@@ -397,14 +405,19 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                         </div>
 
                         {/* Messages */}
-                        <div style={{
-                            flex: 1,
-                            overflowY: 'auto',
-                            padding: '1rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.5rem'
-                        }}>
+                        <div
+                            className="messages-scrollbar"
+                            style={{
+                                flex: 1,
+                                overflowY: 'auto',
+                                padding: '1rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.5rem',
+                                scrollbarWidth: 'thin',
+                                scrollbarColor: 'rgba(124, 58, 237, 0.5) var(--bg-secondary)'
+                            }}
+                        >
                             {/* Load More History - at top */}
                             {hasMoreMessages && (
                                 <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
