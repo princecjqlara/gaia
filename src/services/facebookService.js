@@ -127,20 +127,33 @@ class FacebookService {
     }
 
     /**
-     * Fetch conversations from Facebook Graph API
+     * Fetch conversations from Facebook Graph API with pagination
      */
     async fetchConversationsFromFacebook(pageId, accessToken) {
         try {
-            const response = await fetch(
-                `${GRAPH_API_BASE}/${pageId}/conversations?fields=participants,updated_time,unread_count,messages.limit(1){message,from,created_time}&access_token=${accessToken}`
-            );
+            const allConversations = [];
+            let url = `${GRAPH_API_BASE}/${pageId}/conversations?fields=participants,updated_time,unread_count,messages.limit(1){message,from,created_time}&limit=100&access_token=${accessToken}`;
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'Failed to fetch conversations');
+            // Paginate through all conversations
+            while (url) {
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || 'Failed to fetch conversations');
+                }
+
+                const data = await response.json();
+                allConversations.push(...(data.data || []));
+
+                // Get next page URL if exists
+                url = data.paging?.next || null;
+
+                // Safety limit to prevent infinite loops
+                if (allConversations.length >= 500) break;
             }
 
-            return await response.json();
+            return { data: allConversations };
         } catch (error) {
             console.error('Error fetching conversations from Facebook:', error);
             throw error;

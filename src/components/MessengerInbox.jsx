@@ -375,13 +375,31 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             flexDirection: 'column',
                             gap: '0.5rem'
                         }}>
+                            {/* Load More History - at top */}
+                            {hasMoreMessages && (
+                                <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+                                    <button
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={loadMoreMessages}
+                                        disabled={loading}
+                                        style={{ opacity: 0.7 }}
+                                    >
+                                        {loading ? '⏳ Loading...' : '⬆️ Load earlier messages'}
+                                    </button>
+                                </div>
+                            )}
+
                             {messages.length === 0 ? (
                                 <div style={{
                                     textAlign: 'center',
                                     color: 'var(--text-muted)',
-                                    padding: '2rem'
+                                    padding: '2rem',
+                                    flex: 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
                                 }}>
-                                    No messages yet
+                                    {loading ? '⏳ Loading messages...' : 'No messages yet. Click sync to load messages.'}
                                 </div>
                             ) : (
                                 messages.map(msg => (
@@ -422,20 +440,6 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             )}
                             <div ref={messagesEndRef} />
                         </div>
-
-                        {/* Load More History */}
-                        {hasMoreMessages && (
-                            <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
-                                <button
-                                    className="btn btn-sm btn-secondary"
-                                    onClick={loadMoreMessages}
-                                    disabled={loading}
-                                    style={{ opacity: 0.7 }}
-                                >
-                                    {loading ? '⏳ Loading...' : '⬆️ Load earlier messages'}
-                                </button>
-                            </div>
-                        )}
 
                         {/* Message Composer */}
                         <form onSubmit={handleSendMessage} style={{
