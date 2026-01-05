@@ -131,12 +131,10 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         <div style={{
             display: 'grid',
             gridTemplateColumns: '280px 1fr 260px',
-            height: 'calc(100vh - 140px)',
-            maxHeight: '700px',
-            minHeight: '400px',
+            height: '600px',
             background: 'var(--bg-secondary)',
             borderRadius: 'var(--radius-lg)',
-            overflow: 'hidden',
+            overflow: 'visible',
             border: '1px solid var(--border-color)'
         }}>
             {/* Left Sidebar - Conversations List */}
