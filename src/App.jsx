@@ -91,13 +91,17 @@ function App() {
   // Auto-connect a single Facebook page
   const autoConnectPage = async (page) => {
     try {
-      const { facebookService } = await import('./services/facebookService');
+      const facebookServiceModule = await import('./services/facebookService');
+      const facebookService = facebookServiceModule.default || facebookServiceModule.facebookService;
+
+      // connectPage expects: pageData.id, pageData.name, pageData.access_token, pageData.picture?.data?.url
       await facebookService.connectPage({
-        page_id: page.id,
-        page_name: page.name,
-        page_access_token: page.token,
-        picture_url: page.picture
-      }, null); // Will use current user in service
+        id: page.id,
+        name: page.name,
+        access_token: page.token,
+        picture: { data: { url: page.picture } }
+      }, null);
+
       alert(`✅ Connected "${page.name}"! You can now sync conversations.`);
       setActiveMainTab('messenger');
     } catch (err) {
