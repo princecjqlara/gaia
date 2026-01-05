@@ -88,6 +88,24 @@ function App() {
   const [showFbPageModal, setShowFbPageModal] = useState(false);
   const [connectingPage, setConnectingPage] = useState(false);
 
+  // Auto-connect a single Facebook page
+  const autoConnectPage = async (page) => {
+    try {
+      const { facebookService } = await import('./services/facebookService');
+      await facebookService.connectPage({
+        page_id: page.id,
+        page_name: page.name,
+        page_access_token: page.token,
+        picture_url: page.picture
+      }, null); // Will use current user in service
+      alert(`✅ Connected "${page.name}"! You can now sync conversations.`);
+      setActiveMainTab('messenger');
+    } catch (err) {
+      console.error('Failed to connect page:', err);
+      alert(`Failed to connect page: ${err.message}\n\nMake sure you've run the database migration in Supabase.`);
+    }
+  };
+
   // Check for Facebook OAuth callback parameters - run FIRST before any other effects
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -104,6 +122,9 @@ function App() {
     const fbPages = urlParams.get('fb_pages');
     if (fbPages) {
       console.log('FB Pages param found:', fbPages);
+      // Clear URL immediately
+      window.history.replaceState({}, '', window.location.pathname);
+
       try {
         const decoded = atob(fbPages);
         console.log('Decoded:', decoded);
@@ -111,12 +132,16 @@ function App() {
         console.log('Parsed pages:', pages);
 
         if (pages && pages.length > 0) {
-          setFbPagesForSelection(pages);
-          setShowFbPageModal(true);
-          // Keep URL clean
-          window.history.replaceState({}, '', window.location.pathname);
-          // Show alert to confirm pages received
-          alert(`Found ${pages.length} Facebook page(s). Select one to connect.`);
+          if (pages.length === 1) {
+            // Auto-connect if only one page
+            alert(`Found 1 Facebook page: "${pages[0].name}". Connecting automatically...`);
+            autoConnectPage(pages[0]);
+          } else {
+            // Show selection modal for multiple pages
+            setFbPagesForSelection(pages);
+            setShowFbPageModal(true);
+            alert(`Found ${pages.length} Facebook pages. Please select one to connect.`);
+          }
         } else {
           alert('No Facebook pages found. Make sure you have admin access to at least one Facebook Page.');
         }
