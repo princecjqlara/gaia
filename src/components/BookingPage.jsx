@@ -536,7 +536,9 @@ const styles = {
     slotsTitle: {
         fontSize: '1rem',
         fontWeight: '600',
-        marginBottom: '1rem'
+        marginBottom: '1rem',
+        color: '#1a1a1a',
+        textDecoration: 'none'
     },
     slots: {
         display: 'grid',
