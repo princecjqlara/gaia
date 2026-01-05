@@ -396,6 +396,42 @@ class FacebookService {
     }
 
     /**
+     * Send a message with MESSAGE_TAG for messaging outside 24-hour window
+     * Uses ACCOUNT_UPDATE tag for bulk/automated messages
+     */
+    async sendMessageWithTag(pageId, recipientId, messageText, tag = 'ACCOUNT_UPDATE') {
+        try {
+            const pages = await this.getConnectedPages();
+            const page = pages.find(p => p.page_id === pageId);
+            if (!page) throw new Error('Page not found');
+
+            const response = await fetch(
+                `${GRAPH_API_BASE}/${pageId}/messages?access_token=${page.page_access_token}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recipient: { id: recipientId },
+                        message: { text: messageText },
+                        messaging_type: 'MESSAGE_TAG',
+                        tag: tag
+                    })
+                }
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Failed to send tagged message');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error sending tagged message:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Link a conversation to a client
      */
     async linkConversationToClient(conversationId, clientId) {
@@ -1193,7 +1229,8 @@ class FacebookService {
 
             for (const recipient of recipients) {
                 try {
-                    await this.sendMessage(pageId, recipient.participant_id, messageText);
+                    // Use ACCOUNT_UPDATE tag for bulk/automated messages
+                    await this.sendMessageWithTag(pageId, recipient.participant_id, messageText, 'ACCOUNT_UPDATE');
                     sent++;
                     // Add small delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 100));
