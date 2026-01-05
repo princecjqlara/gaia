@@ -5,8 +5,18 @@
             "destination": "/index.html"
         },
         {
+            "source": "/book/:pageId*",
+            "destination": "/index.html"
+        },
+        {
             "source": "/((?!api|assets|favicon|.*\\..*).*)",
             "destination": "/index.html"
+        }
+    ],
+    "crons": [
+        {
+            "path": "/api/cron/follow-up",
+            "schedule": "0 * * * *"
         }
     ]
 }
