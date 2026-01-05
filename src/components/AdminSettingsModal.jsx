@@ -609,8 +609,12 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                   <button
                     className="btn btn-secondary"
                     onClick={() => {
-                      // Facebook OAuth flow would go here
-                      alert('Facebook OAuth integration requires App ID and App Secret configuration. Please set these up in your environment variables.');
+                      // Facebook OAuth flow - redirect to Facebook Login Dialog
+                      const appId = import.meta.env.VITE_FACEBOOK_APP_ID || '1822108718500869';
+                      const redirectUri = encodeURIComponent(window.location.origin + '/api/facebook/callback');
+                      const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata';
+                      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+                      window.location.href = oauthUrl;
                     }}
                   >
                     Connect Facebook Page
