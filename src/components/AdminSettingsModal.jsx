@@ -6,6 +6,25 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   const [showTagManagement, setShowTagManagement] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState('packages'); // packages, employees, facebook, booking
 
+  // Get the active Facebook page ID from localStorage (connected pages stored there)
+  const getActivePageId = () => {
+    try {
+      const pages = localStorage.getItem('connected_facebook_pages');
+      if (pages) {
+        const parsed = JSON.parse(pages);
+        if (parsed && parsed.length > 0) {
+          return parsed[0].id || parsed[0].page_id || 'default';
+        }
+      }
+      // Try alternative storage
+      const selectedPage = localStorage.getItem('selectedPageId');
+      if (selectedPage) return selectedPage;
+    } catch (e) {
+      console.log('Could not get active page ID:', e);
+    }
+    return 'default';
+  };
+
   // Booking settings state
   const [bookingSettings, setBookingSettings] = useState({
     confirmation_message: 'Your booking has been confirmed! We look forward to meeting with you.',
@@ -143,7 +162,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
 
           // Also try API (only override if it returns complete data)
           try {
-            const response = await fetch('/api/booking/settings?pageId=default');
+            const response = await fetch(`/api/booking/settings?pageId=${getActivePageId()}`);
             if (response.ok) {
               const data = await response.json();
               console.log('API booking settings response:', data);
@@ -230,7 +249,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         console.log('Saved to localStorage');
 
         // Also try API
-        const bookingResponse = await fetch('/api/booking/settings?pageId=default', {
+        const bookingResponse = await fetch(`/api/booking/settings?pageId=${getActivePageId()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bookingSettings)
@@ -845,7 +864,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
               <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => window.open('/booking?pageId=default', '_blank')}
+                  onClick={() => window.open(`/booking?pageId=${getActivePageId()}`, '_blank')}
                   style={{
                     padding: '0.75rem 1.5rem',
                     background: 'linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)',
@@ -865,7 +884,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                 <button
                   type="button"
                   onClick={() => {
-                    const url = `${window.location.origin}/booking?pageId=default`;
+                    const url = `${window.location.origin}/booking?pageId=${getActivePageId()}`;
                     navigator.clipboard.writeText(url);
                     alert('Booking page URL copied to clipboard!');
                   }}
