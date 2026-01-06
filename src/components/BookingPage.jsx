@@ -314,9 +314,9 @@ const BookingPage = () => {
                 )}
 
                 <div style={{
-                    ...styles.grid,
-                    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-                    gap: isMobile ? '1rem' : '2rem'
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem'
                 }}>
                     {/* Calendar */}
                     <div style={styles.calendarSection}>
@@ -457,7 +457,7 @@ const styles = {
     container: {
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%)',
-        padding: '2rem',
+        padding: '0.5rem',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
@@ -466,13 +466,11 @@ const styles = {
     card: {
         background: 'white',
         borderRadius: '16px',
-        padding: '1.5rem',
-        maxWidth: '800px',
-        width: 'calc(100% - 1rem)',
-        margin: '0 0.5rem',
+        padding: '1rem',
+        maxWidth: '450px',
+        width: '100%',
         boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-        boxSizing: 'border-box',
-        overflow: 'hidden'
+        boxSizing: 'border-box'
     },
     badge: {
         display: 'inline-block',
@@ -551,10 +549,10 @@ const styles = {
     },
     weekday: {
         textAlign: 'center',
-        fontSize: '0.75rem',
+        fontSize: '0.65rem',
         color: '#555',
-        padding: '0.5rem',
-        fontWeight: '500'
+        padding: '0.25rem',
+        fontWeight: '600'
     },
     days: {
         display: 'grid',
