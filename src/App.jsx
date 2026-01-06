@@ -78,9 +78,10 @@ function App() {
       return;
     }
 
-    // Booking page route
+    // Booking page route - support both /book/:pageId and /booking
     const bookMatch = path.match(/^\/book\/([a-zA-Z0-9]+)$/);
-    if (bookMatch) {
+    const isBookingPath = path === '/booking' || path.startsWith('/booking');
+    if (bookMatch || isBookingPath) {
       setShowBookingPage(true);
       return;
     }
@@ -90,12 +91,13 @@ function App() {
       const newPath = window.location.pathname;
       const matchRoom = newPath.match(/^\/room\/([a-zA-Z0-9]+)$/);
       const matchBook = newPath.match(/^\/book\/([a-zA-Z0-9]+)$/);
+      const isBookingPath = newPath === '/booking' || newPath.startsWith('/booking');
 
       if (matchRoom) {
         setMeetingRoomSlug(matchRoom[1]);
         setShowMeetingRoom(true);
         setShowBookingPage(false);
-      } else if (matchBook) {
+      } else if (matchBook || isBookingPath) {
         setShowBookingPage(true);
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
