@@ -87,51 +87,71 @@ async function handleIncomingMessage(pageId, event) {
         return;
     }
 
-    console.log(`Incoming message from ${senderId}:`, message.text || '[attachment]');
+    console.log(`[WEBHOOK] Incoming message from ${senderId}:`, message.text || '[attachment]');
 
     // Find or create conversation
     const conversationId = `t_${senderId}`;
 
-    // Upsert conversation
-    const { error: convError } = await supabase
-        .from('facebook_conversations')
-        .upsert({
-            conversation_id: conversationId,
-            page_id: pageId,
-            participant_id: senderId,
-            participant_name: null, // Will be fetched separately if needed
-            last_message_text: message.text || '[Attachment]',
-            last_message_time: new Date(timestamp).toISOString(),
-            unread_count: 1,
-            updated_at: new Date().toISOString()
-        }, {
-            onConflict: 'conversation_id',
-            ignoreDuplicates: false
-        });
+    try {
+        // First, check if conversation exists
+        const { data: existingConv, error: fetchError } = await supabase
+            .from('facebook_conversations')
+            .select('*')
+            .eq('conversation_id', conversationId)
+            .single();
 
-    if (convError) {
-        console.error('Error upserting conversation:', convError);
+        if (fetchError && fetchError.code !== 'PGRST116') {
+            console.error('[WEBHOOK] Error fetching existing conversation:', fetchError);
+        }
+
+        const newUnreadCount = (existingConv?.unread_count || 0) + 1;
+
+        // Upsert conversation with incremented unread count
+        const { error: convError } = await supabase
+            .from('facebook_conversations')
+            .upsert({
+                conversation_id: conversationId,
+                page_id: pageId,
+                participant_id: senderId,
+                participant_name: existingConv?.participant_name || null, // Keep existing name
+                last_message_text: message.text || '[Attachment]',
+                last_message_time: new Date(timestamp).toISOString(),
+                last_message_from_page: false, // Message is from user, not page
+                unread_count: newUnreadCount,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'conversation_id',
+                ignoreDuplicates: false
+            });
+
+        if (convError) {
+            console.error('[WEBHOOK] Error upserting conversation:', convError);
+        } else {
+            console.log(`[WEBHOOK] Conversation ${conversationId} updated, unread: ${newUnreadCount}`);
+        }
+
+        // Save message
+        const { error: msgError } = await supabase
+            .from('facebook_messages')
+            .upsert({
+                message_id: message.mid,
+                conversation_id: conversationId,
+                sender_id: senderId,
+                message_text: message.text || null,
+                attachments: message.attachments || null,
+                timestamp: new Date(timestamp).toISOString(),
+                is_from_page: false,
+                is_read: false
+            }, { onConflict: 'message_id' });
+
+        if (msgError) {
+            console.error('[WEBHOOK] Error saving message:', msgError);
+        } else {
+            console.log(`[WEBHOOK] Message ${message.mid} saved successfully`);
+        }
+    } catch (error) {
+        console.error('[WEBHOOK] Exception in handleIncomingMessage:', error);
     }
-
-    // Save message
-    const { error: msgError } = await supabase
-        .from('facebook_messages')
-        .upsert({
-            message_id: message.mid,
-            conversation_id: conversationId,
-            sender_id: senderId,
-            message_text: message.text || null,
-            attachments: message.attachments || null,
-            timestamp: new Date(timestamp).toISOString(),
-            is_from_page: false,
-            is_read: false
-        }, { onConflict: 'message_id' });
-
-    if (msgError) {
-        console.error('Error saving message:', msgError);
-    }
-
-    console.log(`Message saved for conversation ${conversationId}`);
 }
 
 // Vercel config
