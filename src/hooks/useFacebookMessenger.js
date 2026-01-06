@@ -686,11 +686,39 @@ export function useFacebookMessenger() {
                 }
 
                 // Update the conversation in the list in-place (don't reset pagination)
-                setConversations(prev => prev.map(conv =>
-                    conv.conversation_id === payload.new.conversation_id
-                        ? { ...conv, last_message_text: payload.new.message_text, last_message_time: payload.new.timestamp }
-                        : conv
-                ));
+                setConversations(prev => {
+                    const exists = prev.some(conv => conv.conversation_id === payload.new.conversation_id);
+                    if (exists) {
+                        // Update existing conversation
+                        return prev.map(conv =>
+                            conv.conversation_id === payload.new.conversation_id
+                                ? { ...conv, last_message_text: payload.new.message_text, last_message_time: payload.new.timestamp }
+                                : conv
+                        );
+                    }
+                    // Conversation not in current list - will be handled by conversation subscription
+                    return prev;
+                });
+
+                // If conversation is not in the list, trigger silent refresh to bring it to top
+                setConversations(prev => {
+                    const exists = prev.some(conv => conv.conversation_id === payload.new.conversation_id);
+                    if (!exists) {
+                        // Trigger async refresh (via setTimeout to avoid blocking)
+                        setTimeout(() => {
+                            facebookService.getConversationsWithPagination(null, 1, 8)
+                                .then(result => {
+                                    setConversations(result.conversations);
+                                    setConversationPage(1);
+                                    setHasMoreConversations(result.hasMore);
+                                    setTotalConversations(result.total);
+                                    console.log('[REALTIME] Refreshed conversations after new message');
+                                })
+                                .catch(err => console.error('Error refreshing conversations:', err));
+                        }, 100);
+                    }
+                    return prev;
+                });
             });
 
             // Subscribe to conversation updates
