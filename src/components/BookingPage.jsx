@@ -8,7 +8,12 @@ const BookingPage = () => {
     // Get URL params
     const urlParams = new URLSearchParams(window.location.search);
     const pathParts = window.location.pathname.split('/');
-    const pageId = pathParts[pathParts.indexOf('book') + 1];
+
+    // Support both /book/:pageId and /booking?pageId=xxx formats
+    const pathPageId = pathParts[pathParts.indexOf('book') + 1];
+    const queryPageId = urlParams.get('pageId');
+    const pageId = pathPageId || queryPageId || 'default';
+
     const psid = urlParams.get('psid');
     const contactName = urlParams.get('name') || '';
 
@@ -89,36 +94,58 @@ const BookingPage = () => {
     }, [success, settings, selectedDate, selectedTime, formData.name, pageId]);
 
     const loadSettings = async () => {
+        // Default settings - always show something
+        const defaultSettings = {
+            custom_fields: [
+                { id: 'name', label: 'Your Name', type: 'text', required: true },
+                { id: 'phone', label: 'Phone Number', type: 'tel', required: true },
+                { id: 'email', label: 'Email Address', type: 'email', required: false },
+                { id: 'notes', label: 'Additional Notes', type: 'textarea', required: false }
+            ],
+            available_days: [1, 2, 3, 4, 5],
+            start_time: '09:00',
+            end_time: '17:00',
+            slot_duration: 30,
+            booking_mode: 'slots',
+            allow_next_hour: false
+        };
+
         try {
-            // First try localStorage (immediate)
+            // Start with defaults
+            let loadedSettings = { ...defaultSettings };
+
+            // Try localStorage first (immediate)
             const localSettings = localStorage.getItem('booking_settings');
             if (localSettings) {
                 const parsed = JSON.parse(localSettings);
-                setSettings(parsed);
-                console.log('Loaded booking settings from localStorage');
+                loadedSettings = { ...loadedSettings, ...parsed };
+                console.log('Loaded booking settings from localStorage:', parsed);
             }
+
+            // Apply settings immediately
+            setSettings(loadedSettings);
 
             // Then try API (will override if successful)
-            const response = await fetch(`/api/booking/settings?pageId=${pageId}`);
-            if (response.ok) {
-                const data = await response.json();
-                // Only use API data if it's not a "pending migration" response
-                if (!data.message?.includes('pending migration')) {
-                    setSettings(data);
+            try {
+                const response = await fetch(`/api/booking/settings?pageId=${pageId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('API response:', data);
+                    // Only use API data if it's not a "pending migration" response
+                    if (!data.message?.includes('pending migration') && !data.error) {
+                        loadedSettings = { ...loadedSettings, ...data };
+                        setSettings(loadedSettings);
+                        console.log('Applied settings from API');
+                    }
                 }
+            } catch (apiErr) {
+                console.log('API not available, using localStorage/defaults');
             }
 
-            // Initialize custom form data
-            if (settings?.custom_form && Array.isArray(settings.custom_form)) {
-                const initialCustomData = {};
-                data.custom_form.forEach(field => {
-                    initialCustomData[field.name] = '';
-                });
-                setCustomFormData(initialCustomData);
-            }
         } catch (err) {
-            setError('Unable to load booking settings. Please try again later.');
-            console.error(err);
+            console.error('Error loading settings:', err);
+            // Even on error, set default settings so UI renders
+            setSettings(defaultSettings);
         } finally {
             setLoading(false);
         }
