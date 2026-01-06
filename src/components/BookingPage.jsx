@@ -90,13 +90,26 @@ const BookingPage = () => {
 
     const loadSettings = async () => {
         try {
+            // First try localStorage (immediate)
+            const localSettings = localStorage.getItem('booking_settings');
+            if (localSettings) {
+                const parsed = JSON.parse(localSettings);
+                setSettings(parsed);
+                console.log('Loaded booking settings from localStorage');
+            }
+
+            // Then try API (will override if successful)
             const response = await fetch(`/api/booking/settings?pageId=${pageId}`);
-            if (!response.ok) throw new Error('Failed to load booking settings');
-            const data = await response.json();
-            setSettings(data);
+            if (response.ok) {
+                const data = await response.json();
+                // Only use API data if it's not a "pending migration" response
+                if (!data.message?.includes('pending migration')) {
+                    setSettings(data);
+                }
+            }
 
             // Initialize custom form data
-            if (data.custom_form && Array.isArray(data.custom_form)) {
+            if (settings?.custom_form && Array.isArray(settings.custom_form)) {
                 const initialCustomData = {};
                 data.custom_form.forEach(field => {
                     initialCustomData[field.name] = '';
@@ -429,13 +442,50 @@ const BookingPage = () => {
                                         Available: {settings?.start_time || '09:00'} - {settings?.end_time || '17:00'}
                                     </small>
                                 </div>
+                            ) : (settings?.booking_mode === 'both') ? (
+                                /* Both Options - Show slots and custom picker */
+                                <div>
+                                    {/* Time Slots */}
+                                    {availableSlots.length > 0 && (
+                                        <div style={styles.slots}>
+                                            {availableSlots.map(slot => (
+                                                <button
+                                                    key={slot}
+                                                    type="button"
+                                                    style={{
+                                                        ...styles.slot,
+                                                        ...(selectedTime === slot ? styles.slotSelected : {})
+                                                    }}
+                                                    onClick={() => setSelectedTime(slot)}
+                                                >
+                                                    {formatTime(slot)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {/* Custom Time */}
+                                    <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f0f0', borderRadius: '8px' }}>
+                                        <label style={{ fontSize: '0.875rem', color: '#555', display: 'block', marginBottom: '0.5rem' }}>
+                                            Or pick a custom time:
+                                        </label>
+                                        <input
+                                            type="time"
+                                            value={selectedTime || ''}
+                                            onChange={(e) => setSelectedTime(e.target.value)}
+                                            min={settings?.start_time || '09:00'}
+                                            max={settings?.end_time || '17:00'}
+                                            style={{ padding: '0.75rem', fontSize: '1rem', border: '2px solid #ddd', borderRadius: '6px', width: '100%', boxSizing: 'border-box' }}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
-                                /* Fixed Time Slots */
+                                /* Fixed Time Slots Only */
                                 availableSlots.length > 0 ? (
                                     <div style={styles.slots}>
                                         {availableSlots.map(slot => (
                                             <button
                                                 key={slot}
+                                                type="button"
                                                 style={{
                                                     ...styles.slot,
                                                     ...(selectedTime === slot ? styles.slotSelected : {})

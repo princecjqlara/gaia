@@ -131,20 +131,31 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         setPrompts(loadedPrompts);
         setPackageDetails(loadedDetails);
 
-        // Load booking settings - need a page ID (use first connected page or default)
+        // Load booking settings - try localStorage first, then API
         try {
+          // Check localStorage first
+          const localSettings = localStorage.getItem('booking_settings');
+          if (localSettings) {
+            const parsed = JSON.parse(localSettings);
+            setBookingSettings(prev => ({ ...prev, ...parsed }));
+            console.log('Loaded booking settings from localStorage');
+          }
+
+          // Also try API (will override localStorage if successful)
           const response = await fetch('/api/booking/settings?pageId=default');
           if (response.ok) {
             const data = await response.json();
-            setBookingSettings(prev => ({
-              ...prev,
-              ...data,
-              available_days: data.available_days || prev.available_days,
-              custom_fields: data.custom_fields || prev.custom_fields
-            }));
+            if (!data.message?.includes('pending migration')) {
+              setBookingSettings(prev => ({
+                ...prev,
+                ...data,
+                available_days: data.available_days || prev.available_days,
+                custom_fields: data.custom_fields || prev.custom_fields
+              }));
+            }
           }
         } catch (e) {
-          console.log('Could not load booking settings:', e);
+          console.log('Could not load booking settings from API:', e);
         }
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -200,6 +211,12 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       // Save booking settings
       try {
         console.log('Saving booking settings:', bookingSettings);
+
+        // Always save to localStorage as backup
+        localStorage.setItem('booking_settings', JSON.stringify(bookingSettings));
+        console.log('Saved to localStorage');
+
+        // Also try API
         const bookingResponse = await fetch('/api/booking/settings?pageId=default', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -212,6 +229,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         }
       } catch (e) {
         console.error('Could not save booking settings:', e);
+        // localStorage already saved above as backup
       }
 
       setMessage({ type: 'success', text: 'Settings saved successfully! Page will reload in 1 second...' });
@@ -1024,11 +1042,52 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                         />
                         ⏰ Flexible Time
                       </label>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: bookingSettings.booking_mode === 'both' ? 'var(--primary)' : 'var(--bg-secondary)',
+                        color: bookingSettings.booking_mode === 'both' ? 'white' : 'var(--text-primary)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <input
+                          type="radio"
+                          name="booking_mode"
+                          checked={bookingSettings.booking_mode === 'both'}
+                          onChange={() => setBookingSettings(prev => ({ ...prev, booking_mode: 'both' }))}
+                          style={{ display: 'none' }}
+                        />
+                        📅 Both Options
+                      </label>
                     </div>
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                      {bookingSettings.booking_mode === 'slots'
-                        ? 'Contacts pick from preset time slots (9:00, 9:30, 10:00...)'
-                        : 'Contacts can pick any time (11:32, 2:15...)'}
+                      {bookingSettings.booking_mode === 'slots' && 'Contacts pick from preset time slots (9:00, 9:30, 10:00...)'}
+                      {bookingSettings.booking_mode === 'flexible' && 'Contacts can pick any time (11:32, 2:15...)'}
+                      {bookingSettings.booking_mode === 'both' && 'Show both slots AND time picker - contacts choose their preference'}
+                    </small>
+                  </div>
+
+                  {/* Minimum Advance Booking Hours */}
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">Minimum Advance Booking Time</label>
+                    <select
+                      className="form-select"
+                      value={bookingSettings.min_advance_hours || 1}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, min_advance_hours: parseInt(e.target.value) }))}
+                    >
+                      <option value="0">No minimum (allow immediate)</option>
+                      <option value="1">1 hour before</option>
+                      <option value="2">2 hours before</option>
+                      <option value="3">3 hours before</option>
+                      <option value="4">4 hours before</option>
+                      <option value="24">24 hours (next day only)</option>
+                    </select>
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      How much advance notice is required for bookings (e.g., 2 hours = can book 10 AM at 8 AM)
                     </small>
                   </div>
 
