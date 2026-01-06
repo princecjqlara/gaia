@@ -299,7 +299,7 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, currentUserName
 
 // Gantt-style Day View
 const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEventColor, getClientName, isMobile }) => {
-  const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 11 PM
+  const hours = Array.from({ length: 24 }, (_, i) => i); // Full 24 hours (12 AM to 11 PM)
   const meetings = events.filter(e => e.event_type === 'meeting');
   const otherEvents = events.filter(e => e.event_type !== 'meeting');
 
@@ -309,13 +309,13 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
     const phTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: false, timeZone: 'Asia/Manila' });
     const [hours, minutes] = phTime.split(':').map(Number);
     const h = hours + minutes / 60;
-    return Math.max(0, Math.min(100, ((h - 6) / 17) * 100)); // 6 AM start, 17 hour range
+    return Math.max(0, Math.min(100, (h / 24) * 100)); // Full 24 hour range
   };
 
   const getWidth = (start, end) => {
     const s = new Date(start), e = new Date(end);
     const duration = (e - s) / (1000 * 60 * 60);
-    return Math.max(8, (duration / 17) * 100); // 17 hour range
+    return Math.max(4, (duration / 24) * 100); // 24 hour range
   };
 
   const assignRows = (meetings) => {
@@ -377,74 +377,76 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
             📅 Schedule ({meetings.length} meeting{meetings.length !== 1 ? 's' : ''})
           </div>
 
-          {/* Gantt Timeline */}
-          <div style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '1rem', overflow: 'hidden' }}>
-            {/* Hour labels */}
-            <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
-              {hours.map(h => (
-                <div key={h} style={{ flex: 1, fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: '500' }}>
-                  {h > 12 ? h - 12 : h}{h >= 12 ? 'pm' : 'am'}
-                </div>
-              ))}
-            </div>
-
-            {/* Timeline grid with meetings */}
-            <div style={{ position: 'relative', minHeight: Math.max(100, rowCount * 70 + 20) + 'px' }}>
-              {/* Grid lines */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex' }}>
-                {hours.map((h, i) => (
-                  <div key={h} style={{ flex: 1, borderLeft: i > 0 ? '1px dashed var(--border-color)' : 'none', opacity: 0.4 }} />
+          {/* Gantt Timeline - Horizontally Scrollable */}
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '1rem', overflowX: 'auto' }}>
+            <div style={{ minWidth: '1200px' }}>
+              {/* Hour labels */}
+              <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
+                {hours.map(h => (
+                  <div key={h} style={{ flex: 1, fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: '500', minWidth: '50px' }}>
+                    {h === 0 ? '12am' : h === 12 ? '12pm' : h > 12 ? `${h - 12}pm` : `${h}am`}
+                  </div>
                 ))}
               </div>
 
-              {/* Meetings as bars */}
-              {meetings.map(meeting => {
-                const left = getPosition(meeting.start_time);
-                const width = getWidth(meeting.start_time, meeting.end_time);
-                const top = (meeting.row || 0) * 65 + 8;
-
-                return (
-                  <div
-                    key={meeting.id}
-                    onClick={() => onEventClick(meeting)}
-                    style={{
-                      position: 'absolute',
-                      left: `${left}%`,
-                      width: `${Math.max(12, Math.min(width, 100 - left))}%`,
-                      top: `${top}px`,
-                      height: '55px',
-                      background: `linear-gradient(135deg, ${getEventColor(meeting)}, ${getEventColor(meeting)}dd)`,
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      padding: '8px 10px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      transition: 'transform 0.15s, box-shadow 0.15s',
-                      zIndex: 1,
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.35)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)'; }}
-                  >
-                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '4px' }}>
-                      {meeting.title}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      🕐 {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
-                    </div>
-                    {getClientName(meeting.client_id) && (
-                      <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        👤 {getClientName(meeting.client_id)}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {meetings.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', fontSize: '1rem' }}>
-                  No meetings scheduled for this day
+              {/* Timeline grid with meetings */}
+              <div style={{ position: 'relative', minHeight: Math.max(100, rowCount * 70 + 20) + 'px' }}>
+                {/* Grid lines */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex' }}>
+                  {hours.map((h, i) => (
+                    <div key={h} style={{ flex: 1, borderLeft: i > 0 ? '1px dashed var(--border-color)' : 'none', opacity: 0.4, minWidth: '50px' }} />
+                  ))}
                 </div>
-              )}
+
+                {/* Meetings as bars */}
+                {meetings.map(meeting => {
+                  const left = getPosition(meeting.start_time);
+                  const width = getWidth(meeting.start_time, meeting.end_time);
+                  const top = (meeting.row || 0) * 65 + 8;
+
+                  return (
+                    <div
+                      key={meeting.id}
+                      onClick={() => onEventClick(meeting)}
+                      style={{
+                        position: 'absolute',
+                        left: `${left}%`,
+                        width: `${Math.max(12, Math.min(width, 100 - left))}%`,
+                        top: `${top}px`,
+                        height: '55px',
+                        background: `linear-gradient(135deg, ${getEventColor(meeting)}, ${getEventColor(meeting)}dd)`,
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        padding: '8px 10px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                        zIndex: 1,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.35)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)'; }}
+                    >
+                      <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '4px' }}>
+                        {meeting.title}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        🕐 {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
+                      </div>
+                      {getClientName(meeting.client_id) && (
+                        <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          👤 {getClientName(meeting.client_id)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {meetings.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', fontSize: '1rem' }}>
+                    No meetings scheduled for this day
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
