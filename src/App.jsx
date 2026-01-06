@@ -17,8 +17,10 @@ import LandingPage from './components/LandingPage';
 import ToastContainer from './components/ToastContainer';
 import MeetingRoom from './components/MeetingRoom';
 import MessengerInbox from './components/MessengerInbox';
+import AIAssistantWidget from './components/AIAssistantWidget';
 import BookingPage from './components/BookingPage';
 import { useSupabase } from './hooks/useSupabase';
+import { useScheduledMessageProcessor } from './hooks/useScheduledMessageProcessor';
 import { useNotifications } from './hooks/useNotifications';
 import { useStorage } from './hooks/useStorage';
 import { useClients } from './hooks/useClients';
@@ -187,6 +189,9 @@ function App() {
     filterPackage,
     filterPayment
   }, currentUser, updateClient);
+
+  // Hybrid scheduled message processing - runs every 60s when user is logged in
+  useScheduledMessageProcessor(!!currentUser);
 
   useEffect(() => {
     // Initialize theme
@@ -787,6 +792,11 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Assistant Widget - Admin Only */}
+      {isLoggedIn && (
+        <AIAssistantWidget currentUser={currentUser} />
       )}
 
       <ToastContainer />

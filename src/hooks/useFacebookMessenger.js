@@ -57,16 +57,16 @@ export function useFacebookMessenger() {
         try {
             setLoading(true);
 
-            const page = reset ? 1 : conversationPage;
-            const result = await facebookService.getConversationsWithPagination(pageId, page, 8);
+            // Always load page 1 when reset is true
+            const result = await facebookService.getConversationsWithPagination(pageId, 1, 8);
 
             if (reset) {
                 setConversations(result.conversations);
+                setConversationPage(1);
             } else {
                 setConversations(prev => [...prev, ...result.conversations]);
             }
 
-            setConversationPage(page);
             setHasMoreConversations(result.hasMore);
             setTotalConversations(result.total);
 
@@ -82,7 +82,7 @@ export function useFacebookMessenger() {
         } finally {
             setLoading(false);
         }
-    }, [conversationPage]);
+    }, []); // No dependencies - stable callback
 
     // Load more conversations
     const loadMoreConversations = useCallback(async (pageId = null) => {
@@ -117,8 +117,8 @@ export function useFacebookMessenger() {
             // Mark messages as read
             await facebookService.markMessagesAsRead(conversationId);
 
-            // Refresh conversations to update unread count
-            loadConversations();
+            // Update unread count locally instead of reloading all conversations
+            setUnreadCount(prev => Math.max(0, prev - 1));
 
             return msgs;
         } catch (err) {
@@ -128,7 +128,7 @@ export function useFacebookMessenger() {
         } finally {
             setLoading(false);
         }
-    }, [loadConversations]);
+    }, []);
 
     // Run AI analysis on current conversation
     const runAIAnalysis = useCallback(async (msgs, participantName) => {
@@ -531,6 +531,28 @@ export function useFacebookMessenger() {
         }
     }, [loadConversations]);
 
+    // Delete a conversation
+    const deleteConversation = useCallback(async (conversationId) => {
+        try {
+            await facebookService.deleteConversation(conversationId);
+
+            // Clear selection if deleted conversation was selected
+            if (selectedConversation?.conversation_id === conversationId) {
+                setSelectedConversation(null);
+                setMessages([]);
+            }
+
+            // Remove from local state
+            setConversations(prev => prev.filter(c => c.conversation_id !== conversationId));
+
+            return true;
+        } catch (err) {
+            console.error('Error deleting conversation:', err);
+            setError(err.message);
+            return false;
+        }
+    }, [selectedConversation, loadConversations]);
+
     // Load settings
     const loadSettings = useCallback(async () => {
         try {
@@ -598,14 +620,26 @@ export function useFacebookMessenger() {
                     setMessages(prev => [...prev, payload.new]);
                 }
 
-                // Refresh conversations to update unread counts
-                loadConversations();
+                // Update the conversation in the list in-place (don't reset pagination)
+                setConversations(prev => prev.map(conv =>
+                    conv.conversation_id === payload.new.conversation_id
+                        ? { ...conv, last_message_text: payload.new.message_text, last_message_time: payload.new.timestamp }
+                        : conv
+                ));
             });
 
             // Subscribe to conversation updates
             conversationSubscription = facebookService.subscribeToConversations((payload) => {
                 console.log('Conversation updated:', payload);
-                loadConversations();
+
+                // Update the conversation in-place instead of reloading all
+                if (payload.new) {
+                    setConversations(prev => prev.map(conv =>
+                        conv.conversation_id === payload.new.conversation_id
+                            ? { ...conv, ...payload.new }
+                            : conv
+                    ));
+                }
             });
         };
 
@@ -615,14 +649,15 @@ export function useFacebookMessenger() {
             messageSubscription?.unsubscribe();
             conversationSubscription?.unsubscribe();
         };
-    }, [selectedConversation, loadConversations]);
+    }, [selectedConversation]);
 
-    // Initial load
+    // Initial load - only run once on mount
     useEffect(() => {
         loadConnectedPages();
         loadConversations();
         loadSettings();
-    }, [loadConnectedPages, loadConversations, loadSettings]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Empty deps - only run on mount
 
     return {
         // State
@@ -668,6 +703,7 @@ export function useFacebookMessenger() {
         syncMessages,
         linkToClient,
         assignToUser,
+        deleteConversation,
         loadSettings,
         saveSettings,
         connectPage,

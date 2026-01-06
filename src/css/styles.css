@@ -200,16 +200,22 @@ a:hover {
   padding: var(--space-md) var(--space-xl);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  /* Pill shape header */
+  border-radius: var(--radius-xl);
+  /* Reduced from pill shape to prevent clipping */
   margin-bottom: var(--space-xl);
-  /* Removed shadow-lg for cleaner look, added specific glow if needed */
+  min-height: 70px;
+  /* Ensure minimum height for content */
+  overflow: visible;
+  /* Prevent content clipping */
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .app-logo {
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  flex-shrink: 0;
 }
 
 .app-logo h1 {
@@ -223,7 +229,35 @@ a:hover {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+  padding: var(--space-xs) 0;
+}
+
+/* Hide scrollbar but allow scrolling on header actions */
+.header-actions::-webkit-scrollbar {
+  height: 0;
+  display: none;
+}
+
+/* Responsive header adjustments */
+@media (max-width: 1200px) {
+  .app-header {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-lg);
+  }
+  
+  .header-actions .btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.75rem;
+  }
+  
+  .header-actions .btn span:not(:only-child) {
+    display: none; /* Hide text labels, show only icons */
+  }
 }
 
 /* ============================================

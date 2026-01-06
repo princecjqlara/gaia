@@ -29,6 +29,7 @@ const BookingPage = () => {
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState(null);
     const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [redirectCountdown, setRedirectCountdown] = useState(null);
 
     // Load booking settings
     useEffect(() => {
@@ -41,6 +42,43 @@ const BookingPage = () => {
             loadAvailableSlots(selectedDate);
         }
     }, [selectedDate, pageId]);
+
+    // Auto-redirect countdown effect for successful bookings
+    useEffect(() => {
+        if (success && settings?.auto_redirect_enabled !== false) {
+            const delay = settings?.auto_redirect_delay || 5;
+            setRedirectCountdown(delay);
+
+            // Build messenger URL
+            const formattedDateStr = selectedDate?.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            }) || '';
+            const formattedTimeStr = selectedTime ? formatTime(selectedTime) : '';
+            const prefillMessage = settings?.messenger_prefill_message ||
+                `Hi! I just booked an appointment for ${formattedDateStr} at ${formattedTimeStr}. Please confirm my booking. Thank you!`;
+            const finalMessage = prefillMessage
+                .replace('{date}', formattedDateStr)
+                .replace('{time}', formattedTimeStr)
+                .replace('{name}', formData.name);
+            const messengerUrl = `https://m.me/${pageId}?text=${encodeURIComponent(finalMessage)}`;
+
+            const interval = setInterval(() => {
+                setRedirectCountdown(prev => {
+                    if (prev <= 1) {
+                        clearInterval(interval);
+                        window.location.href = messengerUrl;
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+
+            return () => clearInterval(interval);
+        }
+    }, [success, settings, selectedDate, selectedTime, formData.name, pageId]);
 
     const loadSettings = async () => {
         try {
@@ -176,6 +214,25 @@ const BookingPage = () => {
     }
 
     if (success) {
+        // Build messenger redirect URL with prefilled message
+        const formattedDateStr = selectedDate?.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        const formattedTimeStr = formatTime(selectedTime);
+        const prefillMessage = settings?.messenger_prefill_message ||
+            `Hi! I just booked an appointment for ${formattedDateStr} at ${formattedTimeStr}. Please confirm my booking. Thank you!`;
+
+        // Replace placeholders in message
+        const finalMessage = prefillMessage
+            .replace('{date}', formattedDateStr)
+            .replace('{time}', formattedTimeStr)
+            .replace('{name}', formData.name);
+
+        const messengerUrl = `https://m.me/${pageId}?text=${encodeURIComponent(finalMessage)}`;
+
         return (
             <div style={styles.container}>
                 <div style={styles.card}>
@@ -186,25 +243,40 @@ const BookingPage = () => {
                     </p>
                     <div style={styles.bookingDetails}>
                         <div style={styles.detailItem}>
-                            📅 {selectedDate?.toLocaleDateString('en-US', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                            })}
+                            📅 {formattedDateStr}
                         </div>
                         <div style={styles.detailItem}>
-                            🕐 {formatTime(selectedTime)}
+                            🕐 {formattedTimeStr}
                         </div>
                     </div>
                     <p style={styles.confirmMessage}>
-                        {settings?.confirmation_message || 'We look forward to meeting with you!'}
+                        {settings?.confirmation_message || 'Your booking has been confirmed! We look forward to meeting with you.'}
                     </p>
-                    <p style={styles.returnMessage}>
-                        Please return to Messenger for confirmation.
+
+                    {/* Messenger Redirect Button */}
+                    <a
+                        href={messengerUrl}
+                        style={styles.messengerButton}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        💬 Confirm in Messenger
+                        {redirectCountdown !== null && redirectCountdown > 0 && (
+                            <span style={styles.countdown}> ({redirectCountdown}s)</span>
+                        )}
+                    </a>
+
+                    <p style={styles.redirectNote}>
+                        {redirectCountdown !== null && redirectCountdown > 0
+                            ? `Redirecting to Messenger in ${redirectCountdown} seconds...`
+                            : 'Click the button above to confirm your booking in Messenger'}
                     </p>
+
                     <button
-                        onClick={() => window.close()}
+                        onClick={() => {
+                            setRedirectCountdown(null); // Cancel auto-redirect
+                            window.close();
+                        }}
                         style={styles.closeButton}
                     >
                         Close Window
@@ -609,44 +681,70 @@ const styles = {
         textAlign: 'center',
         fontSize: '1.5rem',
         fontWeight: '700',
-        marginBottom: '0.5rem'
+        marginBottom: '0.5rem',
+        color: '#1a1a1a'
     },
     successText: {
         textAlign: 'center',
-        color: '#666',
+        color: '#333',
         marginBottom: '1rem'
     },
     bookingDetails: {
-        background: '#e8f5e9',
+        background: '#d4edda',
         borderRadius: '12px',
         padding: '1.5rem',
-        marginBottom: '1.5rem'
+        marginBottom: '1.5rem',
+        border: '1px solid #c3e6cb'
     },
     detailItem: {
         fontSize: '1.125rem',
         marginBottom: '0.5rem',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#155724',
+        fontWeight: '600'
     },
     confirmMessage: {
         textAlign: 'center',
-        color: '#666',
-        marginBottom: '1rem'
+        color: '#333',
+        marginBottom: '1.5rem',
+        fontSize: '1rem'
     },
-    returnMessage: {
+    messengerButton: {
+        display: 'block',
+        width: '100%',
+        padding: '1rem',
+        background: '#0084ff',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        fontSize: '1rem',
+        fontWeight: '600',
+        cursor: 'pointer',
+        textDecoration: 'none',
         textAlign: 'center',
-        color: '#2e7d32',
-        fontWeight: '500',
-        marginBottom: '1.5rem'
+        marginBottom: '0.75rem',
+        transition: 'background 0.2s'
+    },
+    countdown: {
+        fontWeight: '400',
+        opacity: '0.9'
+    },
+    redirectNote: {
+        textAlign: 'center',
+        color: '#666',
+        fontSize: '0.875rem',
+        marginBottom: '1rem'
     },
     closeButton: {
         display: 'block',
         width: '100%',
         padding: '1rem',
         background: '#f5f5f5',
-        border: 'none',
+        border: '1px solid #ddd',
         borderRadius: '8px',
         fontSize: '1rem',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        color: '#333'
     }
 };
 

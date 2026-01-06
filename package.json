@@ -10,9 +10,10 @@
     "create-admin": "node create_admin_account.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^17.2.3",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
@@ -21,4 +22,3 @@
     "vite": "^5.0.8"
   }
 }
-

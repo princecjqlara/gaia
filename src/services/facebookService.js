@@ -255,7 +255,8 @@ class FacebookService {
                     linked_client:linked_client_id(id, client_name, business_name),
                     assigned_user:assigned_to(id, name, email)
                 `, { count: 'exact' })
-                .order('last_message_time', { ascending: false })
+                .or('is_archived.is.null,is_archived.eq.false') // Exclude archived
+                .order('last_message_time', { ascending: false, nullsFirst: false })
                 .range(offset, offset + limit - 1);
 
             if (pageId) {
@@ -264,7 +265,12 @@ class FacebookService {
 
             const { data, error, count } = await query;
 
-            if (error) throw error;
+            if (error) {
+                console.error('Pagination query error:', error);
+                throw error;
+            }
+
+            console.log(`Loaded page ${page}: ${data?.length || 0} conversations, total: ${count}, hasMore: ${(offset + limit) < (count || 0)}`);
 
             return {
                 conversations: data || [],
@@ -992,6 +998,31 @@ class FacebookService {
     }
 
     /**
+     * Delete a conversation permanently
+     */
+    async deleteConversation(conversationId) {
+        try {
+            // First delete all messages for this conversation
+            await getSupabase()
+                .from('facebook_messages')
+                .delete()
+                .eq('conversation_id', conversationId);
+
+            // Then delete the conversation itself
+            const { error } = await getSupabase()
+                .from('facebook_conversations')
+                .delete()
+                .eq('conversation_id', conversationId);
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('Error deleting conversation:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Get archived conversations
      */
     async getArchivedConversations(pageId = null) {
@@ -1279,7 +1310,316 @@ class FacebookService {
             return [];
         }
     }
+
+    // ============================================
+    // SAVED REPLIES
+    // ============================================
+
+    /**
+     * Get all saved replies for a page
+     */
+    async getSavedReplies(pageId) {
+        try {
+            const { data, error } = await getSupabase()
+                .from('saved_replies')
+                .select('*')
+                .eq('page_id', pageId)
+                .order('usage_count', { ascending: false });
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching saved replies:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Create a new saved reply
+     */
+    async createSavedReply(pageId, title, content, shortcut = null, category = 'general', userId = null) {
+        try {
+            const { data, error } = await getSupabase()
+                .from('saved_replies')
+                .insert({
+                    page_id: pageId,
+                    title,
+                    content,
+                    shortcut,
+                    category,
+                    created_by: userId
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error creating saved reply:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update a saved reply
+     */
+    async updateSavedReply(replyId, updates) {
+        try {
+            const { data, error } = await getSupabase()
+                .from('saved_replies')
+                .update({ ...updates, updated_at: new Date().toISOString() })
+                .eq('id', replyId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error updating saved reply:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Delete a saved reply
+     */
+    async deleteSavedReply(replyId) {
+        try {
+            const { error } = await getSupabase()
+                .from('saved_replies')
+                .delete()
+                .eq('id', replyId);
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('Error deleting saved reply:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Use a saved reply (increments usage count)
+     */
+    async useSavedReply(replyId) {
+        try {
+            const { data, error } = await getSupabase()
+                .rpc('increment_saved_reply_usage', { reply_id: replyId });
+
+            if (error) {
+                // If RPC doesn't exist, do a manual increment
+                const { data: reply } = await getSupabase()
+                    .from('saved_replies')
+                    .select('usage_count')
+                    .eq('id', replyId)
+                    .single();
+
+                if (reply) {
+                    await getSupabase()
+                        .from('saved_replies')
+                        .update({ usage_count: (reply.usage_count || 0) + 1 })
+                        .eq('id', replyId);
+                }
+            }
+            return true;
+        } catch (error) {
+            console.error('Error incrementing saved reply usage:', error);
+            return false;
+        }
+    }
+
+    // ============================================
+    // SCHEDULED MESSAGES
+    // ============================================
+
+    /**
+     * Schedule a message for later
+     */
+    async scheduleMessage(pageId, messageText, scheduledFor, filterType = 'all', filterValue = null, selectedRecipients = null, mediaUrl = null, userId = null) {
+        try {
+            const { data, error } = await getSupabase()
+                .from('scheduled_messages')
+                .insert({
+                    page_id: pageId,
+                    message_text: messageText,
+                    media_url: mediaUrl,
+                    filter_type: filterType,
+                    filter_value: filterValue,
+                    selected_recipients: selectedRecipients,
+                    scheduled_for: scheduledFor,
+                    status: 'pending',
+                    created_by: userId
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error scheduling message:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get scheduled messages for a page
+     */
+    async getScheduledMessages(pageId, status = null) {
+        try {
+            let query = getSupabase()
+                .from('scheduled_messages')
+                .select('*')
+                .eq('page_id', pageId)
+                .order('scheduled_for', { ascending: true });
+
+            if (status) {
+                query = query.eq('status', status);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching scheduled messages:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Cancel a scheduled message
+     */
+    async cancelScheduledMessage(messageId) {
+        try {
+            const { error } = await getSupabase()
+                .from('scheduled_messages')
+                .update({ status: 'cancelled' })
+                .eq('id', messageId)
+                .eq('status', 'pending');
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('Error cancelling scheduled message:', error);
+            throw error;
+        }
+    }
+
+    // ============================================
+    // ADVANCED FILTERING
+    // ============================================
+
+    /**
+     * Get conversations with advanced filters
+     */
+    async getConversationsWithFilter(pageId, filters = {}) {
+        try {
+            let query = getSupabase()
+                .from('facebook_conversations')
+                .select(`
+                    *,
+                    linked_client:linked_client_id(id, client_name, business_name),
+                    assigned_user:assigned_to(id, name, email)
+                `)
+                .eq('page_id', pageId)
+                .neq('is_archived', true)
+                .order('last_message_time', { ascending: false });
+
+            // Apply filters
+            if (filters.noReply) {
+                // Last message is from customer (not from page)
+                query = query.eq('last_message_from_page', false);
+            }
+
+            if (filters.notBooked) {
+                query = query.is('has_booking', false);
+            }
+
+            if (filters.hasBooking) {
+                query = query.eq('has_booking', true);
+            }
+
+            if (filters.notInPipeline) {
+                query = query.is('linked_client_id', null);
+            }
+
+            if (filters.inPipeline) {
+                query = query.not('linked_client_id', 'is', null);
+            }
+
+            if (filters.proposalStatus) {
+                query = query.eq('proposal_status', filters.proposalStatus);
+            }
+
+            if (filters.unreadOnly) {
+                query = query.gt('unread_count', 0);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            // If filtering by tag, we need to do a secondary filter
+            if (filters.tagId) {
+                const tagConvs = await this.getConversationsByTag(filters.tagId);
+                const tagConvIds = new Set(tagConvs.map(c => c.conversation_id));
+                return (data || []).filter(c => tagConvIds.has(c.conversation_id));
+            }
+
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching filtered conversations:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Generate AI summary for a conversation
+     */
+    async generateConversationSummary(conversationId) {
+        try {
+            // Get messages for the conversation
+            const messages = await this.getMessages(conversationId);
+            if (messages.length === 0) return null;
+
+            // Build conversation text
+            const conversationText = messages.map(m =>
+                `${m.is_from_page ? 'Agent' : 'Customer'}: ${m.message_text}`
+            ).join('\n');
+
+            // Call AI endpoint
+            const response = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: 'summary',
+                    conversationText,
+                    conversationId
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to generate summary');
+            }
+
+            const summary = await response.json();
+
+            // Save summary to conversation
+            await getSupabase()
+                .from('facebook_conversations')
+                .update({
+                    ai_summary: summary.summary,
+                    ai_analysis: summary,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('conversation_id', conversationId);
+
+            return summary;
+        } catch (error) {
+            console.error('Error generating conversation summary:', error);
+            throw error;
+        }
+    }
 }
 
 export const facebookService = new FacebookService();
 export default facebookService;
+

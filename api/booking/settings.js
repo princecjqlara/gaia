@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase with fallbacks
+// Initialize Supabase with fallbacks - prefer anon key
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 // Default booking settings
 const DEFAULT_SETTINGS = {
@@ -14,6 +14,9 @@ const DEFAULT_SETTINGS = {
     max_advance_days: 30,
     custom_form: [],
     confirmation_message: 'Your booking has been confirmed! We look forward to meeting with you.',
+    messenger_prefill_message: 'Hi! I just booked an appointment for {date} at {time}. Please confirm my booking. Thank you!',
+    auto_redirect_enabled: true,
+    auto_redirect_delay: 5,
     reminder_enabled: true,
     reminder_hours_before: 24
 };

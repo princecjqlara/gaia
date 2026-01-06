@@ -4,7 +4,15 @@ import EmployeeSalaryManagement from './EmployeeSalaryManagement';
 
 const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, onTeamPerformance }) => {
   const [showTagManagement, setShowTagManagement] = useState(false);
-  const [activeMainTab, setActiveMainTab] = useState('packages'); // packages, employees
+  const [activeMainTab, setActiveMainTab] = useState('packages'); // packages, employees, facebook, booking
+
+  // Booking settings state
+  const [bookingSettings, setBookingSettings] = useState({
+    confirmation_message: 'Your booking has been confirmed! We look forward to meeting with you.',
+    messenger_prefill_message: 'Hi! I just booked an appointment for {date} at {time}. Please confirm my booking. Thank you!',
+    auto_redirect_enabled: true,
+    auto_redirect_delay: 5
+  });
   const [prices, setPrices] = useState({
     basic: 1799,
     star: 2999,
@@ -240,6 +248,21 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
               }}
             >
               📘 Facebook Integration
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('booking')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'booking' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'booking' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'booking' ? '600' : '400'
+              }}
+            >
+              📅 Booking Settings
             </button>
           </div>
 
@@ -732,6 +755,115 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                     This token is used to verify webhook requests from Facebook
                   </small>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeMainTab === 'booking' && (
+            <div>
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📅 Booking Confirmation Settings</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Customize the messages shown to contacts after they book an appointment.
+                </p>
+
+                <div className="form-group">
+                  <label className="form-label">Confirmation Message</label>
+                  <textarea
+                    className="form-input"
+                    rows="3"
+                    value={bookingSettings.confirmation_message}
+                    onChange={(e) => setBookingSettings(prev => ({ ...prev, confirmation_message: e.target.value }))}
+                    placeholder="Your booking has been confirmed! We look forward to meeting with you."
+                    style={{ resize: 'vertical' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    This message is displayed on the confirmation screen after a successful booking.
+                  </small>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1.5rem' }}>
+                  <label className="form-label">Messenger Pre-fill Message</label>
+                  <textarea
+                    className="form-input"
+                    rows="3"
+                    value={bookingSettings.messenger_prefill_message}
+                    onChange={(e) => setBookingSettings(prev => ({ ...prev, messenger_prefill_message: e.target.value }))}
+                    placeholder="Hi! I just booked an appointment for {date} at {time}. Please confirm my booking."
+                    style={{ resize: 'vertical' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    This message is pre-filled when the contact is redirected to Messenger. Use {'{date}'}, {'{time}'}, and {'{name}'} as placeholders.
+                  </small>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>↩️ Auto-Redirect Settings</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Configure automatic redirect to Messenger after booking.
+                </p>
+
+                <div style={{
+                  padding: '1rem',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)',
+                  marginBottom: '1rem'
+                }}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={bookingSettings.auto_redirect_enabled}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, auto_redirect_enabled: e.target.checked }))}
+                      style={{ width: '20px', height: '20px' }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: '500' }}>Enable Auto-Redirect to Messenger</div>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                        Automatically redirect contacts to Messenger after booking confirmation
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {bookingSettings.auto_redirect_enabled && (
+                  <div className="form-group">
+                    <label className="form-label">Redirect Delay (seconds)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={bookingSettings.auto_redirect_delay}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, auto_redirect_delay: parseInt(e.target.value) || 5 }))}
+                      min="1"
+                      max="30"
+                      style={{ maxWidth: '150px' }}
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Number of seconds to wait before redirecting to Messenger (1-30)
+                    </small>
+                  </div>
+                )}
+              </div>
+
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(50, 150, 250, 0.1)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(50, 150, 250, 0.3)'
+              }}>
+                <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--info)' }}>
+                  💡 How it works
+                </div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  After a contact books an appointment, they will see the confirmation message and a "Confirm in Messenger" button.
+                  The button opens Facebook Messenger with your pre-filled message, allowing the contact to send it to you as confirmation.
+                </p>
               </div>
             </div>
           )}
