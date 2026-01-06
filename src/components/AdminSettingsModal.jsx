@@ -127,6 +127,22 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         setExpenses(loadedExpenses);
         setPrompts(loadedPrompts);
         setPackageDetails(loadedDetails);
+
+        // Load booking settings - need a page ID (use first connected page or default)
+        try {
+          const response = await fetch('/api/booking/settings?pageId=default');
+          if (response.ok) {
+            const data = await response.json();
+            setBookingSettings(prev => ({
+              ...prev,
+              ...data,
+              available_days: data.available_days || prev.available_days,
+              custom_fields: data.custom_fields || prev.custom_fields
+            }));
+          }
+        } catch (e) {
+          console.log('Could not load booking settings:', e);
+        }
       } catch (error) {
         console.error('Error loading settings:', error);
         setMessage({ type: 'error', text: 'Failed to load settings' });
@@ -177,6 +193,18 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       await saveExpenses(expenses);
       await saveAIPrompts(prompts);
       await savePackageDetails(packageDetails);
+
+      // Save booking settings
+      try {
+        await fetch('/api/booking/settings?pageId=default', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bookingSettings)
+        });
+      } catch (e) {
+        console.log('Could not save booking settings:', e);
+      }
+
       setMessage({ type: 'success', text: 'Settings saved successfully! Page will reload in 1 second...' });
       // Reload the page to update package prices throughout the app
       setTimeout(() => {

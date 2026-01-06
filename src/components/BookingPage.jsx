@@ -186,8 +186,12 @@ const BookingPage = () => {
 
         for (let day = 1; day <= lastDay.getDate(); day++) {
             const date = new Date(year, month, day);
-            const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
-            const isWorkingDay = settings?.working_days?.includes(dayName) ?? true;
+            const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+            // Check available_days (numeric array) or fall back to working_days (string array) or default to Mon-Fri
+            const availableDays = settings?.available_days || [1, 2, 3, 4, 5]; // Default Mon-Fri
+            const isWorkingDay = Array.isArray(availableDays)
+                ? availableDays.includes(dayOfWeek)
+                : (settings?.working_days?.includes(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]) ?? true);
             const isPast = date < today;
             const isTooFar = date > maxDate;
 
@@ -391,87 +395,48 @@ const BookingPage = () => {
                     <form onSubmit={handleSubmit} style={styles.form}>
                         <h3 style={styles.formTitle}>📋 Your Information</h3>
 
-                        <div style={styles.formRow}>
-                            <input
-                                type="text"
-                                placeholder="Your Name *"
-                                required
-                                value={formData.name}
-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                style={styles.input}
-                            />
-                        </div>
-
-                        <div style={styles.formRow}>
-                            <input
-                                type="email"
-                                placeholder="Email Address"
-                                value={formData.email}
-                                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                style={styles.input}
-                            />
-                            <input
-                                type="tel"
-                                placeholder="Phone Number"
-                                value={formData.phone}
-                                onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                style={styles.input}
-                            />
-                        </div>
-
-                        {/* Custom Form Fields */}
-                        {settings?.custom_form?.map(field => (
-                            <div key={field.name} style={styles.formRow}>
+                        {/* Dynamic Form Fields from custom_fields (new) or custom_form (legacy) */}
+                        {(settings?.custom_fields || settings?.custom_form || [
+                            { id: 'name', label: 'Your Name', type: 'text', required: true },
+                            { id: 'phone', label: 'Phone Number', type: 'tel', required: true },
+                            { id: 'email', label: 'Email Address', type: 'email', required: false },
+                            { id: 'notes', label: 'Additional Notes', type: 'textarea', required: false }
+                        ]).map(field => (
+                            <div key={field.id || field.name} style={styles.formRow}>
                                 {field.type === 'textarea' ? (
                                     <textarea
                                         placeholder={field.label + (field.required ? ' *' : '')}
                                         required={field.required}
-                                        value={customFormData[field.name] || ''}
-                                        onChange={e => setCustomFormData({
-                                            ...customFormData,
-                                            [field.name]: e.target.value
-                                        })}
+                                        value={formData[field.id || field.name] || customFormData[field.id || field.name] || ''}
+                                        onChange={e => {
+                                            const fieldKey = field.id || field.name;
+                                            if (['name', 'email', 'phone', 'notes'].includes(fieldKey)) {
+                                                setFormData({ ...formData, [fieldKey]: e.target.value });
+                                            } else {
+                                                setCustomFormData({ ...customFormData, [fieldKey]: e.target.value });
+                                            }
+                                        }}
                                         style={{ ...styles.input, minHeight: '80px' }}
                                     />
-                                ) : field.type === 'select' ? (
-                                    <select
-                                        required={field.required}
-                                        value={customFormData[field.name] || ''}
-                                        onChange={e => setCustomFormData({
-                                            ...customFormData,
-                                            [field.name]: e.target.value
-                                        })}
-                                        style={styles.input}
-                                    >
-                                        <option value="">{field.label}</option>
-                                        {field.options?.map(opt => (
-                                            <option key={opt} value={opt}>{opt}</option>
-                                        ))}
-                                    </select>
                                 ) : (
                                     <input
                                         type={field.type || 'text'}
                                         placeholder={field.label + (field.required ? ' *' : '')}
                                         required={field.required}
-                                        value={customFormData[field.name] || ''}
-                                        onChange={e => setCustomFormData({
-                                            ...customFormData,
-                                            [field.name]: e.target.value
-                                        })}
+                                        value={formData[field.id || field.name] || customFormData[field.id || field.name] || ''}
+                                        onChange={e => {
+                                            const fieldKey = field.id || field.name;
+                                            if (['name', 'email', 'phone', 'notes'].includes(fieldKey)) {
+                                                setFormData({ ...formData, [fieldKey]: e.target.value });
+                                            } else {
+                                                setCustomFormData({ ...customFormData, [fieldKey]: e.target.value });
+                                            }
+                                        }}
                                         style={styles.input}
                                     />
                                 )}
                             </div>
                         ))}
-
-                        <div style={styles.formRow}>
-                            <textarea
-                                placeholder="Additional notes (optional)"
-                                value={formData.notes}
-                                onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                style={{ ...styles.input, minHeight: '80px' }}
-                            />
-                        </div>
 
                         <button
                             type="submit"
@@ -483,7 +448,7 @@ const BookingPage = () => {
                     </form>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
 
