@@ -112,20 +112,21 @@ async function handleIncomingMessage(pageId, event) {
         return;
     }
 
-    // Find or create conversation
-    const conversationId = `t_${senderId}`;
-
+    // Find or create conversation - look up by participant_id first (matches synced conversations)
     try {
-        // First, check if conversation exists
         const { data: existingConv, error: fetchError } = await db
             .from('facebook_conversations')
             .select('*')
-            .eq('conversation_id', conversationId)
+            .eq('participant_id', senderId)
+            .eq('page_id', pageId)
             .single();
 
         if (fetchError && fetchError.code !== 'PGRST116') {
             console.error('[WEBHOOK] Error fetching existing conversation:', fetchError);
         }
+
+        // Use existing conversation_id or create temporary one for new conversations
+        const conversationId = existingConv?.conversation_id || `t_${senderId}`;
 
         const newUnreadCount = (existingConv?.unread_count || 0) + 1;
 

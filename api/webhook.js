@@ -105,15 +105,17 @@ async function handleIncomingMessage(pageId, event) {
         return;
     }
 
-    const conversationId = `t_${senderId}`;
-
     try {
-        // Check if conversation exists
+        // Look up existing conversation by participant_id first (matches synced conversations)
         const { data: existingConv } = await db
             .from('facebook_conversations')
             .select('*')
-            .eq('conversation_id', conversationId)
+            .eq('participant_id', senderId)
+            .eq('page_id', pageId)
             .single();
+
+        // Use existing conversation_id or create temporary one for new conversations
+        const conversationId = existingConv?.conversation_id || `t_${senderId}`;
 
         const newUnreadCount = (existingConv?.unread_count || 0) + 1;
 
