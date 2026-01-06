@@ -67,6 +67,7 @@ export default async function handler(req, res) {
                 .single();
 
             if (!error && settings) {
+                console.log('[AVAILABLE] Loaded settings from DB:', settings);
                 // Only use DB values if query params weren't provided
                 if (!start_time) config.start_time = settings.start_time || config.start_time;
                 if (!end_time) config.end_time = settings.end_time || config.end_time;
@@ -74,6 +75,8 @@ export default async function handler(req, res) {
                 if (!min_advance_hours) config.min_advance_hours = settings.min_advance_hours || config.min_advance_hours;
                 config.available_days = settings.available_days;
                 config.working_days = settings.working_days;
+                // Load same_day_buffer from DB!
+                config.same_day_buffer = settings.same_day_buffer || 0;
             }
         } catch (e) {
             console.log('Could not fetch settings from DB, using params/defaults');
