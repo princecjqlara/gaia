@@ -122,11 +122,12 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         return () => clearInterval(refreshInterval);
     }, [selectedConversation?.id, refreshMessages]);
 
-    // Auto-refresh conversation list every 30 seconds (silent to prevent UI flashing)
+    // Auto-refresh conversation list every 5 seconds (silent to prevent UI flashing)
+    // Using polling since Supabase Realtime may not be enabled
     useEffect(() => {
         const refreshInterval = setInterval(() => {
             loadConversations?.(null, true, true); // silent=true prevents loading flicker
-        }, 30000); // 30 seconds
+        }, 5000); // 5 seconds for near real-time updates
 
         return () => clearInterval(refreshInterval);
     }, []);
