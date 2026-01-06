@@ -147,17 +147,22 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         setLoading(true);
 
         // First, get connected Facebook pages to get the actual page ID
+        // Store in local variable since state won't update until next render
+        let currentPageId = 'default';
         try {
           const connectedPages = await facebookService.getConnectedPages();
           if (connectedPages && connectedPages.length > 0) {
-            const pageId = connectedPages[0].page_id || connectedPages[0].id;
-            console.log('Found connected Facebook page:', pageId);
-            setActivePageId(pageId);
+            currentPageId = connectedPages[0].page_id || connectedPages[0].id;
+            console.log('Found connected Facebook page:', currentPageId);
+            setActivePageId(currentPageId);
             // Store in localStorage for backup
-            localStorage.setItem('selectedPageId', pageId);
+            localStorage.setItem('selectedPageId', currentPageId);
           }
         } catch (pageErr) {
           console.log('Could not fetch connected pages:', pageErr);
+          // Try to get from localStorage as fallback
+          const savedPageId = localStorage.getItem('selectedPageId');
+          if (savedPageId) currentPageId = savedPageId;
         }
 
         const loadedPrices = await getPackagePrices();
@@ -179,9 +184,10 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             console.log('Loaded booking settings from localStorage:', parsed);
           }
 
-          // Also try API (only override if it returns complete data)
+          // Also try API using the currentPageId variable (not state!)
           try {
-            const response = await fetch(`/api/booking/settings?pageId=${getActivePageId()}`);
+            console.log('Loading booking settings for page:', currentPageId);
+            const response = await fetch(`/api/booking/settings?pageId=${currentPageId}`);
             if (response.ok) {
               const data = await response.json();
               console.log('API booking settings response:', data);
