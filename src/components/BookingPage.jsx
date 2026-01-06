@@ -106,6 +106,7 @@ const BookingPage = () => {
             start_time: '09:00',
             end_time: '17:00',
             slot_duration: 30,
+            min_advance_hours: 1,
             booking_mode: 'slots',
             allow_next_hour: false
         };
@@ -114,18 +115,8 @@ const BookingPage = () => {
             // Start with defaults
             let loadedSettings = { ...defaultSettings };
 
-            // Try localStorage first (immediate)
-            const localSettings = localStorage.getItem('booking_settings');
-            if (localSettings) {
-                const parsed = JSON.parse(localSettings);
-                loadedSettings = { ...loadedSettings, ...parsed };
-                console.log('Loaded booking settings from localStorage:', parsed);
-            }
-
-            // Apply settings immediately
-            setSettings(loadedSettings);
-
-            // Then try API (will override if successful)
+            // For public booking pages, try API FIRST (admin settings are stored in database)
+            // localStorage is only used as fallback or for admin preview
             try {
                 const response = await fetch(`/api/booking/settings?pageId=${pageId}`);
                 if (response.ok) {
@@ -134,13 +125,22 @@ const BookingPage = () => {
                     // Only use API data if it's not a "pending migration" response
                     if (!data.message?.includes('pending migration') && !data.error) {
                         loadedSettings = { ...loadedSettings, ...data };
-                        setSettings(loadedSettings);
-                        console.log('Applied settings from API');
+                        console.log('Applied settings from API:', loadedSettings);
                     }
                 }
             } catch (apiErr) {
-                console.log('API not available, using localStorage/defaults');
+                console.log('API not available, checking localStorage');
+                // Fallback to localStorage if API fails (e.g., offline preview)
+                const localSettings = localStorage.getItem('booking_settings');
+                if (localSettings) {
+                    const parsed = JSON.parse(localSettings);
+                    loadedSettings = { ...loadedSettings, ...parsed };
+                    console.log('Loaded booking settings from localStorage:', parsed);
+                }
             }
+
+            // Apply settings
+            setSettings(loadedSettings);
 
         } catch (err) {
             console.error('Error loading settings:', err);

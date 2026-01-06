@@ -7,11 +7,21 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVIC
 // Default booking settings
 const DEFAULT_SETTINGS = {
     working_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    available_days: [1, 2, 3, 4, 5],
     start_time: '09:00',
     end_time: '17:00',
     slot_duration: 60,
     buffer_time: 15,
     max_advance_days: 30,
+    min_advance_hours: 1,
+    booking_mode: 'slots',
+    allow_next_hour: false,
+    custom_fields: [
+        { id: 'name', label: 'Your Name', type: 'text', required: true },
+        { id: 'phone', label: 'Phone Number', type: 'tel', required: true },
+        { id: 'email', label: 'Email Address', type: 'email', required: false },
+        { id: 'notes', label: 'Additional Notes', type: 'textarea', required: false }
+    ],
     custom_form: [],
     confirmation_message: 'Your booking has been confirmed! We look forward to meeting with you.',
     messenger_prefill_message: 'Hi! I just booked an appointment for {date} at {time}. Please confirm my booking. Thank you!',
@@ -67,7 +77,8 @@ export default async function handler(req, res) {
                 throw error;
             }
 
-            return res.status(200).json(data || { page_id: pageId, ...DEFAULT_SETTINGS });
+            // Merge with defaults to ensure all fields are present
+            return res.status(200).json({ ...DEFAULT_SETTINGS, ...data } || { page_id: pageId, ...DEFAULT_SETTINGS });
         } catch (error) {
             console.error('Error fetching booking settings:', error);
             // Return defaults on any error
@@ -81,13 +92,16 @@ export default async function handler(req, res) {
             const settings = req.body;
             console.log('Received booking settings to save:', JSON.stringify(settings, null, 2));
 
-            // Map settings to database columns
+            // Map settings to database columns - include all important fields
             const dbSettings = {
                 page_id: pageId,
                 available_days: settings.available_days || [1, 2, 3, 4, 5],
                 start_time: settings.start_time || '09:00',
                 end_time: settings.end_time || '17:00',
                 slot_duration: settings.slot_duration || 30,
+                min_advance_hours: settings.min_advance_hours ?? 1,
+                booking_mode: settings.booking_mode || 'slots',
+                allow_next_hour: settings.allow_next_hour || false,
                 custom_fields: settings.custom_fields || [],
                 custom_form: settings.custom_form || [],
                 confirmation_message: settings.confirmation_message || '',

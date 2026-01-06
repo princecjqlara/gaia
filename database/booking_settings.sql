@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS booking_settings (
     slot_duration INTEGER DEFAULT 30, -- minutes
     max_advance_days INTEGER DEFAULT 30,
     
+    -- Same-day booking settings
+    min_advance_hours INTEGER DEFAULT 1, -- Hours in advance required for same-day bookings
+    booking_mode TEXT DEFAULT 'slots', -- 'slots', 'flexible', or 'both'
+    allow_next_hour BOOLEAN DEFAULT false, -- Show quick "Book Next Hour" button
+    
     -- Custom form fields (JSON array)
     custom_fields JSONB DEFAULT '[
         {"id": "name", "label": "Your Name", "type": "text", "required": true},
