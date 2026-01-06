@@ -11,7 +11,19 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     confirmation_message: 'Your booking has been confirmed! We look forward to meeting with you.',
     messenger_prefill_message: 'Hi! I just booked an appointment for {date} at {time}. Please confirm my booking. Thank you!',
     auto_redirect_enabled: true,
-    auto_redirect_delay: 5
+    auto_redirect_delay: 5,
+    // Availability settings
+    available_days: [1, 2, 3, 4, 5], // 0=Sun, 1=Mon, ..., 6=Sat (default: Mon-Fri)
+    start_time: '09:00',
+    end_time: '17:00',
+    slot_duration: 30, // minutes
+    // Custom form fields
+    custom_fields: [
+      { id: 'name', label: 'Your Name', type: 'text', required: true },
+      { id: 'phone', label: 'Phone Number', type: 'tel', required: true },
+      { id: 'email', label: 'Email Address', type: 'email', required: false },
+      { id: 'notes', label: 'Additional Notes', type: 'textarea', required: false }
+    ]
   });
   const [prices, setPrices] = useState({
     basic: 1799,
@@ -849,6 +861,197 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                     </small>
                   </div>
                 )}
+              </div>
+
+              {/* Availability Settings */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🗓️ Availability Settings</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Set which days and times are available for booking.
+                </p>
+
+                <div className="form-group">
+                  <label className="form-label">Available Days</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                      <label key={day} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        padding: '0.5rem 0.75rem',
+                        background: bookingSettings.available_days?.includes(index) ? 'var(--primary)' : 'var(--bg-tertiary)',
+                        color: bookingSettings.available_days?.includes(index) ? 'white' : 'var(--text-primary)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={bookingSettings.available_days?.includes(index) || false}
+                          onChange={(e) => {
+                            const days = bookingSettings.available_days || [];
+                            if (e.target.checked) {
+                              setBookingSettings(prev => ({ ...prev, available_days: [...days, index].sort() }));
+                            } else {
+                              setBookingSettings(prev => ({ ...prev, available_days: days.filter(d => d !== index) }));
+                            }
+                          }}
+                          style={{ display: 'none' }}
+                        />
+                        {day}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Start Time</label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={bookingSettings.start_time || '09:00'}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, start_time: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">End Time</label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={bookingSettings.end_time || '17:00'}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, end_time: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Slot Duration</label>
+                    <select
+                      className="form-select"
+                      value={bookingSettings.slot_duration || 30}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, slot_duration: parseInt(e.target.value) }))}
+                    >
+                      <option value="15">15 minutes</option>
+                      <option value="30">30 minutes</option>
+                      <option value="45">45 minutes</option>
+                      <option value="60">60 minutes</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom Form Fields */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📝 Booking Form Fields</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Configure which fields contacts must fill out when booking. Toggle required/optional for each field.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {(bookingSettings.custom_fields || []).map((field, index) => (
+                    <div key={field.id} style={{
+                      display: 'flex',
+                      gap: '0.75rem',
+                      alignItems: 'center',
+                      padding: '0.75rem',
+                      background: 'var(--bg-tertiary)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)'
+                    }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={field.label}
+                        onChange={(e) => {
+                          const fields = [...(bookingSettings.custom_fields || [])];
+                          fields[index].label = e.target.value;
+                          setBookingSettings(prev => ({ ...prev, custom_fields: fields }));
+                        }}
+                        placeholder="Field Label"
+                        style={{ flex: 1, marginBottom: 0 }}
+                      />
+                      <select
+                        className="form-select"
+                        value={field.type}
+                        onChange={(e) => {
+                          const fields = [...(bookingSettings.custom_fields || [])];
+                          fields[index].type = e.target.value;
+                          setBookingSettings(prev => ({ ...prev, custom_fields: fields }));
+                        }}
+                        style={{ width: '120px', marginBottom: 0 }}
+                      >
+                        <option value="text">Text</option>
+                        <option value="email">Email</option>
+                        <option value="tel">Phone</option>
+                        <option value="textarea">Long Text</option>
+                      </select>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={field.required}
+                          onChange={(e) => {
+                            const fields = [...(bookingSettings.custom_fields || [])];
+                            fields[index].required = e.target.checked;
+                            setBookingSettings(prev => ({ ...prev, custom_fields: fields }));
+                          }}
+                          style={{ width: '18px', height: '18px' }}
+                        />
+                        Required
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fields = (bookingSettings.custom_fields || []).filter((_, i) => i !== index);
+                          setBookingSettings(prev => ({ ...prev, custom_fields: fields }));
+                        }}
+                        style={{
+                          background: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '0.5rem',
+                          cursor: 'pointer',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fields = bookingSettings.custom_fields || [];
+                    const newId = `field_${Date.now()}`;
+                    setBookingSettings(prev => ({
+                      ...prev,
+                      custom_fields: [...fields, { id: newId, label: 'New Field', type: 'text', required: false }]
+                    }));
+                  }}
+                  style={{
+                    marginTop: '1rem',
+                    padding: '0.75rem 1.5rem',
+                    background: 'var(--bg-secondary)',
+                    border: '2px dashed var(--border-color)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.875rem',
+                    width: '100%'
+                  }}
+                >
+                  + Add Field
+                </button>
               </div>
 
               <div style={{
