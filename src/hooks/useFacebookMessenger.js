@@ -53,6 +53,32 @@ export function useFacebookMessenger() {
         }
     }, []);
 
+    // Helper function to deduplicate conversations by participant_id
+    // Keeps the most recent conversation for each participant
+    const deduplicateByParticipant = (conversations) => {
+        const seenParticipants = new Map();
+        return conversations.filter(conv => {
+            const participantId = conv.participant_id;
+            if (!participantId) return true; // Keep if no participant_id
+
+            const existing = seenParticipants.get(participantId);
+            if (!existing) {
+                seenParticipants.set(participantId, conv);
+                return true;
+            }
+
+            // Keep only the more recent conversation
+            const existingTime = new Date(existing.last_message_time || 0).getTime();
+            const currentTime = new Date(conv.last_message_time || 0).getTime();
+            if (currentTime > existingTime) {
+                seenParticipants.set(participantId, conv);
+                return true;
+            }
+            console.log('[DEDUP] Skipping duplicate for participant:', participantId);
+            return false;
+        });
+    };
+
     // Load conversations with pagination
     // silent = true prevents loading state from causing UI flicker
     const loadConversations = useCallback(async (pageId = null, reset = true, silent = false) => {
@@ -65,21 +91,24 @@ export function useFacebookMessenger() {
             // Always load page 1 when reset is true
             const result = await facebookService.getConversationsWithPagination(pageId, 1, 8);
 
+            // Deduplicate to prevent same contact showing multiple times
+            const dedupedConversations = deduplicateByParticipant(result.conversations);
+
             if (reset) {
-                setConversations(result.conversations);
+                setConversations(dedupedConversations);
                 setConversationPage(1);
             } else {
-                setConversations(prev => [...prev, ...result.conversations]);
+                setConversations(prev => deduplicateByParticipant([...prev, ...dedupedConversations]));
             }
 
             setHasMoreConversations(result.hasMore);
             setTotalConversations(result.total);
 
             // Calculate unread count
-            const totalUnread = result.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+            const totalUnread = dedupedConversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
             setUnreadCount(prev => reset ? totalUnread : prev + totalUnread);
 
-            return result.conversations;
+            return dedupedConversations;
         } catch (err) {
             console.error('Error loading conversations:', err);
             setError(err.message);
@@ -101,7 +130,8 @@ export function useFacebookMessenger() {
 
             const result = await facebookService.getConversationsWithPagination(pageId, nextPage, 8);
 
-            setConversations(prev => [...prev, ...result.conversations]);
+            // Deduplicate when appending to existing conversations
+            setConversations(prev => deduplicateByParticipant([...prev, ...result.conversations]));
             setConversationPage(nextPage);
             setHasMoreConversations(result.hasMore);
 
@@ -727,21 +757,40 @@ export function useFacebookMessenger() {
 
                 if (payload.new) {
                     setConversations(prev => {
-                        // Check if conversation already exists in the list
-                        const existingIndex = prev.findIndex(
+                        // Check if conversation already exists by conversation_id
+                        const existingByConvId = prev.findIndex(
                             conv => conv.conversation_id === payload.new.conversation_id
                         );
 
-                        if (existingIndex >= 0) {
+                        // Also check by participant_id to prevent duplicates from same contact
+                        const existingByParticipant = prev.findIndex(
+                            conv => conv.participant_id === payload.new.participant_id &&
+                                conv.conversation_id !== payload.new.conversation_id
+                        );
+
+                        if (existingByConvId >= 0) {
                             // Update existing conversation and move to top
                             const updated = [...prev];
-                            updated[existingIndex] = { ...updated[existingIndex], ...payload.new };
+                            updated[existingByConvId] = { ...updated[existingByConvId], ...payload.new };
                             // Move to top if it has a new message
                             if (payload.eventType === 'INSERT' || payload.new.last_message_time) {
-                                const [movedConv] = updated.splice(existingIndex, 1);
+                                const [movedConv] = updated.splice(existingByConvId, 1);
                                 return [movedConv, ...updated];
                             }
                             return updated;
+                        } else if (existingByParticipant >= 0) {
+                            // Same participant with different conversation_id - update the existing one
+                            // This handles cases where Facebook creates new thread IDs for same contact
+                            console.log('[DEDUP] Same participant, updating existing:', payload.new.participant_id);
+                            const updated = [...prev];
+                            // Use the newer conversation_id but keep it in place
+                            updated[existingByParticipant] = {
+                                ...updated[existingByParticipant],
+                                ...payload.new
+                            };
+                            // Move to top
+                            const [movedConv] = updated.splice(existingByParticipant, 1);
+                            return [movedConv, ...updated];
                         } else {
                             // NEW conversation - add to the top of the list
                             console.log('Adding new conversation to list:', payload.new.conversation_id);
