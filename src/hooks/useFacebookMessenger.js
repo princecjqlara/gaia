@@ -209,6 +209,24 @@ export function useFacebookMessenger() {
         }
     }, [checkExistingClient]);
 
+    // Silent refresh for messages - doesn't clear messages or show loading
+    // Used for background auto-refresh to prevent UI flashing
+    const refreshMessages = useCallback(async (conversationId, pageId) => {
+        if (!conversationId) return;
+
+        try {
+            // Silently sync and get messages without clearing UI
+            await facebookService.syncMessages(conversationId, pageId);
+            const msgs = await facebookService.getMessages(conversationId);
+            setMessages(msgs);
+
+            // Silently mark as read
+            await facebookService.markMessagesAsRead(conversationId);
+        } catch (err) {
+            console.error('Error refreshing messages:', err);
+        }
+    }, []);
+
     // Analyze current conversation with AI
     const analyzeCurrentConversation = useCallback(async () => {
         if (!selectedConversation || messages.length === 0) return null;
@@ -741,6 +759,7 @@ export function useFacebookMessenger() {
         loadMoreConversations,
         loadMessages,
         selectConversation,
+        refreshMessages,
         sendMessage,
         sendMediaMessage,
         sendBookingButton,

@@ -40,7 +40,9 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         // Conversation pagination
         hasMoreConversations,
         loadMoreConversations,
-        totalConversations
+        totalConversations,
+        // Silent refresh
+        refreshMessages
     } = useFacebookMessenger();
 
     const [messageText, setMessageText] = useState('');
@@ -97,19 +99,19 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // Auto-refresh messages every 10 seconds when conversation is selected
+    // Auto-refresh messages every 10 seconds when conversation is selected (silent - no loading)
     useEffect(() => {
         if (!selectedConversation) return;
 
         const refreshInterval = setInterval(() => {
-            // Refresh messages for current conversation
+            // Silently refresh messages without causing loading flash
             if (selectedConversation?.conversation_id) {
-                selectConversation(selectedConversation);
+                refreshMessages(selectedConversation.conversation_id, selectedConversation.page_id);
             }
         }, 10000); // 10 seconds
 
         return () => clearInterval(refreshInterval);
-    }, [selectedConversation?.id]);
+    }, [selectedConversation?.id, refreshMessages]);
 
     // Auto-refresh conversation list every 30 seconds (silent to prevent UI flashing)
     useEffect(() => {
