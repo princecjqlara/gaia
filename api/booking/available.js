@@ -57,12 +57,20 @@ export default async function handler(req, res) {
             console.log('Could not fetch settings, using defaults');
         }
 
-        // Check if date is a working day
+        // Check if date is a working day - support both available_days (numeric) and working_days (string)
         const dateObj = new Date(date);
+        const dayOfWeek = dateObj.getDay(); // 0=Sun, 6=Sat
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const dayName = dayNames[dateObj.getDay()];
+        const dayName = dayNames[dayOfWeek];
 
-        if (!config.working_days?.includes(dayName)) {
+        let isWorkingDay = true;
+        if (config.available_days && Array.isArray(config.available_days)) {
+            isWorkingDay = config.available_days.includes(dayOfWeek);
+        } else if (config.working_days && Array.isArray(config.working_days)) {
+            isWorkingDay = config.working_days.includes(dayName);
+        }
+
+        if (!isWorkingDay) {
             return res.status(200).json({ slots: [], message: 'Not a working day' });
         }
 
@@ -79,6 +87,32 @@ export default async function handler(req, res) {
             bookedTimes = (existingBookings || []).map(b => b.booking_time);
         } catch (e) {
             console.log('Could not fetch existing bookings');
+        }
+
+        // Also check calendar_events for conflicts
+        try {
+            const dateStart = new Date(date);
+            dateStart.setHours(0, 0, 0, 0);
+            const dateEnd = new Date(date);
+            dateEnd.setHours(23, 59, 59, 999);
+
+            const { data: calendarEvents } = await supabase
+                .from('calendar_events')
+                .select('start_time')
+                .gte('start_time', dateStart.toISOString())
+                .lte('start_time', dateEnd.toISOString());
+
+            if (calendarEvents && calendarEvents.length > 0) {
+                calendarEvents.forEach(event => {
+                    const eventTime = new Date(event.start_time);
+                    const timeStr = `${String(eventTime.getHours()).padStart(2, '0')}:${String(eventTime.getMinutes()).padStart(2, '0')}:00`;
+                    if (!bookedTimes.includes(timeStr)) {
+                        bookedTimes.push(timeStr);
+                    }
+                });
+            }
+        } catch (e) {
+            console.log('Could not fetch calendar events for availability check');
         }
 
         const slots = generateSlots(config, date, bookedTimes);

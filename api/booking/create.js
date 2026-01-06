@@ -202,6 +202,51 @@ export default async function handler(req, res) {
 
         console.log('Booking created successfully:', data?.id);
 
+        // Auto-add to team calendar (calendar_events table)
+        try {
+            // Get slot duration from settings (default 30 min)
+            let slotDuration = 30;
+            try {
+                const { data: settings } = await supabase
+                    .from('booking_settings')
+                    .select('slot_duration')
+                    .eq('page_id', pageId)
+                    .single();
+                if (settings?.slot_duration) {
+                    slotDuration = settings.slot_duration;
+                }
+            } catch (e) {
+                console.log('Could not fetch slot duration, using default 30 min');
+            }
+
+            // Calculate end time
+            const startTime = new Date(bookingDatetime);
+            const endTime = new Date(startTime.getTime() + slotDuration * 60 * 1000);
+
+            const calendarEvent = {
+                title: `📅 Meeting: ${contactName}`,
+                start_time: startTime.toISOString(),
+                end_time: endTime.toISOString(),
+                type: 'meeting',
+                description: `Booked via booking page\nEmail: ${contactEmail || 'N/A'}\nPhone: ${contactPhone || 'N/A'}\nNotes: ${notes || 'None'}`,
+                all_day: false,
+                booking_id: data?.id,
+                created_at: new Date().toISOString()
+            };
+
+            const { error: calendarError } = await supabase
+                .from('calendar_events')
+                .insert(calendarEvent);
+
+            if (calendarError) {
+                console.log('Could not add to calendar (table may not exist):', calendarError.message);
+            } else {
+                console.log('Added booking to team calendar');
+            }
+        } catch (calError) {
+            console.log('Calendar sync error (non-critical):', calError.message);
+        }
+
         // Build confirmation message
         const formattedDate = new Date(date).toLocaleDateString('en-US', {
             weekday: 'long',
