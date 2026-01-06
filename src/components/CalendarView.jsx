@@ -299,7 +299,7 @@ const CalendarView = ({ clients, isOpen, onClose, currentUserId, currentUserName
 
 // Gantt-style Day View
 const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEventColor, getClientName, isMobile }) => {
-  const hours = Array.from({ length: 14 }, (_, i) => i + 7); // 7 AM to 8 PM
+  const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 11 PM
   const meetings = events.filter(e => e.event_type === 'meeting');
   const otherEvents = events.filter(e => e.event_type !== 'meeting');
 
@@ -309,13 +309,13 @@ const GanttDayView = ({ date, events, onClose, onSchedule, onEventClick, getEven
     const phTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: false, timeZone: 'Asia/Manila' });
     const [hours, minutes] = phTime.split(':').map(Number);
     const h = hours + minutes / 60;
-    return Math.max(0, Math.min(100, ((h - 7) / 13) * 100));
+    return Math.max(0, Math.min(100, ((h - 6) / 17) * 100)); // 6 AM start, 17 hour range
   };
 
   const getWidth = (start, end) => {
     const s = new Date(start), e = new Date(end);
     const duration = (e - s) / (1000 * 60 * 60);
-    return Math.max(8, (duration / 13) * 100);
+    return Math.max(8, (duration / 17) * 100); // 17 hour range
   };
 
   const assignRows = (meetings) => {
