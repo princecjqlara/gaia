@@ -17,6 +17,9 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     start_time: '09:00',
     end_time: '17:00',
     slot_duration: 30, // minutes
+    // Booking mode settings
+    booking_mode: 'slots', // 'slots' = fixed time slots, 'flexible' = any time
+    allow_next_hour: false, // Show "Book Next Hour" quick option
     // Custom form fields
     custom_fields: [
       { id: 'name', label: 'Your Name', type: 'text', required: true },
@@ -971,6 +974,83 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                       <option value="45">45 minutes</option>
                       <option value="60">60 minutes</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* Booking Mode Options */}
+                <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">Booking Mode</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: bookingSettings.booking_mode === 'slots' ? 'var(--primary)' : 'var(--bg-secondary)',
+                        color: bookingSettings.booking_mode === 'slots' ? 'white' : 'var(--text-primary)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <input
+                          type="radio"
+                          name="booking_mode"
+                          checked={bookingSettings.booking_mode === 'slots'}
+                          onChange={() => setBookingSettings(prev => ({ ...prev, booking_mode: 'slots' }))}
+                          style={{ display: 'none' }}
+                        />
+                        🕐 Fixed Time Slots
+                      </label>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: bookingSettings.booking_mode === 'flexible' ? 'var(--primary)' : 'var(--bg-secondary)',
+                        color: bookingSettings.booking_mode === 'flexible' ? 'white' : 'var(--text-primary)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <input
+                          type="radio"
+                          name="booking_mode"
+                          checked={bookingSettings.booking_mode === 'flexible'}
+                          onChange={() => setBookingSettings(prev => ({ ...prev, booking_mode: 'flexible' }))}
+                          style={{ display: 'none' }}
+                        />
+                        ⏰ Flexible Time
+                      </label>
+                    </div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      {bookingSettings.booking_mode === 'slots'
+                        ? 'Contacts pick from preset time slots (9:00, 9:30, 10:00...)'
+                        : 'Contacts can pick any time (11:32, 2:15...)'}
+                    </small>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      cursor: 'pointer'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={bookingSettings.allow_next_hour || false}
+                        onChange={(e) => setBookingSettings(prev => ({ ...prev, allow_next_hour: e.target.checked }))}
+                        style={{ width: '20px', height: '20px' }}
+                      />
+                      <div>
+                        <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>⚡ Show "Book Next Hour" Option</span>
+                        <br />
+                        <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Quick booking button for contacts to book the next available hour</small>
+                      </div>
+                    </label>
                   </div>
                 </div>
               </div>

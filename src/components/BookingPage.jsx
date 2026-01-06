@@ -362,27 +362,93 @@ const BookingPage = () => {
                         </div>
                     </div>
 
-                    {/* Time Slots */}
+                    {/* Time Selection */}
                     <div style={styles.slotsSection}>
                         <h3 style={styles.slotsTitle}>🕐 Available Times</h3>
+
+                        {/* Next Hour Quick Book Option */}
+                        {settings?.allow_next_hour && selectedDate && (
+                            <button
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    marginBottom: '1rem',
+                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontSize: '0.95rem',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.5rem'
+                                }}
+                                onClick={() => {
+                                    const now = new Date();
+                                    const nextHour = new Date(now);
+                                    nextHour.setHours(nextHour.getHours() + 1);
+                                    nextHour.setMinutes(0);
+                                    const timeStr = `${String(nextHour.getHours()).padStart(2, '0')}:${String(nextHour.getMinutes()).padStart(2, '0')}`;
+                                    setSelectedTime(timeStr);
+                                    setSelectedDate(new Date());
+                                }}
+                            >
+                                ⚡ Book Next Hour ({(() => {
+                                    const next = new Date();
+                                    next.setHours(next.getHours() + 1);
+                                    next.setMinutes(0);
+                                    return next.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                })()})
+                            </button>
+                        )}
+
                         {selectedDate ? (
-                            availableSlots.length > 0 ? (
-                                <div style={styles.slots}>
-                                    {availableSlots.map(slot => (
-                                        <button
-                                            key={slot}
-                                            style={{
-                                                ...styles.slot,
-                                                ...(selectedTime === slot ? styles.slotSelected : {})
-                                            }}
-                                            onClick={() => setSelectedTime(slot)}
-                                        >
-                                            {formatTime(slot)}
-                                        </button>
-                                    ))}
+                            settings?.booking_mode === 'flexible' ? (
+                                /* Flexible Time Picker */
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <label style={{ fontSize: '0.875rem', color: '#555' }}>
+                                        Pick your preferred time:
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={selectedTime || ''}
+                                        onChange={(e) => setSelectedTime(e.target.value)}
+                                        min={settings?.start_time || '09:00'}
+                                        max={settings?.end_time || '17:00'}
+                                        style={{
+                                            padding: '1rem',
+                                            fontSize: '1.25rem',
+                                            border: '2px solid #e0e0e0',
+                                            borderRadius: '8px',
+                                            textAlign: 'center'
+                                        }}
+                                    />
+                                    <small style={{ color: '#888', fontSize: '0.75rem' }}>
+                                        Available: {settings?.start_time || '09:00'} - {settings?.end_time || '17:00'}
+                                    </small>
                                 </div>
                             ) : (
-                                <p style={styles.noSlots}>No available slots for this date</p>
+                                /* Fixed Time Slots */
+                                availableSlots.length > 0 ? (
+                                    <div style={styles.slots}>
+                                        {availableSlots.map(slot => (
+                                            <button
+                                                key={slot}
+                                                style={{
+                                                    ...styles.slot,
+                                                    ...(selectedTime === slot ? styles.slotSelected : {})
+                                                }}
+                                                onClick={() => setSelectedTime(slot)}
+                                            >
+                                                {formatTime(slot)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p style={styles.noSlots}>No available slots for this date</p>
+                                )
                             )
                         ) : (
                             <p style={styles.noSlots}>Select a date to see available times</p>
