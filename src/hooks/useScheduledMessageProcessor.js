@@ -27,8 +27,8 @@ export const useScheduledMessageProcessor = (isActive = true) => {
                 .from('scheduled_messages')
                 .select('*')
                 .eq('status', 'pending')
-                .lte('scheduled_time', now)
-                .order('scheduled_time', { ascending: true })
+                .lte('scheduled_for', now)
+                .order('scheduled_for', { ascending: true })
                 .limit(10);
 
             if (error) {
