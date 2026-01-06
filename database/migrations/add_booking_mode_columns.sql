@@ -1,20 +1,44 @@
--- Migration: Add same-day booking settings columns
--- Run this in Supabase SQL Editor if you already have the booking_settings table
+-- Complete Migration: Add ALL missing booking_settings columns
+-- Run this in Supabase SQL Editor to fix the booking settings table
 
--- Add min_advance_hours column (hours required in advance for same-day bookings)
+-- Add all potentially missing columns
 ALTER TABLE booking_settings 
 ADD COLUMN IF NOT EXISTS min_advance_hours INTEGER DEFAULT 1;
 
--- Add booking_mode column ('slots', 'flexible', or 'both')
 ALTER TABLE booking_settings 
 ADD COLUMN IF NOT EXISTS booking_mode TEXT DEFAULT 'slots';
 
--- Add allow_next_hour column (show "Book Next Hour" quick option)
 ALTER TABLE booking_settings 
 ADD COLUMN IF NOT EXISTS allow_next_hour BOOLEAN DEFAULT false;
 
--- Confirm the changes
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS auto_redirect_enabled BOOLEAN DEFAULT true;
+
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS auto_redirect_delay INTEGER DEFAULT 5;
+
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS confirmation_message TEXT DEFAULT 'Your booking has been confirmed! We look forward to meeting with you.';
+
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS messenger_prefill_message TEXT DEFAULT 'Hi! I just booked an appointment for {date} at {time}. Please confirm my booking. Thank you!';
+
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS reminder_enabled BOOLEAN DEFAULT true;
+
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS reminder_hours_before INTEGER DEFAULT 24;
+
+ALTER TABLE booking_settings 
+ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '[
+    {"id": "name", "label": "Your Name", "type": "text", "required": true},
+    {"id": "phone", "label": "Phone Number", "type": "tel", "required": true},
+    {"id": "email", "label": "Email Address", "type": "email", "required": false},
+    {"id": "notes", "label": "Additional Notes", "type": "textarea", "required": false}
+]'::jsonb;
+
+-- Verify the columns were added
 SELECT column_name, data_type, column_default 
 FROM information_schema.columns 
-WHERE table_name = 'booking_settings' 
-AND column_name IN ('min_advance_hours', 'booking_mode', 'allow_next_hour');
+WHERE table_name = 'booking_settings'
+ORDER BY ordinal_position;

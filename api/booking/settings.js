@@ -92,32 +92,60 @@ export default async function handler(req, res) {
             const settings = req.body;
             console.log('Received booking settings to save:', JSON.stringify(settings, null, 2));
 
-            // Map settings to database columns - include all important fields
-            const dbSettings = {
+            // Core settings that should always exist in the table
+            const coreSettings = {
                 page_id: pageId,
                 available_days: settings.available_days || [1, 2, 3, 4, 5],
                 start_time: settings.start_time || '09:00',
                 end_time: settings.end_time || '17:00',
                 slot_duration: settings.slot_duration || 30,
-                min_advance_hours: settings.min_advance_hours ?? 1,
-                booking_mode: settings.booking_mode || 'slots',
-                allow_next_hour: settings.allow_next_hour || false,
-                custom_fields: settings.custom_fields || [],
-                custom_form: settings.custom_form || [],
-                confirmation_message: settings.confirmation_message || '',
-                messenger_prefill_message: settings.messenger_prefill_message || '',
-                auto_redirect_enabled: settings.auto_redirect_enabled !== false,
-                auto_redirect_delay: settings.auto_redirect_delay || 5,
                 updated_at: new Date().toISOString()
             };
 
+            // Extended settings - only include if they have values
+            // These may not exist in older DB schemas
+            const extendedSettings = {};
+
+            if (settings.min_advance_hours !== undefined) extendedSettings.min_advance_hours = settings.min_advance_hours;
+            if (settings.booking_mode !== undefined) extendedSettings.booking_mode = settings.booking_mode;
+            if (settings.allow_next_hour !== undefined) extendedSettings.allow_next_hour = settings.allow_next_hour;
+            if (settings.custom_fields !== undefined) extendedSettings.custom_fields = settings.custom_fields;
+            if (settings.custom_form !== undefined) extendedSettings.custom_form = settings.custom_form;
+            if (settings.confirmation_message !== undefined) extendedSettings.confirmation_message = settings.confirmation_message;
+            if (settings.messenger_prefill_message !== undefined) extendedSettings.messenger_prefill_message = settings.messenger_prefill_message;
+            if (settings.auto_redirect_enabled !== undefined) extendedSettings.auto_redirect_enabled = settings.auto_redirect_enabled;
+            if (settings.auto_redirect_delay !== undefined) extendedSettings.auto_redirect_delay = settings.auto_redirect_delay;
+
+            // Try to save all settings
+            let dbSettings = { ...coreSettings, ...extendedSettings };
             console.log('Saving to database:', JSON.stringify(dbSettings, null, 2));
 
-            const { data, error } = await supabase
+            let { data, error } = await supabase
                 .from('booking_settings')
                 .upsert(dbSettings, { onConflict: 'page_id' })
                 .select()
                 .single();
+
+            // If column not found, try with just core settings
+            if (error && error.code === 'PGRST204') {
+                console.log('Some columns missing, trying core settings only');
+                const { data: coreData, error: coreError } = await supabase
+                    .from('booking_settings')
+                    .upsert(coreSettings, { onConflict: 'page_id' })
+                    .select()
+                    .single();
+
+                if (!coreError) {
+                    // Return what we could save, merged with what was requested
+                    return res.status(200).json({
+                        ...settings,
+                        ...coreData,
+                        _warning: 'Some settings could not be saved - database migration needed'
+                    });
+                }
+                error = coreError;
+                data = coreData;
+            }
 
             if (error) {
                 console.error('Supabase error:', error);
@@ -131,7 +159,7 @@ export default async function handler(req, res) {
             }
 
             console.log('Saved successfully:', data);
-            return res.status(200).json(data);
+            return res.status(200).json({ ...DEFAULT_SETTINGS, ...data });
         } catch (error) {
             console.error('Error saving booking settings:', error);
             return res.status(500).json({ error: 'Failed to save settings', details: error.message });
