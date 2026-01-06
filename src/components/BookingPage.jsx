@@ -685,26 +685,30 @@ const styles = {
         padding: '2rem'
     },
     form: {
-        borderTop: '1px solid #eee',
-        paddingTop: '2rem'
+        marginTop: '1.5rem',
+        padding: '1.5rem',
+        background: '#f8f9fa',
+        borderRadius: '12px',
+        border: '1px solid #e0e0e0'
     },
     formTitle: {
-        fontSize: '1rem',
+        fontSize: '1.1rem',
         fontWeight: '600',
-        marginBottom: '1rem'
+        marginBottom: '1rem',
+        color: '#333'
     },
     formRow: {
-        display: 'flex',
-        gap: '1rem',
         marginBottom: '1rem'
     },
     input: {
-        flex: 1,
+        width: '100%',
         padding: '0.875rem 1rem',
-        border: '1px solid #e0e0e0',
+        border: '2px solid #ddd',
         borderRadius: '8px',
-        fontSize: '0.875rem',
+        fontSize: '1rem',
         outline: 'none',
+        background: 'white',
+        boxSizing: 'border-box',
         transition: 'border-color 0.2s'
     },
     submitButton: {
