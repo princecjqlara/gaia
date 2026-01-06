@@ -1,9 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase with fallbacks
-// Note: Using ANON key first as service role key may have issues
+// Initialize Supabase with service role key to bypass RLS
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v18.0';
 
@@ -223,16 +222,37 @@ export default async function handler(req, res) {
             const startTime = new Date(bookingDatetime);
             const endTime = new Date(startTime.getTime() + slotDuration * 60 * 1000);
 
+            // Build detailed description with all contact info and custom fields
+            let eventDescription = `📱 Booked via booking page\n\n`;
+            eventDescription += `👤 Name: ${contactName}\n`;
+            if (contactEmail) eventDescription += `📧 Email: ${contactEmail}\n`;
+            if (contactPhone) eventDescription += `📞 Phone: ${contactPhone}\n`;
+            if (notes) eventDescription += `📝 Notes: ${notes}\n`;
+
+            // Add custom form data
+            if (customFormData && Object.keys(customFormData).length > 0) {
+                eventDescription += `\n📋 Additional Info:\n`;
+                for (const [key, value] of Object.entries(customFormData)) {
+                    if (value) {
+                        // Format key for display (remove underscores, capitalize)
+                        const formattedKey = key.replace(/_/g, ' ').replace(/^field /i, '').replace(/\b\w/g, l => l.toUpperCase());
+                        eventDescription += `• ${formattedKey}: ${value}\n`;
+                    }
+                }
+            }
+
             const calendarEvent = {
-                title: `📅 Meeting: ${contactName}`,
+                title: `📅 Booking: ${contactName}`,
                 start_time: startTime.toISOString(),
                 end_time: endTime.toISOString(),
                 type: 'meeting',
-                description: `Booked via booking page\nEmail: ${contactEmail || 'N/A'}\nPhone: ${contactPhone || 'N/A'}\nNotes: ${notes || 'None'}`,
+                description: eventDescription.trim(),
                 all_day: false,
                 booking_id: data?.id,
                 created_at: new Date().toISOString()
             };
+
+            console.log('Creating calendar event:', calendarEvent.title);
 
             const { error: calendarError } = await supabase
                 .from('calendar_events')
@@ -241,7 +261,7 @@ export default async function handler(req, res) {
             if (calendarError) {
                 console.log('Could not add to calendar (table may not exist):', calendarError.message);
             } else {
-                console.log('Added booking to team calendar');
+                console.log('✅ Added booking to team calendar');
             }
         } catch (calError) {
             console.log('Calendar sync error (non-critical):', calError.message);
