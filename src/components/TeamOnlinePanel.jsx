@@ -103,7 +103,10 @@ const TeamOnlinePanel = ({ onClose }) => {
     // Update user role
     const updateUserRole = async (userId, newRole) => {
         const supabase = getSupabaseClient();
-        if (!supabase) return;
+        if (!supabase) {
+            alert('Database connection not available');
+            return;
+        }
 
         try {
             const { error } = await supabase
@@ -111,12 +114,24 @@ const TeamOnlinePanel = ({ onClose }) => {
                 .update({ role: newRole })
                 .eq('id', userId);
 
-            if (error) throw error;
+            if (error) {
+                console.error('Supabase error:', error);
+                alert(`Failed to update role: ${error.message}`);
+                return;
+            }
 
-            // Refresh data
-            loadData();
+            // Update local state immediately for responsiveness
+            setAllUsers(prev => prev.map(u =>
+                u.id === userId ? { ...u, role: newRole } : u
+            ));
+            setOnlineUsers(prev => prev.map(u =>
+                u.id === userId ? { ...u, role: newRole } : u
+            ));
+
+            console.log(`Role updated for ${userId} to ${newRole}`);
         } catch (err) {
             console.error('Error updating user role:', err);
+            alert(`Error: ${err.message}`);
         }
     };
 
