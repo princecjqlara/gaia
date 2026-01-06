@@ -106,6 +106,7 @@ export default async function handler(req, res) {
             // These may not exist in older DB schemas
             const extendedSettings = {};
 
+            if (settings.same_day_buffer !== undefined) extendedSettings.same_day_buffer = settings.same_day_buffer;
             if (settings.min_advance_hours !== undefined) extendedSettings.min_advance_hours = settings.min_advance_hours;
             if (settings.booking_mode !== undefined) extendedSettings.booking_mode = settings.booking_mode;
             if (settings.allow_next_hour !== undefined) extendedSettings.allow_next_hour = settings.allow_next_hour;

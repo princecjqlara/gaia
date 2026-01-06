@@ -166,6 +166,12 @@ function generateSlots(config, date, bookedTimes) {
     const dateObj = new Date(date);
     const isToday = dateObj.toDateString() === now.toDateString();
 
+    // Same-day buffer: if admin sets 5 hours, contacts can only book slots 5+ hours from now
+    const sameDayBuffer = config.same_day_buffer || 0; // Default: no buffer, just past times
+    const minBookingTime = isToday
+        ? new Date(now.getTime() + (sameDayBuffer * 60 * 60 * 1000))
+        : null;
+
     while (currentHour < endHour || (currentHour === endHour && currentMinute < endMinute)) {
         const timeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
         const timeWithSeconds = timeStr + ':00';
@@ -180,11 +186,11 @@ function generateSlots(config, date, bookedTimes) {
             continue;
         }
 
-        // Skip past times for today only
+        // For today: skip if slot is before minBookingTime (now + buffer hours)
         if (isToday) {
             const slotDateTime = new Date(date);
             slotDateTime.setHours(currentHour, currentMinute, 0, 0);
-            if (slotDateTime <= now) {
+            if (slotDateTime <= (minBookingTime || now)) {
                 currentMinute += duration;
                 while (currentMinute >= 60) {
                     currentMinute -= 60;

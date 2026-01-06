@@ -1130,6 +1130,30 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                     </small>
                   </div>
 
+                  {/* Same-Day Booking Buffer */}
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="form-label">⏰ Same-Day Booking Buffer</label>
+                    <select
+                      className="form-select"
+                      value={bookingSettings.same_day_buffer || 0}
+                      onChange={(e) => setBookingSettings(prev => ({ ...prev, same_day_buffer: parseInt(e.target.value) }))}
+                    >
+                      <option value="0">No buffer (show all future slots)</option>
+                      <option value="1">1 hour ahead</option>
+                      <option value="2">2 hours ahead</option>
+                      <option value="3">3 hours ahead</option>
+                      <option value="4">4 hours ahead</option>
+                      <option value="5">5 hours ahead</option>
+                      <option value="6">6 hours ahead</option>
+                      <option value="8">8 hours ahead</option>
+                      <option value="12">12 hours ahead</option>
+                    </select>
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      For <strong>today only</strong>: How many hours ahead must the available slots be?<br />
+                      Example: If set to 5 hours and it's 8 AM, contacts can book from 1 PM onwards today.
+                    </small>
+                  </div>
+
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label style={{
                       display: 'flex',
