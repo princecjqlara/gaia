@@ -30,6 +30,14 @@ const BookingPage = () => {
     const [error, setError] = useState(null);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [redirectCountdown, setRedirectCountdown] = useState(null);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
+
+    // Handle resize for mobile detection
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 600);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Load booking settings
     useEffect(() => {
@@ -301,7 +309,11 @@ const BookingPage = () => {
                     <div style={styles.error}>{error}</div>
                 )}
 
-                <div style={styles.grid}>
+                <div style={{
+                    ...styles.grid,
+                    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                    gap: isMobile ? '1rem' : '2rem'
+                }}>
                     {/* Calendar */}
                     <div style={styles.calendarSection}>
                         <div style={styles.calendarHeader}>
@@ -489,10 +501,13 @@ const styles = {
     card: {
         background: 'white',
         borderRadius: '16px',
-        padding: '2rem',
+        padding: '1.5rem',
         maxWidth: '800px',
-        width: '100%',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
+        width: 'calc(100% - 1rem)',
+        margin: '0 0.5rem',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+        boxSizing: 'border-box',
+        overflow: 'hidden'
     },
     badge: {
         display: 'inline-block',
@@ -535,7 +550,9 @@ const styles = {
     calendarSection: {
         background: '#f8f9fa',
         borderRadius: '12px',
-        padding: '1.5rem'
+        padding: '1rem',
+        minWidth: 0,
+        overflow: 'hidden'
     },
     calendarHeader: {
         display: 'flex',
@@ -577,18 +594,19 @@ const styles = {
     days: {
         display: 'grid',
         gridTemplateColumns: 'repeat(7, 1fr)',
-        gap: '4px'
+        gap: '2px'
     },
     day: {
         aspectRatio: '1',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: '8px',
+        borderRadius: '6px',
         cursor: 'pointer',
-        fontSize: '0.875rem',
+        fontSize: '0.8rem',
         transition: 'all 0.2s',
-        color: '#1a1a1a'
+        color: '#1a1a1a',
+        minWidth: 0
     },
     dayDisabled: {
         color: '#999',
