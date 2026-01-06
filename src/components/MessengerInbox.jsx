@@ -50,7 +50,16 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [editableNotes, setEditableNotes] = useState('');
     const [showMediaUpload, setShowMediaUpload] = useState(false);
-    const [smartSort, setSmartSort] = useState(true); // AI priority sorting
+    // AI priority sorting - persisted to localStorage
+    const [smartSort, setSmartSort] = useState(() => {
+        const saved = localStorage.getItem('messenger_ai_priority');
+        return saved !== null ? saved === 'true' : true; // Default true
+    });
+
+    // Persist AI Priority setting
+    useEffect(() => {
+        localStorage.setItem('messenger_ai_priority', String(smartSort));
+    }, [smartSort]);
 
     // New UI state
     const [showBulkModal, setShowBulkModal] = useState(false);
