@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import facebookService from '../services/facebookService';
 import { analyzeConversation } from '../services/aiConversationAnalyzer';
+import { autoAssignService } from '../services/autoAssignService';
 
 /**
  * React hook for Facebook Messenger functionality
@@ -219,7 +220,7 @@ export function useFacebookMessenger() {
         return analysis;
     }, [selectedConversation, messages, runAIAnalysis, checkExistingClient]);
 
-    // Transfer conversation to client pipeline
+    // Transfer conversation to client pipeline with auto-assign
     const transferToClient = useCallback(async (clientData = {}, userId) => {
         if (!selectedConversation) return null;
 
@@ -230,6 +231,18 @@ export function useFacebookMessenger() {
                 clientData,
                 userId
             );
+
+            // Auto-assign to clocked-in chat support user (round-robin)
+            try {
+                const assignedUser = await autoAssignService.assignConversation(
+                    selectedConversation.conversation_id
+                );
+                if (assignedUser) {
+                    console.log(`[Pipeline] Auto-assigned to ${assignedUser.name || assignedUser.email}`);
+                }
+            } catch (assignErr) {
+                console.log('[Pipeline] Auto-assign skipped:', assignErr.message);
+            }
 
             // Update selected conversation with linked client
             setSelectedConversation(prev => ({
