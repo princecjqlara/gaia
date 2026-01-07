@@ -89,6 +89,7 @@ export default async function handler(req, res) {
  */
 async function handleIncomingMessage(pageId, event) {
     const senderId = event.sender?.id;
+    const recipientId = event.recipient?.id;
     const message = event.message;
     const timestamp = event.timestamp;
 
@@ -97,7 +98,15 @@ async function handleIncomingMessage(pageId, event) {
         return;
     }
 
-    console.log(`[WEBHOOK] Message from ${senderId}: ${message.text || '[attachment]'}`);
+    // Check if this is an echo (message sent FROM the page, not received)
+    const isEcho = message.is_echo === true;
+
+    // For echoes: sender is the page, recipient is the user
+    // For regular messages: sender is the user, recipient is the page
+    const participantId = isEcho ? recipientId : senderId;
+    const isFromPage = isEcho;
+
+    console.log(`[WEBHOOK] ${isEcho ? 'Echo' : 'Incoming'} from ${participantId}: ${message.text || '[attachment]'}`);
 
     const db = getSupabase();
     if (!db) {
@@ -110,14 +119,15 @@ async function handleIncomingMessage(pageId, event) {
         const { data: existingConv } = await db
             .from('facebook_conversations')
             .select('*')
-            .eq('participant_id', senderId)
+            .eq('participant_id', participantId)
             .eq('page_id', pageId)
             .single();
 
         // Use existing conversation_id or create temporary one for new conversations
-        const conversationId = existingConv?.conversation_id || `t_${senderId}`;
+        const conversationId = existingConv?.conversation_id || `t_${participantId}`;
 
-        const newUnreadCount = (existingConv?.unread_count || 0) + 1;
+        // Only increment unread for messages FROM the user, not echoes
+        const newUnreadCount = isFromPage ? (existingConv?.unread_count || 0) : (existingConv?.unread_count || 0) + 1;
 
         // Upsert conversation
         // Use participant_id + page_id as conflict key to prevent duplicate contacts
@@ -126,11 +136,11 @@ async function handleIncomingMessage(pageId, event) {
             .upsert({
                 conversation_id: conversationId,
                 page_id: pageId,
-                participant_id: senderId,
-                participant_name: existingConv?.participant_name || `User ${senderId.slice(-4)}`,
+                participant_id: participantId,
+                participant_name: existingConv?.participant_name || `User ${participantId.slice(-4)}`,
                 last_message_text: message.text || '[Attachment]',
                 last_message_time: new Date(timestamp).toISOString(),
-                last_message_from_page: false,
+                last_message_from_page: isFromPage,
                 unread_count: newUnreadCount,
                 updated_at: new Date().toISOString()
             }, {
@@ -154,8 +164,8 @@ async function handleIncomingMessage(pageId, event) {
                 message_text: message.text || null,
                 attachments: message.attachments || null,
                 timestamp: new Date(timestamp).toISOString(),
-                is_from_page: false,
-                is_read: false
+                is_from_page: isFromPage,
+                is_read: isFromPage // Echo messages are already "read"
             }, { onConflict: 'message_id' });
 
         if (msgError) {
