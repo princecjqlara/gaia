@@ -153,7 +153,11 @@ const BookingPage = () => {
 
     const loadAvailableSlots = async (date) => {
         try {
-            const dateStr = date.toISOString().split('T')[0];
+            // Use local date format (not UTC) to ensure correct date matching on server
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
             // Pass settings to API for proper slot generation
             const params = new URLSearchParams({
                 pageId: pageId,
@@ -190,7 +194,7 @@ const BookingPage = () => {
                 body: JSON.stringify({
                     pageId,
                     psid,
-                    date: selectedDate.toISOString().split('T')[0],
+                    date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`,
                     time: selectedTime,
                     contactName: formData.name,
                     contactEmail: formData.email,
