@@ -595,6 +595,18 @@ const MeetingDetailsModal = ({ meeting, onClose, onUpdate, onDelete, onStartVide
             {meeting.client_id && ` • ${getClientName(meeting.client_id)}`}
           </div>
 
+          {/* Contact Details / Description Section - shows form answers from bookings */}
+          {meeting.description && (
+            <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem', color: '#22c55e' }}>
+                📋 Contact Details
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                {meeting.description}
+              </div>
+            </div>
+          )}
+
           {/* Video Call Section */}
           <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
             <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.75rem', color: '#3b82f6' }}>
