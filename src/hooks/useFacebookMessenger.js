@@ -22,6 +22,9 @@ export function useFacebookMessenger() {
     const [analyzing, setAnalyzing] = useState(false);
     const [existingClient, setExistingClient] = useState(null);
 
+    // Automatic conversation insights (no AI required)
+    const [conversationInsights, setConversationInsights] = useState(null);
+
     // Pagination state
     const [messagePage, setMessagePage] = useState(1);
     const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -201,6 +204,7 @@ export function useFacebookMessenger() {
         setSelectedConversation(conversation);
         setAiAnalysis(null);
         setExistingClient(null);
+        setConversationInsights(null); // Clear insights
         setMessages([]); // Clear old messages immediately
 
         if (conversation) {
@@ -219,6 +223,14 @@ export function useFacebookMessenger() {
 
                 // Mark messages as read
                 await facebookService.markMessagesAsRead(conversation.conversation_id);
+
+                // Load automatic insights (booking status, timeline, stats)
+                const insights = await facebookService.getConversationInsights(
+                    conversation.conversation_id,
+                    conversation.participant_id,
+                    conversation.page_id
+                );
+                setConversationInsights(insights);
 
                 // Load existing AI analysis if available
                 const savedAnalysis = await facebookService.getAIAnalysis(conversation.conversation_id);
@@ -833,6 +845,7 @@ export function useFacebookMessenger() {
         aiAnalysis,
         analyzing,
         existingClient,
+        conversationInsights,
 
         // Pagination & Search State
         messagePage,

@@ -172,7 +172,7 @@ const TeamOnlinePanel = ({ onClose }) => {
                                         ⚡ Auto-Assign Round Robin
                                     </div>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        Automatically assign new conversations to clocked-in chat support users
+                                        Automatically assign new conversations to clocked-in users (excludes admin and chat support)
                                     </div>
                                 </div>
                                 <button

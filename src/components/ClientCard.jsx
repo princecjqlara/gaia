@@ -109,8 +109,8 @@ const ClientCard = ({ client, onView, onEdit }) => {
         {client.monthsWithClient > 0 && (
           <span>⏱️ {client.monthsWithClient}mo</span>
         )}
-        {client.assignedTo && (
-          <span>👤 {client.assignedTo}</span>
+        {(client.assignedUser || client.assignedTo) && (
+          <span>👤 {client.assignedUser?.name || client.assignedUser?.email || client.assignedTo}</span>
         )}
       </div>
       {client.phase === 'testing' && (

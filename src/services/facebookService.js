@@ -1693,6 +1693,113 @@ class FacebookService {
             throw error;
         }
     }
+
+    // ============================================
+    // CONVERSATION INSIGHTS (Auto-detected)
+    // ============================================
+
+    /**
+     * Get booking for a contact by their PSID (participant_id)
+     */
+    async getBookingByParticipant(participantId, pageId) {
+        try {
+            const { data, error } = await getSupabase()
+                .from('bookings')
+                .select('*')
+                .eq('contact_psid', participantId)
+                .eq('page_id', pageId)
+                .order('booking_datetime', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error fetching booking by participant:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get automatic insights for a conversation (without AI analysis)
+     * Includes: message stats, timeline, booking status
+     */
+    async getConversationInsights(conversationId, participantId, pageId) {
+        try {
+            // 1. Get message statistics
+            const { data: messages, error: msgError } = await getSupabase()
+                .from('facebook_messages')
+                .select('timestamp, is_from_page')
+                .eq('conversation_id', conversationId)
+                .order('timestamp', { ascending: true });
+
+            if (msgError) {
+                console.error('Error fetching messages for insights:', msgError);
+            }
+
+            const messageCount = messages?.length || 0;
+            const firstMessageDate = messages?.[0]?.timestamp;
+            const lastMessageDate = messages?.[messages.length - 1]?.timestamp;
+
+            // Calculate days since first contact
+            const daysSinceFirstContact = firstMessageDate
+                ? Math.floor((new Date() - new Date(firstMessageDate)) / (1000 * 60 * 60 * 24))
+                : null;
+
+            // Count messages by sender
+            const customerMessages = messages?.filter(m => !m.is_from_page).length || 0;
+            const agentMessages = messages?.filter(m => m.is_from_page).length || 0;
+
+            // 2. Get booking info
+            const booking = await this.getBookingByParticipant(participantId, pageId);
+
+            // Calculate days until/since appointment
+            let bookingDaysInfo = null;
+            if (booking?.booking_datetime) {
+                const bookingDate = new Date(booking.booking_datetime);
+                const now = new Date();
+                const diffDays = Math.floor((bookingDate - now) / (1000 * 60 * 60 * 24));
+                bookingDaysInfo = diffDays >= 0
+                    ? { type: 'upcoming', days: diffDays }
+                    : { type: 'past', days: Math.abs(diffDays) };
+            }
+
+            return {
+                // Message statistics
+                messageCount,
+                customerMessages,
+                agentMessages,
+                firstMessageDate,
+                lastMessageDate,
+                daysSinceFirstContact,
+
+                // Booking info
+                hasBooking: !!booking,
+                booking: booking ? {
+                    id: booking.id,
+                    datetime: booking.booking_datetime,
+                    date: booking.booking_date,
+                    time: booking.booking_time,
+                    status: booking.status,
+                    contactName: booking.contact_name,
+                    contactPhone: booking.contact_phone,
+                    notes: booking.notes,
+                    daysInfo: bookingDaysInfo
+                } : null,
+
+                // Timeline events
+                timeline: [
+                    firstMessageDate && { type: 'first_contact', date: firstMessageDate, label: 'First Contact' },
+                    booking?.created_at && { type: 'booking_created', date: booking.created_at, label: 'Appointment Booked' },
+                    booking?.booking_datetime && { type: 'appointment', date: booking.booking_datetime, label: 'Appointment', status: booking.status },
+                    lastMessageDate && { type: 'last_activity', date: lastMessageDate, label: 'Last Message' }
+                ].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date))
+            };
+        } catch (error) {
+            console.error('Error getting conversation insights:', error);
+            return null;
+        }
+    }
 }
 
 export const facebookService = new FacebookService();

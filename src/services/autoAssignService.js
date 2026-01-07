@@ -26,16 +26,16 @@ export const autoAssignService = {
                 return null;
             }
 
-            // Get all clocked-in chat support users (NOT admin)
+            // Get all clocked-in users with 'user' role (NOT admin or chat_support)
             const { data: onlineUsers, error: usersError } = await supabase
                 .from('users')
                 .select('id, name, email')
                 .eq('is_clocked_in', true)
-                .eq('role', 'chat_support')
+                .eq('role', 'user')
                 .order('name');
 
             if (usersError || !onlineUsers || onlineUsers.length === 0) {
-                console.log('[AutoAssign] No clocked-in chat support users available');
+                console.log('[AutoAssign] No clocked-in users available');
                 return null;
             }
 

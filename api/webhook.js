@@ -17,6 +17,47 @@ function getSupabase() {
 }
 
 /**
+ * Fetch Facebook user profile name using Graph API
+ */
+async function fetchFacebookUserName(userId, pageId) {
+    const db = getSupabase();
+    if (!db) return null;
+
+    try {
+        // Get page access token from database
+        const { data: page } = await db
+            .from('facebook_pages')
+            .select('page_access_token')
+            .eq('page_id', pageId)
+            .single();
+
+        if (!page?.page_access_token) {
+            console.log('[WEBHOOK] No page access token available for user name lookup');
+            return null;
+        }
+
+        // Fetch user profile from Facebook
+        const response = await fetch(
+            `https://graph.facebook.com/v18.0/${userId}?fields=name,first_name,last_name&access_token=${page.page_access_token}`
+        );
+
+        if (!response.ok) {
+            console.log('[WEBHOOK] Failed to fetch user profile:', response.status);
+            return null;
+        }
+
+        const profile = await response.json();
+        const userName = profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+
+        console.log(`[WEBHOOK] Fetched Facebook user name: ${userName}`);
+        return userName || null;
+    } catch (err) {
+        console.error('[WEBHOOK] Error fetching user name:', err.message);
+        return null;
+    }
+}
+
+/**
  * Facebook Webhook Handler
  * Handles verification (GET) and incoming messages (POST)
  */
@@ -129,6 +170,12 @@ async function handleIncomingMessage(pageId, event) {
         // Only increment unread for messages FROM the user, not echoes
         const newUnreadCount = isFromPage ? (existingConv?.unread_count || 0) : (existingConv?.unread_count || 0) + 1;
 
+        // Fetch real Facebook user name for new conversations (only for incoming messages)
+        let participantName = existingConv?.participant_name;
+        if (!participantName && !isFromPage) {
+            participantName = await fetchFacebookUserName(participantId, pageId);
+        }
+
         // Upsert conversation
         // Use participant_id + page_id as conflict key to prevent duplicate contacts
         const { error: convError } = await db
@@ -137,7 +184,7 @@ async function handleIncomingMessage(pageId, event) {
                 conversation_id: conversationId,
                 page_id: pageId,
                 participant_id: participantId,
-                participant_name: existingConv?.participant_name || `User ${participantId.slice(-4)}`,
+                participant_name: participantName || null,
                 last_message_text: message.text || '[Attachment]',
                 last_message_time: new Date(timestamp).toISOString(),
                 last_message_from_page: isFromPage,

@@ -23,6 +23,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         aiAnalysis,
         analyzing,
         existingClient,
+        conversationInsights,
         analyzeCurrentConversation,
         transferToClient,
         updateExistingLead,
@@ -1519,7 +1520,106 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 </button>
                             </div>
 
-                            {/* AI Insights */}
+                            {/* Conversation Insights (Auto-detected - always visible) */}
+                            {conversationInsights && (
+                                <div style={{
+                                    marginTop: '1rem',
+                                    padding: '1rem',
+                                    background: 'var(--bg-secondary)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--border-color)'
+                                }}>
+                                    <h5 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        📊 Conversation Insights
+                                    </h5>
+
+                                    {/* Booking Status - Always show */}
+                                    <div style={{
+                                        padding: '0.75rem',
+                                        background: conversationInsights.hasBooking
+                                            ? 'var(--success-alpha, rgba(74, 222, 128, 0.1))'
+                                            : 'var(--bg-tertiary)',
+                                        borderRadius: 'var(--radius-sm)',
+                                        marginBottom: '0.75rem'
+                                    }}>
+                                        {conversationInsights.hasBooking ? (
+                                            <>
+                                                <div style={{ fontWeight: '500', color: 'var(--success)', marginBottom: '0.25rem' }}>
+                                                    ✅ Appointment Booked
+                                                </div>
+                                                <div style={{ fontSize: '0.875rem' }}>
+                                                    📅 {new Date(conversationInsights.booking.datetime).toLocaleDateString()} at {conversationInsights.booking.time}
+                                                </div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                    Status: <span style={{
+                                                        textTransform: 'capitalize',
+                                                        color: conversationInsights.booking.status === 'confirmed' ? 'var(--success)' :
+                                                            conversationInsights.booking.status === 'cancelled' ? 'var(--error)' : 'var(--warning)'
+                                                    }}>{conversationInsights.booking.status}</span>
+                                                    {conversationInsights.booking.daysInfo && (
+                                                        <span> • {conversationInsights.booking.daysInfo.type === 'upcoming'
+                                                            ? `In ${conversationInsights.booking.daysInfo.days} days`
+                                                            : `${conversationInsights.booking.daysInfo.days} days ago`
+                                                        }</span>
+                                                    )}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div style={{ fontWeight: '500', color: 'var(--text-muted)' }}>
+                                                📅 No Appointment Booked
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Message Summary */}
+                                    <div style={{ marginBottom: '0.75rem' }}>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                            💬 Conversation Summary
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            <span>{conversationInsights.messageCount} messages</span>
+                                            <span>•</span>
+                                            <span>{conversationInsights.customerMessages} from customer</span>
+                                            {conversationInsights.daysSinceFirstContact !== null && (
+                                                <>
+                                                    <span>•</span>
+                                                    <span>{conversationInsights.daysSinceFirstContact} days ago</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Timeline */}
+                                    {conversationInsights.timeline && conversationInsights.timeline.length > 0 && (
+                                        <div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                                📅 Timeline
+                                            </div>
+                                            <div style={{
+                                                fontSize: '0.8rem',
+                                                paddingLeft: '0.5rem',
+                                                borderLeft: '2px solid var(--border-color)'
+                                            }}>
+                                                {conversationInsights.timeline.map((event, idx) => (
+                                                    <div key={idx} style={{
+                                                        marginBottom: '0.25rem',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center'
+                                                    }}>
+                                                        <span>{event.label}</span>
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                                            {new Date(event.date).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* AI Insights (from analysis) */}
                             {aiAnalysis && (
                                 <div style={{
                                     marginTop: '1rem',
