@@ -135,8 +135,12 @@ export default async function handler(req, res) {
             });
         }
 
-        // Create booking datetime
-        const bookingDatetime = new Date(`${date}T${time}:00`);
+        // Create booking datetime - interpret time as Philippines timezone (UTC+8)
+        // Input time is in Philippines local time, we need to convert to proper UTC
+        const phOffset = 8 * 60; // Philippines is UTC+8 (8 hours = 480 minutes)
+        const localDate = new Date(`${date}T${time}:00`);
+        // Adjust for Philippines timezone: subtract 8 hours to get UTC
+        const bookingDatetime = new Date(localDate.getTime() - (phOffset * 60 * 1000));
 
         // Create the booking
         const bookingData = {
