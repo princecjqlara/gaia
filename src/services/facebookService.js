@@ -871,14 +871,14 @@ class FacebookService {
 
             if (convError) throw convError;
 
-            // Create new client
+            // Create new client - don't use participant_id as contact details
             const newClient = {
                 client_name: clientData.clientName || conv.participant_name,
-                business_name: clientData.businessName || conv.extracted_details?.businessName,
-                contact_details: clientData.contactDetails || conv.participant_id,
-                facebook_page: clientData.facebookPage || conv.extracted_details?.facebookPage,
-                niche: clientData.niche || conv.extracted_details?.niche,
-                notes: conv.ai_notes || clientData.notes || '',
+                business_name: clientData.businessName || conv.extracted_details?.businessName || null,
+                contact_details: clientData.contactDetails || conv.extracted_details?.phone || conv.extracted_details?.email || null,
+                facebook_page: clientData.facebookPage || conv.extracted_details?.facebookPage || null,
+                niche: clientData.niche || conv.extracted_details?.niche || null,
+                notes: clientData.notes || conv.ai_notes || '',
                 phase: 'booked',
                 package: clientData.package || null,
                 payment_status: 'unpaid',
@@ -888,13 +888,37 @@ class FacebookService {
                 created_at: new Date().toISOString()
             };
 
-            const { data: client, error: clientError } = await getSupabase()
+            let client;
+            const { data: insertedClient, error: clientError } = await getSupabase()
                 .from('clients')
                 .insert(newClient)
                 .select()
                 .single();
 
-            if (clientError) throw clientError;
+            if (clientError) {
+                // If source/niche/facebook_page columns don't exist, retry without them
+                if (clientError.message?.includes('source') ||
+                    clientError.message?.includes('niche') ||
+                    clientError.message?.includes('facebook_page')) {
+
+                    delete newClient.source;
+                    delete newClient.niche;
+                    delete newClient.facebook_page;
+
+                    const { data: retryClient, error: retryError } = await getSupabase()
+                        .from('clients')
+                        .insert(newClient)
+                        .select()
+                        .single();
+
+                    if (retryError) throw retryError;
+                    client = retryClient;
+                } else {
+                    throw clientError;
+                }
+            } else {
+                client = insertedClient;
+            }
 
             // Link conversation to new client
             await this.linkConversationToClient(conversationId, client.id);

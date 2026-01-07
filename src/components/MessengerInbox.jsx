@@ -49,6 +49,14 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [messageText, setMessageText] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [showTransferModal, setShowTransferModal] = useState(false);
+    const [transferForm, setTransferForm] = useState({
+        clientName: '',
+        businessName: '',
+        contactDetails: '',
+        pageLink: '',
+        niche: '',
+        notes: ''
+    });
     const [editableNotes, setEditableNotes] = useState('');
     const [showMediaUpload, setShowMediaUpload] = useState(false);
     // AI priority sorting - persisted to localStorage
@@ -1756,7 +1764,18 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 <div style={{ marginTop: '1rem' }}>
                                     <button
                                         className="btn btn-primary"
-                                        onClick={() => transferToClient({}, currentUserId)}
+                                        onClick={() => {
+                                            // Prefill form with conversation data
+                                            setTransferForm({
+                                                clientName: selectedConversation.participant_name || '',
+                                                businessName: aiAnalysis?.details?.businessName || '',
+                                                contactDetails: aiAnalysis?.details?.phone || aiAnalysis?.details?.email || '',
+                                                pageLink: aiAnalysis?.details?.facebookPage || '',
+                                                niche: aiAnalysis?.details?.niche || '',
+                                                notes: aiAnalysis?.notes || ''
+                                            });
+                                            setShowTransferModal(true);
+                                        }}
                                         disabled={loading}
                                         style={{ width: '100%' }}
                                     >
@@ -2065,6 +2084,182 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                     onClick={() => setShowTagsModal(false)}
                                 >
                                     Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Transfer to Pipeline Confirmation Modal */}
+                {showTransferModal && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(0,0,0,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000
+                    }}>
+                        <div style={{
+                            background: 'var(--bg-primary)',
+                            padding: '1.5rem',
+                            borderRadius: 'var(--radius-lg)',
+                            width: '100%',
+                            maxWidth: '500px',
+                            maxHeight: '90vh',
+                            overflow: 'auto'
+                        }}>
+                            <h3 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                ➕ Add to Pipeline
+                            </h3>
+                            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                                Review and edit the details before adding to pipeline:
+                            </p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                        Client Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={transferForm.clientName}
+                                        onChange={(e) => setTransferForm(prev => ({ ...prev, clientName: e.target.value }))}
+                                        placeholder="Enter client name"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-secondary)'
+                                        }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                        Business Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={transferForm.businessName}
+                                        onChange={(e) => setTransferForm(prev => ({ ...prev, businessName: e.target.value }))}
+                                        placeholder="Enter business name"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-secondary)'
+                                        }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                        Contact Details (Phone/Email)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={transferForm.contactDetails}
+                                        onChange={(e) => setTransferForm(prev => ({ ...prev, contactDetails: e.target.value }))}
+                                        placeholder="Enter phone or email"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-secondary)'
+                                        }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                        Facebook Page Link
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={transferForm.pageLink}
+                                        onChange={(e) => setTransferForm(prev => ({ ...prev, pageLink: e.target.value }))}
+                                        placeholder="Enter Facebook page URL"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-secondary)'
+                                        }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                        Niche/Industry
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={transferForm.niche}
+                                        onChange={(e) => setTransferForm(prev => ({ ...prev, niche: e.target.value }))}
+                                        placeholder="Enter business niche"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-secondary)'
+                                        }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                        Notes
+                                    </label>
+                                    <textarea
+                                        value={transferForm.notes}
+                                        onChange={(e) => setTransferForm(prev => ({ ...prev, notes: e.target.value }))}
+                                        placeholder="Additional notes..."
+                                        rows={3}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-secondary)',
+                                            resize: 'vertical'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowTransferModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={async () => {
+                                        await transferToClient({
+                                            clientName: transferForm.clientName,
+                                            businessName: transferForm.businessName,
+                                            contactDetails: transferForm.contactDetails,
+                                            facebookPage: transferForm.pageLink,
+                                            niche: transferForm.niche,
+                                            notes: transferForm.notes
+                                        }, currentUserId);
+                                        setShowTransferModal(false);
+                                    }}
+                                    disabled={!transferForm.clientName || loading}
+                                >
+                                    {loading ? 'Adding...' : '✅ Add to Pipeline'}
                                 </button>
                             </div>
                         </div>
