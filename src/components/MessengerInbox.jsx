@@ -109,6 +109,75 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [conversationTags, setConversationTags] = useState([]);
     const [loadingTags, setLoadingTags] = useState(false);
 
+    // Warning settings - loaded from localStorage
+    const [warningSettings, setWarningSettings] = useState(() => {
+        try {
+            const saved = localStorage.getItem('warning_settings');
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        } catch (e) {
+            console.log('Could not load warning settings:', e);
+        }
+        return {
+            warning_hours: 24,
+            danger_hours: 48,
+            warning_color: '#f59e0b',
+            danger_color: '#ef4444',
+            enable_no_activity_warning: true,
+            enable_no_tag_warning: true,
+            enable_proposal_stuck_warning: true
+        };
+    });
+
+    // Warning detection function
+    const getContactWarningStatus = (conv) => {
+        if (!warningSettings) return null;
+
+        const now = new Date();
+        const lastActivity = conv.last_message_time ? new Date(conv.last_message_time) : null;
+        const hoursSinceActivity = lastActivity ? (now - lastActivity) / (1000 * 60 * 60) : Infinity;
+
+        // Check various conditions
+        const hasNoTag = !conv.tags || conv.tags.length === 0;
+        const isStuckProposal = conv.proposal_status === 'sent' && hoursSinceActivity > warningSettings.warning_hours;
+        const isInactive = hoursSinceActivity >= warningSettings.warning_hours;
+        const isCritical = hoursSinceActivity >= warningSettings.danger_hours;
+
+        // Determine warning level based on enabled conditions
+        let shouldWarn = false;
+        let shouldCritical = false;
+
+        if (warningSettings.enable_no_activity_warning && isInactive) {
+            shouldWarn = true;
+            if (isCritical) shouldCritical = true;
+        }
+
+        if (warningSettings.enable_no_tag_warning && hasNoTag) {
+            shouldWarn = true;
+        }
+
+        if (warningSettings.enable_proposal_stuck_warning && isStuckProposal) {
+            shouldWarn = true;
+            if (isCritical) shouldCritical = true;
+        }
+
+        if (shouldCritical) {
+            return { level: 'danger', color: warningSettings.danger_color, hoursSince: Math.floor(hoursSinceActivity) };
+        }
+        if (shouldWarn) {
+            return { level: 'warning', color: warningSettings.warning_color, hoursSince: Math.floor(hoursSinceActivity) };
+        }
+        return null;
+    };
+
+    // Count contacts in warning state
+    const warningCount = conversations.filter(conv => getContactWarningStatus(conv)).length;
+    const dangerCount = conversations.filter(conv => {
+        const status = getContactWarningStatus(conv);
+        return status && status.level === 'danger';
+    }).length;
+
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -604,6 +673,21 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                     {unreadCount}
                                 </span>
                             )}
+                            {warningCount > 0 && (
+                                <span
+                                    style={{
+                                        marginLeft: '0.5rem',
+                                        background: dangerCount > 0 ? warningSettings.danger_color : warningSettings.warning_color,
+                                        color: 'white',
+                                        padding: '0.125rem 0.5rem',
+                                        borderRadius: '999px',
+                                        fontSize: '0.75rem'
+                                    }}
+                                    title={`${warningCount} contacts need attention${dangerCount > 0 ? ` (${dangerCount} critical)` : ''}`}
+                                >
+                                    ⚠️ {warningCount}
+                                </span>
+                            )}
                         </h3>
                         <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             <button
@@ -805,126 +889,137 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 }
                             </div>
                         ) : (
-                            filteredConversations.map(conv => (
-                                <div
-                                    key={conv.id}
-                                    onClick={() => {
-                                        selectConversation(conv);
-                                        setMobileView('chat'); // Switch to chat on mobile
-                                    }}
-                                    style={{
-                                        padding: '0.75rem 1rem',
-                                        cursor: 'pointer',
-                                        borderBottom: '1px solid var(--border-color)',
-                                        background: selectedConversation?.id === conv.id
-                                            ? 'var(--primary-alpha)'
-                                            : 'transparent',
-                                        transition: 'background 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        if (selectedConversation?.id !== conv.id) {
-                                            e.currentTarget.style.background = 'var(--bg-secondary)';
-                                        }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        if (selectedConversation?.id !== conv.id) {
-                                            e.currentTarget.style.background = 'transparent';
-                                        }
-                                    }}
-                                >
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.75rem'
-                                    }}>
-                                        {/* Avatar */}
+                            filteredConversations.map(conv => {
+                                const warningStatus = getContactWarningStatus(conv);
+                                return (
+                                    <div
+                                        key={conv.id}
+                                        onClick={() => {
+                                            selectConversation(conv);
+                                            setMobileView('chat'); // Switch to chat on mobile
+                                        }}
+                                        style={{
+                                            padding: '0.75rem 1rem',
+                                            cursor: 'pointer',
+                                            borderBottom: '1px solid var(--border-color)',
+                                            borderLeft: warningStatus ? `4px solid ${warningStatus.color}` : 'none',
+                                            paddingLeft: warningStatus ? 'calc(1rem - 4px)' : '1rem',
+                                            background: selectedConversation?.id === conv.id
+                                                ? 'var(--primary-alpha)'
+                                                : warningStatus
+                                                    ? `${warningStatus.color}15`
+                                                    : 'transparent',
+                                            transition: 'background 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (selectedConversation?.id !== conv.id) {
+                                                e.currentTarget.style.background = warningStatus
+                                                    ? `${warningStatus.color}25`
+                                                    : 'var(--bg-secondary)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (selectedConversation?.id !== conv.id) {
+                                                e.currentTarget.style.background = warningStatus
+                                                    ? `${warningStatus.color}15`
+                                                    : 'transparent';
+                                            }
+                                        }}
+                                    >
                                         <div style={{
-                                            width: '40px',
-                                            height: '40px',
-                                            borderRadius: '50%',
-                                            background: 'var(--primary)',
                                             display: 'flex',
                                             alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: 'white',
-                                            fontWeight: 'bold',
-                                            fontSize: '1rem',
-                                            flexShrink: 0
+                                            gap: '0.75rem'
                                         }}>
-                                            {conv.participant_picture_url ? (
-                                                <img
-                                                    src={conv.participant_picture_url}
-                                                    alt=""
-                                                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                                                />
-                                            ) : (
-                                                conv.participant_name?.charAt(0)?.toUpperCase() || '?'
-                                            )}
-                                        </div>
-
-                                        {/* Details */}
-                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            {/* Avatar */}
                                             <div style={{
+                                                width: '40px',
+                                                height: '40px',
+                                                borderRadius: '50%',
+                                                background: 'var(--primary)',
                                                 display: 'flex',
-                                                justifyContent: 'space-between',
                                                 alignItems: 'center',
-                                                marginBottom: '0.25rem'
+                                                justifyContent: 'center',
+                                                color: 'white',
+                                                fontWeight: 'bold',
+                                                fontSize: '1rem',
+                                                flexShrink: 0
                                             }}>
-                                                <span style={{
-                                                    fontWeight: conv.unread_count > 0 ? '600' : '500',
-                                                    color: 'var(--text-primary)',
+                                                {conv.participant_picture_url ? (
+                                                    <img
+                                                        src={conv.participant_picture_url}
+                                                        alt=""
+                                                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                                                    />
+                                                ) : (
+                                                    conv.participant_name?.charAt(0)?.toUpperCase() || '?'
+                                                )}
+                                            </div>
+
+                                            {/* Details */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    marginBottom: '0.25rem'
+                                                }}>
+                                                    <span style={{
+                                                        fontWeight: conv.unread_count > 0 ? '600' : '500',
+                                                        color: 'var(--text-primary)',
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }}>
+                                                        {conv.participant_name || 'Unknown'}
+                                                    </span>
+                                                    <span style={{
+                                                        fontSize: '0.75rem',
+                                                        color: 'var(--text-muted)',
+                                                        flexShrink: 0
+                                                    }}>
+                                                        {formatTime(conv.last_message_time)}
+                                                    </span>
+                                                </div>
+                                                <div style={{
+                                                    fontSize: '0.875rem',
+                                                    color: conv.unread_count > 0 ? 'var(--text-primary)' : 'var(--text-muted)',
+                                                    fontWeight: conv.unread_count > 0 ? '500' : '400',
                                                     whiteSpace: 'nowrap',
                                                     overflow: 'hidden',
                                                     textOverflow: 'ellipsis'
                                                 }}>
-                                                    {conv.participant_name || 'Unknown'}
-                                                </span>
-                                                <span style={{
+                                                    {conv.last_message_text || 'No messages'}
+                                                </div>
+                                                {conv.linked_client && (
+                                                    <div style={{
+                                                        fontSize: '0.75rem',
+                                                        color: 'var(--primary)',
+                                                        marginTop: '0.25rem'
+                                                    }}>
+                                                        🔗 {conv.linked_client.client_name}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Unread Badge */}
+                                            {conv.unread_count > 0 && (
+                                                <div style={{
+                                                    background: 'var(--primary)',
+                                                    color: 'white',
+                                                    borderRadius: '999px',
+                                                    padding: '0.125rem 0.5rem',
                                                     fontSize: '0.75rem',
-                                                    color: 'var(--text-muted)',
+                                                    fontWeight: 'bold',
                                                     flexShrink: 0
                                                 }}>
-                                                    {formatTime(conv.last_message_time)}
-                                                </span>
-                                            </div>
-                                            <div style={{
-                                                fontSize: '0.875rem',
-                                                color: conv.unread_count > 0 ? 'var(--text-primary)' : 'var(--text-muted)',
-                                                fontWeight: conv.unread_count > 0 ? '500' : '400',
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
-                                            }}>
-                                                {conv.last_message_text || 'No messages'}
-                                            </div>
-                                            {conv.linked_client && (
-                                                <div style={{
-                                                    fontSize: '0.75rem',
-                                                    color: 'var(--primary)',
-                                                    marginTop: '0.25rem'
-                                                }}>
-                                                    🔗 {conv.linked_client.client_name}
+                                                    {conv.unread_count}
                                                 </div>
                                             )}
                                         </div>
-
-                                        {/* Unread Badge */}
-                                        {conv.unread_count > 0 && (
-                                            <div style={{
-                                                background: 'var(--primary)',
-                                                color: 'white',
-                                                borderRadius: '999px',
-                                                padding: '0.125rem 0.5rem',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 'bold',
-                                                flexShrink: 0
-                                            }}>
-                                                {conv.unread_count}
-                                            </div>
-                                        )}
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
 
                         {/* Load More Conversations */}

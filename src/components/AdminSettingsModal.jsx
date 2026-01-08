@@ -51,6 +51,17 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       { id: 'notes', label: 'Additional Notes', type: 'textarea', required: false }
     ]
   });
+
+  // Contact warning settings state
+  const [warningSettings, setWarningSettings] = useState({
+    warning_hours: 24,
+    danger_hours: 48,
+    warning_color: '#f59e0b', // amber
+    danger_color: '#ef4444',  // red
+    enable_no_activity_warning: true,
+    enable_no_tag_warning: true,
+    enable_proposal_stuck_warning: true
+  });
   const [prices, setPrices] = useState({
     basic: 1799,
     star: 2999,
@@ -214,6 +225,18 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         } catch (e) {
           console.log('Could not load booking settings:', e);
         }
+
+        // Load warning settings from localStorage
+        try {
+          const savedWarningSettings = localStorage.getItem('warning_settings');
+          if (savedWarningSettings) {
+            const parsed = JSON.parse(savedWarningSettings);
+            setWarningSettings(prev => ({ ...prev, ...parsed }));
+            console.log('Loaded warning settings from localStorage:', parsed);
+          }
+        } catch (e) {
+          console.log('Could not load warning settings:', e);
+        }
       } catch (error) {
         console.error('Error loading settings:', error);
         setMessage({ type: 'error', text: 'Failed to load settings' });
@@ -287,6 +310,14 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       } catch (e) {
         console.error('Could not save booking settings:', e);
         // localStorage already saved above as backup
+      }
+
+      // Save warning settings to localStorage
+      try {
+        localStorage.setItem('warning_settings', JSON.stringify(warningSettings));
+        console.log('Warning settings saved to localStorage:', warningSettings);
+      } catch (e) {
+        console.error('Could not save warning settings:', e);
       }
 
       setMessage({ type: 'success', text: 'Settings saved successfully! Page will reload in 1 second...' });
@@ -716,6 +747,161 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                   <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                     Use {'{niche}'} and {'{audience}'} as placeholders
                   </small>
+                </div>
+              </div>
+
+              {/* Contact Warning Settings */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚠️ Contact Warning Settings</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Configure when contacts should show warning indicators in Messenger Inbox
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">⏰ Warning Threshold (hours)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={warningSettings.warning_hours}
+                      onChange={(e) => setWarningSettings(prev => ({ ...prev, warning_hours: parseInt(e.target.value) || 24 }))}
+                      min="1"
+                      max="168"
+                      placeholder="24"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Show warning after this many hours of no activity
+                    </small>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">🚨 Danger Threshold (hours)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={warningSettings.danger_hours}
+                      onChange={(e) => setWarningSettings(prev => ({ ...prev, danger_hours: parseInt(e.target.value) || 48 }))}
+                      min="1"
+                      max="336"
+                      placeholder="48"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Show critical warning after this many hours
+                    </small>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">🟠 Warning Color</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="color"
+                        value={warningSettings.warning_color}
+                        onChange={(e) => setWarningSettings(prev => ({ ...prev, warning_color: e.target.value }))}
+                        style={{ width: '50px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={warningSettings.warning_color}
+                        onChange={(e) => setWarningSettings(prev => ({ ...prev, warning_color: e.target.value }))}
+                        style={{ flex: 1 }}
+                        placeholder="#f59e0b"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">🔴 Danger Color</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="color"
+                        value={warningSettings.danger_color}
+                        onChange={(e) => setWarningSettings(prev => ({ ...prev, danger_color: e.target.value }))}
+                        style={{ width: '50px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={warningSettings.danger_color}
+                        onChange={(e) => setWarningSettings(prev => ({ ...prev, danger_color: e.target.value }))}
+                        style={{ flex: 1 }}
+                        placeholder="#ef4444"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  padding: '1rem',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  <h5 style={{ marginBottom: '0.75rem', color: 'var(--text-primary)' }}>🎯 Warning Conditions</h5>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    cursor: 'pointer',
+                    marginBottom: '0.75rem'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={warningSettings.enable_no_activity_warning}
+                      onChange={(e) => setWarningSettings(prev => ({ ...prev, enable_no_activity_warning: e.target.checked }))}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    <div>
+                      <span style={{ fontWeight: '500' }}>No Activity Warning</span>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Warn when no messages for the configured hours
+                      </div>
+                    </div>
+                  </label>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    cursor: 'pointer',
+                    marginBottom: '0.75rem'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={warningSettings.enable_no_tag_warning}
+                      onChange={(e) => setWarningSettings(prev => ({ ...prev, enable_no_tag_warning: e.target.checked }))}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    <div>
+                      <span style={{ fontWeight: '500' }}>No Tag Warning</span>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Warn when contact has no tags assigned
+                      </div>
+                    </div>
+                  </label>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={warningSettings.enable_proposal_stuck_warning}
+                      onChange={(e) => setWarningSettings(prev => ({ ...prev, enable_proposal_stuck_warning: e.target.checked }))}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    <div>
+                      <span style={{ fontWeight: '500' }}>Proposal Stuck Warning</span>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Warn when proposal is sent but inactive for too long
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
             </>
