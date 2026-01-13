@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFacebookMessenger } from '../hooks/useFacebookMessenger';
 import { facebookService } from '../services/facebookService';
+import WarningDashboard from './WarningDashboard';
 
 const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const {
@@ -88,6 +89,8 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [selectedTagFilter, setSelectedTagFilter] = useState(null);
     const [showArchived, setShowArchived] = useState(false);
     const [archivedConversations, setArchivedConversations] = useState([]);
+    const [showWarningDashboard, setShowWarningDashboard] = useState(false);
+
 
     // Advanced filtering state
     const [activeFilter, setActiveFilter] = useState('all');
@@ -679,19 +682,25 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 </span>
                             )}
                             {warningCount > 0 && (
-                                <span
+                                <button
+                                    onClick={() => setShowWarningDashboard(true)}
                                     style={{
                                         marginLeft: '0.5rem',
                                         background: dangerCount > 0 ? warningSettings.danger_color : warningSettings.warning_color,
                                         color: 'white',
                                         padding: '0.125rem 0.5rem',
                                         borderRadius: '999px',
-                                        fontSize: '0.75rem'
+                                        fontSize: '0.75rem',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        transition: 'transform 0.2s'
                                     }}
-                                    title={`${warningCount} contacts need attention${dangerCount > 0 ? ` (${dangerCount} critical)` : ''}`}
+                                    title={`Click to view ${warningCount} contacts needing attention${dangerCount > 0 ? ` (${dangerCount} critical)` : ''}`}
+                                    onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                                    onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
                                 >
                                     ⚠️ {warningCount}
-                                </span>
+                                </button>
                             )}
                         </h3>
                         <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -2039,9 +2048,39 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                     background: 'var(--bg-secondary)',
                                     borderRadius: 'var(--radius-md)'
                                 }}>
-                                    <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>
-                                        🔗 Linked Client
-                                    </h5>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                        <h5 style={{ margin: 0, fontSize: '0.875rem' }}>
+                                            🔗 Linked Client
+                                        </h5>
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm('Unlink this conversation from the client?')) {
+                                                    linkToClient(selectedConversation.conversation_id, null);
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '0.25rem 0.5rem',
+                                                fontSize: '0.7rem',
+                                                background: 'transparent',
+                                                border: '1px solid var(--error)',
+                                                color: 'var(--error)',
+                                                borderRadius: 'var(--radius-sm)',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = 'var(--error)';
+                                                e.target.style.color = 'white';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = 'transparent';
+                                                e.target.style.color = 'var(--error)';
+                                            }}
+                                            title="Unlink from client"
+                                        >
+                                            ✕ Unlink
+                                        </button>
+                                    </div>
                                     <div style={{ fontWeight: '500' }}>
                                         {selectedConversation.linked_client.client_name}
                                     </div>
@@ -2210,10 +2249,50 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                     className="form-input"
                                     value={bulkMessage}
                                     onChange={(e) => setBulkMessage(e.target.value)}
-                                    placeholder="Type your message..."
+                                    placeholder="Hi {first_name}! Type your message here..."
                                     rows={4}
                                     style={{ width: '100%', resize: 'vertical' }}
                                 />
+                                <div style={{
+                                    marginTop: '0.5rem',
+                                    padding: '0.75rem',
+                                    background: 'var(--bg-secondary)',
+                                    borderRadius: 'var(--radius-md)',
+                                    fontSize: '0.75rem',
+                                    color: 'var(--text-muted)'
+                                }}>
+                                    <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                                        📝 Template Variables (click to insert):
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {[
+                                            { var: '{name}', desc: 'Full name' },
+                                            { var: '{first_name}', desc: 'First name' },
+                                            { var: '{date}', desc: 'Today\'s date' },
+                                            { var: '{time}', desc: 'Current time' },
+                                            { var: '{day}', desc: 'Day of week' }
+                                        ].map(item => (
+                                            <button
+                                                key={item.var}
+                                                type="button"
+                                                onClick={() => setBulkMessage(prev => prev + item.var)}
+                                                style={{
+                                                    padding: '0.25rem 0.5rem',
+                                                    background: 'var(--primary-alpha)',
+                                                    border: '1px solid var(--primary)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    color: 'var(--primary)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.7rem',
+                                                    fontFamily: 'monospace'
+                                                }}
+                                                title={item.desc}
+                                            >
+                                                {item.var}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -2513,6 +2592,19 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     </div>
                 )}
             </div>
+
+            {/* Warning Dashboard Modal */}
+            {showWarningDashboard && (
+                <WarningDashboard
+                    conversations={conversations}
+                    onSelectConversation={(conv) => {
+                        selectConversation(conv);
+                        setMobileView('chat');
+                    }}
+                    onClose={() => setShowWarningDashboard(false)}
+                    warningSettings={warningSettings}
+                />
+            )}
         </>
     );
 };

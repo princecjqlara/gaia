@@ -419,6 +419,21 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             >
               📅 Booking Settings
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('warnings')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'warnings' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'warnings' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'warnings' ? '600' : '400'
+              }}
+            >
+              ⚠️ Warning Rules
+            </button>
           </div>
 
           {activeMainTab === 'packages' && (
@@ -1535,6 +1550,213 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
               </div>
             </div>
           )}
+
+          {activeMainTab === 'warnings' && (
+            <div>
+              <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚠️ Warning Rules Configuration</h4>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '2rem' }}>
+                Configure when contacts appear in the Warning Dashboard. These warnings help you identify contacts that need attention.
+              </p>
+
+              {/* Time Thresholds */}
+              <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                <h5 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>⏰ Time Thresholds</h5>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b' }}></span>
+                      Warning After (hours)
+                    </label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={(() => {
+                        try {
+                          const saved = localStorage.getItem('warning_settings');
+                          return saved ? JSON.parse(saved).warning_hours : 24;
+                        } catch { return 24; }
+                      })()}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 24;
+                        try {
+                          const saved = localStorage.getItem('warning_settings');
+                          const settings = saved ? JSON.parse(saved) : {};
+                          settings.warning_hours = val;
+                          localStorage.setItem('warning_settings', JSON.stringify(settings));
+                        } catch { }
+                      }}
+                      min="1"
+                      max="168"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Contacts with no activity for this many hours show as "Warning"
+                    </small>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></span>
+                      Critical After (hours)
+                    </label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={(() => {
+                        try {
+                          const saved = localStorage.getItem('warning_settings');
+                          return saved ? JSON.parse(saved).danger_hours : 48;
+                        } catch { return 48; }
+                      })()}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 48;
+                        try {
+                          const saved = localStorage.getItem('warning_settings');
+                          const settings = saved ? JSON.parse(saved) : {};
+                          settings.danger_hours = val;
+                          localStorage.setItem('warning_settings', JSON.stringify(settings));
+                        } catch { }
+                      }}
+                      min="1"
+                      max="336"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Contacts with no activity for this many hours show as "Critical"
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning Types */}
+              <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                <h5 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>📋 Warning Types</h5>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Enable or disable specific warning categories
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {[
+                    { key: 'enable_no_activity_warning', label: '⏳ No Activity Warning', desc: 'Alert when contact has no messages for defined hours' },
+                    { key: 'enable_awaiting_reply_warning', label: '💬 Awaiting Reply', desc: 'Alert when customer sent last message and is waiting for response' },
+                    { key: 'enable_unassigned_warning', label: '👤 Unassigned Contact', desc: 'Alert when contact is not assigned to any team member' },
+                    { key: 'enable_no_tag_warning', label: '🏷️ No Tags', desc: 'Alert when contact has no tags assigned' },
+                    { key: 'enable_proposal_stuck_warning', label: '📨 Stuck Proposal', desc: 'Alert when proposal was sent but no response received' },
+                  ].map(item => (
+                    <label
+                      key={item.key}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '0.75rem',
+                        padding: '0.75rem',
+                        background: 'var(--bg-tertiary)',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        border: '1px solid var(--border-color)'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        defaultChecked={(() => {
+                          try {
+                            const saved = localStorage.getItem('warning_settings');
+                            return saved ? JSON.parse(saved)[item.key] !== false : true;
+                          } catch { return true; }
+                        })()}
+                        onChange={(e) => {
+                          try {
+                            const saved = localStorage.getItem('warning_settings');
+                            const settings = saved ? JSON.parse(saved) : {};
+                            settings[item.key] = e.target.checked;
+                            localStorage.setItem('warning_settings', JSON.stringify(settings));
+                          } catch { }
+                        }}
+                        style={{ width: '18px', height: '18px', marginTop: '2px', flexShrink: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>{item.label}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Colors */}
+              <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                <h5 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>🎨 Warning Colors</h5>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Warning Color</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="color"
+                        defaultValue={(() => {
+                          try {
+                            const saved = localStorage.getItem('warning_settings');
+                            return saved ? JSON.parse(saved).warning_color : '#f59e0b';
+                          } catch { return '#f59e0b'; }
+                        })()}
+                        onChange={(e) => {
+                          try {
+                            const saved = localStorage.getItem('warning_settings');
+                            const settings = saved ? JSON.parse(saved) : {};
+                            settings.warning_color = e.target.value;
+                            localStorage.setItem('warning_settings', JSON.stringify(settings));
+                          } catch { }
+                        }}
+                        style={{ width: '40px', height: '40px', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Amber (default)</span>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Critical Color</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="color"
+                        defaultValue={(() => {
+                          try {
+                            const saved = localStorage.getItem('warning_settings');
+                            return saved ? JSON.parse(saved).danger_color : '#ef4444';
+                          } catch { return '#ef4444'; }
+                        })()}
+                        onChange={(e) => {
+                          try {
+                            const saved = localStorage.getItem('warning_settings');
+                            const settings = saved ? JSON.parse(saved) : {};
+                            settings.danger_color = e.target.value;
+                            localStorage.setItem('warning_settings', JSON.stringify(settings));
+                          } catch { }
+                        }}
+                        style={{ width: '40px', height: '40px', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Red (default)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(50, 150, 250, 0.1)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(50, 150, 250, 0.3)'
+              }}>
+                <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--info)' }}>
+                  💡 How it works
+                </div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Click the <strong>⚠️ warning badge</strong> in the Messenger tab to open the Warning Dashboard.
+                  It shows all contacts organized by category (Critical, Warning, Awaiting Reply, Unassigned, No Tags).
+                  Changes are saved automatically.
+                </p>
+              </div>
+            </div>
+          )}
+
 
           {message.text && (
             <div style={{

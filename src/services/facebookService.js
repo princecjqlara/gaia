@@ -203,6 +203,8 @@ class FacebookService {
                     participant_name: participant?.name,
                     last_message_text: lastMessage?.message,
                     last_message_time: lastMessage?.created_time,
+                    // Track if last message was from page (for AI priority sorting)
+                    last_message_from_page: lastMessage?.from?.id === pageId,
                     unread_count: conv.unread_count || 0,
                     updated_at: new Date().toISOString()
                 };
@@ -1301,12 +1303,12 @@ class FacebookService {
      */
     async sendBulkMessage(pageId, filterType, messageText, filterValue = null, userId = null) {
         try {
-            // Get recipients based on filter
+            // Get recipients based on filter - include participant_name for template replacement
             let query = getSupabase()
                 .from('facebook_conversations')
-                .select('conversation_id, participant_id')
+                .select('conversation_id, participant_id, participant_name, last_message_time')
                 .eq('page_id', pageId)
-                .eq('is_archived', false);
+                .or('is_archived.is.null,is_archived.eq.false');
 
             // Apply filters
             switch (filterType) {
@@ -1353,14 +1355,32 @@ class FacebookService {
                 .select()
                 .single();
 
+            // Helper function to replace template variables
+            const replaceTemplateVars = (text, recipient) => {
+                const name = recipient.participant_name || 'there';
+                const firstName = name.split(' ')[0] || 'there';
+                const now = new Date();
+
+                return text
+                    .replace(/\{name\}/gi, name)
+                    .replace(/\{first_name\}/gi, firstName)
+                    .replace(/\{firstname\}/gi, firstName)
+                    .replace(/\{date\}/gi, now.toLocaleDateString())
+                    .replace(/\{time\}/gi, now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+                    .replace(/\{day\}/gi, now.toLocaleDateString([], { weekday: 'long' }));
+            };
+
             // Send messages
             let sent = 0;
             let failed = 0;
 
             for (const recipient of recipients) {
                 try {
+                    // Replace template variables with actual values
+                    const personalizedMessage = replaceTemplateVars(messageText, recipient);
+
                     // Use ACCOUNT_UPDATE tag for bulk/automated messages
-                    await this.sendMessageWithTag(pageId, recipient.participant_id, messageText, 'ACCOUNT_UPDATE');
+                    await this.sendMessageWithTag(pageId, recipient.participant_id, personalizedMessage, 'ACCOUNT_UPDATE');
                     sent++;
                     // Add small delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 100));
