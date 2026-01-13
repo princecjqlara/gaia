@@ -135,6 +135,45 @@ const TeamOnlinePanel = ({ onClose }) => {
         }
     };
 
+    // Delete user
+    const deleteUser = async (userId, userName) => {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+            alert('Database connection not available');
+            return;
+        }
+
+        // Confirmation dialog
+        const confirmed = window.confirm(
+            `Are you sure you want to delete "${userName || 'this user'}"?\n\nThis action cannot be undone and will permanently remove the user from the system.`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const { error } = await supabase
+                .from('users')
+                .delete()
+                .eq('id', userId);
+
+            if (error) {
+                console.error('Supabase error:', error);
+                alert(`Failed to delete user: ${error.message}`);
+                return;
+            }
+
+            // Update local state immediately for responsiveness
+            setAllUsers(prev => prev.filter(u => u.id !== userId));
+            setOnlineUsers(prev => prev.filter(u => u.id !== userId));
+
+            console.log(`User ${userId} deleted successfully`);
+            alert(`User "${userName || 'User'}" has been deleted successfully.`);
+        } catch (err) {
+            console.error('Error deleting user:', err);
+            alert(`Error: ${err.message}`);
+        }
+    };
+
     useEffect(() => {
         loadData();
         // Refresh every 30 seconds
@@ -289,23 +328,49 @@ const TeamOnlinePanel = ({ onClose }) => {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <select
-                                                value={user.role || 'user'}
-                                                onChange={(e) => updateUserRole(user.id, e.target.value)}
-                                                style={{
-                                                    padding: '0.35rem 0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-primary)',
-                                                    color: 'var(--text-primary)',
-                                                    fontSize: '0.8rem',
-                                                    cursor: 'pointer'
-                                                }}
-                                            >
-                                                <option value="user">👤 User</option>
-                                                <option value="chat_support">💬 Chat Support</option>
-                                                <option value="admin">👑 Admin</option>
-                                            </select>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <select
+                                                    value={user.role || 'user'}
+                                                    onChange={(e) => updateUserRole(user.id, e.target.value)}
+                                                    style={{
+                                                        padding: '0.35rem 0.5rem',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid var(--border-color)',
+                                                        background: 'var(--bg-primary)',
+                                                        color: 'var(--text-primary)',
+                                                        fontSize: '0.8rem',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    <option value="user">👤 User</option>
+                                                    <option value="chat_support">💬 Chat Support</option>
+                                                    <option value="admin">👑 Admin</option>
+                                                </select>
+                                                <button
+                                                    onClick={() => deleteUser(user.id, user.name || user.email)}
+                                                    title="Delete user"
+                                                    style={{
+                                                        padding: '0.35rem 0.5rem',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid #ef4444',
+                                                        background: 'transparent',
+                                                        color: '#ef4444',
+                                                        fontSize: '0.8rem',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.target.style.background = '#ef4444';
+                                                        e.target.style.color = 'white';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.target.style.background = 'transparent';
+                                                        e.target.style.color = '#ef4444';
+                                                    }}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
