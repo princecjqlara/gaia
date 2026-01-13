@@ -150,8 +150,8 @@ class FacebookService {
     async fetchConversationsFromFacebook(pageId, accessToken) {
         try {
             const allConversations = [];
-            // Explicitly request name field in participants
-            let url = `${GRAPH_API_BASE}/${pageId}/conversations?fields=participants{name,id},updated_time,unread_count,messages.limit(1){message,from,created_time}&limit=100&access_token=${accessToken}`;
+            // Explicitly request name field in participants and from.id in messages
+            let url = `${GRAPH_API_BASE}/${pageId}/conversations?fields=participants{name,id},updated_time,unread_count,messages.limit(1){message,from{id,name},created_time}&limit=100&access_token=${accessToken}`;
 
             // Paginate through all conversations
             while (url) {
@@ -213,15 +213,31 @@ class FacebookService {
                     }
                 }
 
+                // Check if conversation already exists to preserve name
+                const { data: existingConv } = await getSupabase()
+                    .from('facebook_conversations')
+                    .select('participant_name')
+                    .eq('conversation_id', conv.id)
+                    .single();
+
+                // Use existing name if we couldn't fetch a new one
+                const finalName = participantName || existingConv?.participant_name || null;
+
+                // Determine if last message was from page
+                const fromId = lastMessage?.from?.id;
+                const isFromPage = fromId === pageId;
+
+                console.log(`[SYNC] Conv ${conv.id}: from=${fromId}, pageId=${pageId}, isFromPage=${isFromPage}, name=${finalName}`);
+
                 const conversationData = {
                     page_id: pageId,
                     conversation_id: conv.id,
                     participant_id: participant?.id || 'unknown',
-                    participant_name: participantName || null,
+                    participant_name: finalName,
                     last_message_text: lastMessage?.message,
                     last_message_time: lastMessage?.created_time,
                     // Track if last message was from page (for AI priority sorting)
-                    last_message_from_page: lastMessage?.from?.id === pageId,
+                    last_message_from_page: isFromPage,
                     unread_count: conv.unread_count || 0,
                     updated_at: new Date().toISOString()
                 };
