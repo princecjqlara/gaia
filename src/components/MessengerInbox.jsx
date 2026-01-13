@@ -43,7 +43,12 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         loadMoreConversations,
         totalConversations,
         // Silent refresh
-        refreshMessages
+        refreshMessages,
+        // Conversation search (across ALL pages, not just loaded)
+        searchConversations,
+        conversationSearchResults,
+        searchingConversations,
+        clearConversationSearch
     } = useFacebookMessenger();
 
     const [messageText, setMessageText] = useState('');
@@ -734,14 +739,66 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     {/* Search and Sort */}
                     <div style={{ padding: '0.5rem 0.75rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="Search..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                style={{ flex: 1 }}
-                            />
+                            <div style={{ flex: 1, position: 'relative' }}>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="Search all contacts..."
+                                    value={searchTerm}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setSearchTerm(value);
+                                        // Trigger global search for 2+ characters (debounced)
+                                        if (value.length >= 2) {
+                                            // Debounce search
+                                            clearTimeout(window._searchDebounce);
+                                            window._searchDebounce = setTimeout(() => {
+                                                searchConversations?.(value);
+                                            }, 300);
+                                        } else {
+                                            clearConversationSearch?.();
+                                        }
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        paddingRight: searchingConversations ? '2rem' : '0.75rem'
+                                    }}
+                                />
+                                {searchingConversations && (
+                                    <span style={{
+                                        position: 'absolute',
+                                        right: '0.5rem',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        fontSize: '0.875rem'
+                                    }}>
+                                        ⏳
+                                    </span>
+                                )}
+                                {searchTerm && !searchingConversations && (
+                                    <button
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            clearConversationSearch?.();
+                                        }}
+                                        style={{
+                                            position: 'absolute',
+                                            right: '0.5rem',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontSize: '0.875rem',
+                                            color: 'var(--text-muted)',
+                                            padding: '0.25rem'
+                                        }}
+                                        title="Clear search"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
                             <button
                                 className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => {
@@ -754,6 +811,20 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 ☑️
                             </button>
                         </div>
+
+                        {/* Search results indicator */}
+                        {searchTerm.length >= 2 && conversationSearchResults?.length > 0 && (
+                            <div style={{
+                                fontSize: '0.7rem',
+                                color: 'var(--text-muted)',
+                                marginBottom: '0.5rem',
+                                padding: '0.25rem 0.5rem',
+                                background: 'var(--bg-tertiary)',
+                                borderRadius: 'var(--radius-sm)'
+                            }}>
+                                🔍 Found {conversationSearchResults.length} contacts across all pages
+                            </div>
+                        )}
 
                         {/* Filter Dropdown */}
                         <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
@@ -877,15 +948,96 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             minHeight: 0
                         }}
                     >
-                        {filteredConversations.length === 0 ? (
+                        {/* Show global search results if search is active and has results */}
+                        {searchTerm.length >= 2 && conversationSearchResults?.length > 0 ? (
+                            conversationSearchResults.map(conv => {
+                                const warningStatus = getContactWarningStatus(conv);
+                                return (
+                                    <div
+                                        key={conv.id || conv.conversation_id}
+                                        onClick={() => {
+                                            selectConversation(conv);
+                                            setMobileView('chat');
+                                        }}
+                                        style={{
+                                            padding: '0.75rem 1rem',
+                                            cursor: 'pointer',
+                                            borderBottom: '1px solid var(--border-color)',
+                                            borderLeft: warningStatus ? `4px solid ${warningStatus.color}` : '4px solid var(--primary)',
+                                            paddingLeft: 'calc(1rem - 4px)',
+                                            background: selectedConversation?.id === conv.id
+                                                ? 'var(--primary-alpha)'
+                                                : 'var(--bg-secondary)',
+                                            transition: 'background 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (selectedConversation?.id !== conv.id) {
+                                                e.currentTarget.style.background = 'var(--primary-alpha)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (selectedConversation?.id !== conv.id) {
+                                                e.currentTarget.style.background = 'var(--bg-secondary)';
+                                            }
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            {/* Avatar */}
+                                            <div style={{
+                                                width: '40px',
+                                                height: '40px',
+                                                borderRadius: '50%',
+                                                background: 'var(--primary)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: 'white',
+                                                fontWeight: 'bold',
+                                                fontSize: '1rem',
+                                                flexShrink: 0
+                                            }}>
+                                                {conv.participant_picture_url ? (
+                                                    <img
+                                                        src={conv.participant_picture_url}
+                                                        alt=""
+                                                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                                                    />
+                                                ) : (
+                                                    conv.participant_name?.charAt(0)?.toUpperCase() || '?'
+                                                )}
+                                            </div>
+                                            {/* Details */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                                                    {conv.participant_name || 'Unknown'}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: '0.75rem',
+                                                    color: 'var(--text-muted)',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis'
+                                                }}>
+                                                    {conv.last_message_text || 'No messages'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        ) : filteredConversations.length === 0 ? (
                             <div style={{
                                 padding: '2rem 1rem',
                                 textAlign: 'center',
                                 color: 'var(--text-muted)'
                             }}>
-                                {conversations.length === 0
-                                    ? 'No conversations yet. Connect a Facebook page to get started.'
-                                    : 'No conversations match your search.'
+                                {searchTerm.length >= 2 && searchingConversations
+                                    ? 'Searching...'
+                                    : searchTerm.length >= 2
+                                        ? 'No contacts found matching your search.'
+                                        : conversations.length === 0
+                                            ? 'No conversations yet. Connect a Facebook page to get started.'
+                                            : 'No conversations match your filter.'
                                 }
                             </div>
                         ) : (
