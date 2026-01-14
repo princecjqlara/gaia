@@ -363,21 +363,67 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
 
         const recentMessages = (messages || []).reverse();
 
-        // Build AI prompt
-        const systemPrompt = config.system_prompt || 'You are a friendly AI assistant for a business. Be helpful and concise.';
+        // Build AI prompt with Taglish as default language
+        const systemPrompt = config.system_prompt || 'You are a friendly AI sales assistant for a business. Be helpful, professional, and concise.';
         const knowledgeBase = config.knowledge_base || '';
+        const faqContent = config.faq || ''; // FAQ for RAG pipeline
+        const language = config.language || 'Taglish'; // Default to Taglish (Tagalog + English mix)
 
-        let aiPrompt = `${systemPrompt}\n\nPlatform: Facebook Messenger\nContact: ${conversation?.participant_name || 'Unknown'}\n`;
+        let aiPrompt = `## Role
+${systemPrompt}
+
+## Language
+Respond in ${language} (mix of Tagalog and English). Be natural and conversational like a Filipino customer service rep.
+
+## Platform: Facebook Messenger
+Contact Name: ${conversation?.participant_name || 'Customer'}
+`;
+
+        // Add Knowledge Base (company info, services, etc.)
         if (knowledgeBase) {
-            aiPrompt += `\nKnowledge Base:\n${knowledgeBase}\n`;
+            aiPrompt += `
+## Knowledge Base (About the Business)
+${knowledgeBase}
+`;
         }
+
+        // Add FAQ section for RAG
+        if (faqContent) {
+            aiPrompt += `
+## Frequently Asked Questions (Use these to answer queries)
+${faqContent}
+`;
+        }
+
+        // Add bot rules
         if (config.bot_rules_dos) {
-            aiPrompt += `\nDO: ${config.bot_rules_dos}\n`;
+            aiPrompt += `
+## DO's
+${config.bot_rules_dos}
+`;
         }
         if (config.bot_rules_donts) {
-            aiPrompt += `\nDON'T: ${config.bot_rules_donts}\n`;
+            aiPrompt += `
+## DON'Ts
+${config.bot_rules_donts}
+`;
         }
-        aiPrompt += `\nKeep responses concise for chat.`;
+
+        // Add booking info if configured
+        if (config.booking_url) {
+            aiPrompt += `
+## Booking Link
+When customer wants to schedule/book, share this: ${config.booking_url}
+`;
+        }
+
+        aiPrompt += `
+## Important Guidelines
+- Keep responses SHORT and conversational (this is chat, not email)
+- Use Taglish naturally - mix English and Tagalog as Filipinos do
+- Be friendly but professional
+- If unsure about something, say you'll have a team member follow up
+`;
 
         const aiMessages = [{ role: 'system', content: aiPrompt }];
         for (const msg of recentMessages) {

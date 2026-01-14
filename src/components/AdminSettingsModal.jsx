@@ -2134,6 +2134,66 @@ Always ask for the customer's name and business type early in the conversation.`
                 />
               </div>
 
+              {/* FAQ for RAG Pipeline */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>❓ FAQ (Frequently Asked Questions)</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Add common questions and answers. The AI will use these to respond accurately.
+                </p>
+                <textarea
+                  className="form-input"
+                  rows={8}
+                  placeholder={`Q: Magkano po ang basic package?
+A: Ang Basic package natin ay ₱1,799 per month, kasama na ang 2 videos, 2 photos, at ad management.
+
+Q: Pwede po ba sa installment?
+A: Yes po! May 2x payment option tayo - 50% upfront, 50% after 2 weeks.
+
+Q: Gaano katagal bago mag-start?
+A: Usually 3-5 business days after payment confirmation po.
+
+Q: What if hindi effective ang ads?
+A: We offer optimization and A/B testing. If after 14 days walang improvement, free consultation natin.`}
+                  defaultValue={(() => {
+                    try {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      return config.faq || '';
+                    } catch { return ''; }
+                  })()}
+                  onChange={(e) => {
+                    const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                    config.faq = e.target.value;
+                    localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                  }}
+                  style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem' }}
+                />
+              </div>
+
+              {/* Language Selector */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🌐 Response Language</h5>
+                <select
+                  className="form-input"
+                  defaultValue={(() => {
+                    try {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      return config.language || 'Taglish';
+                    } catch { return 'Taglish'; }
+                  })()}
+                  onChange={(e) => {
+                    const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                    config.language = e.target.value;
+                    localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                  }}
+                  style={{ maxWidth: '300px' }}
+                >
+                  <option value="Taglish">Taglish (Tagalog + English mix) - Default</option>
+                  <option value="English">English only</option>
+                  <option value="Tagalog">Tagalog only</option>
+                  <option value="Filipino">Filipino (formal)</option>
+                </select>
+              </div>
+
               {/* Bot Rules - Do's and Don'ts */}
               <div style={{ marginBottom: '2rem' }}>
                 <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📋 Bot Rules (Do's & Don'ts)</h5>
