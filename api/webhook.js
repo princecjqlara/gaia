@@ -630,18 +630,46 @@ When customer wants to schedule/book, share this: ${config.booking_url}
 
         console.log('[WEBHOOK] AI Reply:', aiReply.substring(0, 80) + '...');
         console.log('[WEBHOOK] AI Reply length:', aiReply.length);
+        console.log('[WEBHOOK] Contains ||| delimiter:', aiReply.includes('|||'));
 
-        // Split messages using AI's ||| delimiter (AI decides where to split)
-        // Fall back to single message if no delimiters
+        // Split messages - AI uses |||, but if not, force split by sentences
         let messageParts = [];
 
         if (aiReply.includes('|||')) {
             // AI decided to split the message
             messageParts = aiReply.split('|||').map(p => p.trim()).filter(p => p.length > 0);
-            console.log(`[WEBHOOK] AI split into ${messageParts.length} parts`);
+            console.log(`[WEBHOOK] AI split into ${messageParts.length} parts using |||`);
         } else {
-            // Single message (AI decided it's short enough)
-            messageParts.push(aiReply);
+            // FALLBACK: Force split by sentences if response is long
+            // Split on sentence endings (. ! ?) followed by space
+            const sentences = aiReply.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+
+            if (sentences.length <= 2) {
+                // Short enough, send as one
+                messageParts.push(aiReply);
+            } else {
+                // Group sentences into parts (2-3 sentences each)
+                let currentPart = '';
+                let sentenceCount = 0;
+
+                for (const sentence of sentences) {
+                    currentPart += (currentPart ? ' ' : '') + sentence;
+                    sentenceCount++;
+
+                    if (sentenceCount >= 2) {
+                        messageParts.push(currentPart.trim());
+                        currentPart = '';
+                        sentenceCount = 0;
+                    }
+                }
+
+                // Add remaining sentences
+                if (currentPart.trim()) {
+                    messageParts.push(currentPart.trim());
+                }
+
+                console.log(`[WEBHOOK] Force split into ${messageParts.length} parts by sentences`);
+            }
         }
 
         console.log(`[WEBHOOK] Sending ${messageParts.length} message part(s)`);
@@ -651,6 +679,13 @@ When customer wants to schedule/book, share this: ${config.booking_url}
 
         for (let i = 0; i < messageParts.length; i++) {
             const part = messageParts[i];
+
+            // Add delay between messages for natural chat feel
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            console.log(`[WEBHOOK] Sending part ${i + 1}/${messageParts.length}: "${part.substring(0, 50)}..."`);
 
             const sendResponse = await fetch(
                 `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
