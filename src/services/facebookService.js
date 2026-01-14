@@ -508,17 +508,20 @@ class FacebookService {
 
     /**
      * Get messages for a conversation from database
+     * Loads only the most recent 100 messages for performance
      */
-    async getMessages(conversationId) {
+    async getMessages(conversationId, limit = 100) {
         try {
             const { data, error } = await getSupabase()
                 .from('facebook_messages')
                 .select('*')
                 .eq('conversation_id', conversationId)
-                .order('timestamp', { ascending: true });
+                .order('timestamp', { ascending: false })
+                .limit(limit);
 
             if (error) throw error;
-            return data || [];
+            // Reverse to show oldest first in UI
+            return (data || []).reverse();
         } catch (error) {
             console.error('Error fetching messages:', error);
             return [];
