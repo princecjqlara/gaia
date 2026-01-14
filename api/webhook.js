@@ -209,24 +209,25 @@ async function handleIncomingMessage(pageId, event) {
         // Try multiple sources for participant name
         let participantName = existingConv?.participant_name;
 
-        if (!participantName && !isFromPage) {
+        // Fetch name if missing (for both incoming messages AND echoes)
+        if (!participantName) {
             // Source 1: Check if Facebook included sender name in the event
-            const senderNameFromEvent = event.sender?.name || message.sender_name;
+            const senderNameFromEvent = event.sender?.name || event.recipient?.name || message.sender_name;
             if (senderNameFromEvent) {
-                console.log(`[WEBHOOK] Got name from event sender: ${senderNameFromEvent}`);
+                console.log(`[WEBHOOK] Got name from event: ${senderNameFromEvent}`);
                 participantName = senderNameFromEvent;
             }
 
             // Source 2: Try to fetch from Facebook Graph API
             if (!participantName) {
-                console.log(`[WEBHOOK] No name in event, attempting API fetch for participant: ${participantId}`);
+                console.log(`[WEBHOOK] Fetching name from API for participant: ${participantId}`);
                 participantName = await fetchFacebookUserName(participantId, pageId);
             }
 
             if (participantName) {
-                console.log(`[WEBHOOK] Final participant name resolved: ${participantName}`);
+                console.log(`[WEBHOOK] Name resolved: ${participantName}`);
             } else {
-                console.log(`[WEBHOOK] Could not resolve name for participant ${participantId} - will show as Unknown`);
+                console.log(`[WEBHOOK] Could not resolve name for ${participantId}`);
             }
         }
 
