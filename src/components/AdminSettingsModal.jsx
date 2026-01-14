@@ -443,6 +443,21 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             >
               ⚠️ Warning Rules
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('aichatbot')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'aichatbot' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'aichatbot' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'aichatbot' ? '600' : '400'
+              }}
+            >
+              🤖 AI Chatbot
+            </button>
           </div>
 
           {activeMainTab === 'packages' && (
@@ -1828,6 +1843,177 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             </div>
           )}
 
+          {/* AI Chatbot Tab */}
+          {activeMainTab === 'aichatbot' && (
+            <div>
+              <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🤖 AI Chatbot Configuration</h4>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                Configure automated messaging, follow-ups, and AI behavior for your chatbot
+              </p>
+
+              {/* Stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>-</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>AI Active</div>
+                </div>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--warning)' }}>-</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Human Takeover</div>
+                </div>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--info)' }}>-</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pending Follow-ups</div>
+                </div>
+              </div>
+
+              {/* Core Settings */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚙️ Core Settings</h5>
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                    <span>Auto-respond to new messages</span>
+                    <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                      <input type="checkbox" defaultChecked={true} onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.auto_respond_to_new_messages = e.target.checked;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }} style={{ opacity: 0, width: 0, height: 0 }} />
+                      <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#6366f1', borderRadius: '24px' }}></span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                    <span>Enable silence follow-ups (24h inactivity)</span>
+                    <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                      <input type="checkbox" defaultChecked={true} style={{ opacity: 0, width: 0, height: 0 }} />
+                      <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#6366f1', borderRadius: '24px' }}></span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                    <span>Auto-takeover on low confidence</span>
+                    <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                      <input type="checkbox" defaultChecked={true} style={{ opacity: 0, width: 0, height: 0 }} />
+                      <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#6366f1', borderRadius: '24px' }}></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Timing Settings */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⏱️ Timing Settings</h5>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Cooldown between messages (hours)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      defaultValue={4}
+                      min="1"
+                      max="72"
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.default_cooldown_hours = parseInt(e.target.value) || 4;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Silence threshold (hours)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      defaultValue={24}
+                      min="12"
+                      max="168"
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.intuition_silence_hours = parseInt(e.target.value) || 24;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Max messages per day per contact</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      defaultValue={5}
+                      min="1"
+                      max="10"
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.max_messages_per_day = parseInt(e.target.value) || 5;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Min confidence threshold (0-1)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      defaultValue={0.6}
+                      min="0.1"
+                      max="1"
+                      step="0.1"
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.min_confidence_threshold = parseFloat(e.target.value) || 0.6;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚡ Quick Actions</h5>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      if (confirm('Enable AI for all conversations?')) {
+                        alert('This will be available when connected to database');
+                      }
+                    }}
+                  >
+                    ✅ Enable AI for All
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171' }}
+                    onClick={() => {
+                      if (confirm('Disable AI for all conversations?')) {
+                        alert('This will be available when connected to database');
+                      }
+                    }}
+                  >
+                    ⏸️ Disable AI for All
+                  </button>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(99, 102, 241, 0.1)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(99, 102, 241, 0.3)'
+              }}>
+                <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                  💡 User Controls
+                </div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Regular users can <strong>pause/resume AI</strong> for individual contacts and <strong>view scheduled follow-ups</strong>
+                  using the 🤖 button in each conversation. Only admins can modify these global settings.
+                </p>
+              </div>
+            </div>
+          )}
 
           {message.text && (
             <div style={{
