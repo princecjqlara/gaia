@@ -108,7 +108,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
         await loadAllData();
     };
 
-    // Styles
+    // Styles - Dark theme to match system
     const styles = {
         overlay: {
             position: 'fixed',
@@ -116,25 +116,26 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
+            background: 'rgba(0, 0, 0, 0.7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000
         },
         panel: {
-            background: 'white',
+            background: '#1a1a2e',
             borderRadius: '12px',
             width: '90%',
             maxWidth: '600px',
             maxHeight: '80vh',
             overflow: 'hidden',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            border: '1px solid #2d2d44'
         },
         header: {
             padding: '20px',
-            borderBottom: '1px solid #e5e7eb',
+            borderBottom: '1px solid #2d2d44',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
@@ -143,18 +144,18 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             margin: 0,
             fontSize: '18px',
             fontWeight: 600,
-            color: '#111827'
+            color: '#ffffff'
         },
         closeBtn: {
             background: 'none',
             border: 'none',
             fontSize: '24px',
             cursor: 'pointer',
-            color: '#6b7280'
+            color: '#9ca3af'
         },
         tabs: {
             display: 'flex',
-            borderBottom: '1px solid #e5e7eb'
+            borderBottom: '1px solid #2d2d44'
         },
         tab: {
             padding: '12px 20px',
@@ -162,12 +163,12 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             border: 'none',
             cursor: 'pointer',
             fontSize: '14px',
-            color: '#6b7280',
+            color: '#9ca3af',
             borderBottom: '2px solid transparent'
         },
         activeTab: {
-            color: '#7c3aed',
-            borderBottomColor: '#7c3aed'
+            color: '#818cf8',
+            borderBottomColor: '#818cf8'
         },
         content: {
             padding: '20px',
@@ -180,20 +181,22 @@ export default function AIControlPanel({ conversationId, participantName, onClos
         sectionTitle: {
             fontSize: '14px',
             fontWeight: 600,
-            color: '#374151',
+            color: '#e5e7eb',
             marginBottom: '12px'
         },
         statusCard: {
-            background: '#f9fafb',
+            background: '#252542',
             borderRadius: '8px',
             padding: '16px',
-            marginBottom: '12px'
+            marginBottom: '12px',
+            border: '1px solid #2d2d44'
         },
         statusRow: {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '8px'
+            marginBottom: '8px',
+            color: '#d1d5db'
         },
         badge: {
             padding: '4px 12px',
@@ -202,20 +205,20 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             fontWeight: 500
         },
         badgeGreen: {
-            background: '#d1fae5',
-            color: '#065f46'
+            background: 'rgba(16, 185, 129, 0.2)',
+            color: '#34d399'
         },
         badgeRed: {
-            background: '#fee2e2',
-            color: '#991b1b'
+            background: 'rgba(239, 68, 68, 0.2)',
+            color: '#f87171'
         },
         badgeYellow: {
-            background: '#fef3c7',
-            color: '#92400e'
+            background: 'rgba(245, 158, 11, 0.2)',
+            color: '#fbbf24'
         },
         badgePurple: {
-            background: '#ede9fe',
-            color: '#5b21b6'
+            background: 'rgba(139, 92, 246, 0.2)',
+            color: '#a78bfa'
         },
         button: {
             padding: '8px 16px',
@@ -226,46 +229,49 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             fontWeight: 500
         },
         buttonPrimary: {
-            background: '#7c3aed',
+            background: '#6366f1',
             color: 'white'
         },
         buttonSecondary: {
-            background: '#f3f4f6',
-            color: '#374151'
+            background: '#374151',
+            color: '#e5e7eb'
         },
         buttonDanger: {
-            background: '#fee2e2',
-            color: '#991b1b'
+            background: 'rgba(239, 68, 68, 0.2)',
+            color: '#f87171'
         },
         goalCard: {
-            background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
             borderRadius: '8px',
             padding: '16px',
             color: 'white',
             marginBottom: '12px'
         },
         followUpItem: {
-            background: '#f9fafb',
+            background: '#252542',
             borderRadius: '8px',
             padding: '12px',
             marginBottom: '8px',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            border: '1px solid #2d2d44'
         },
         logItem: {
             padding: '12px 0',
-            borderBottom: '1px solid #f3f4f6',
-            fontSize: '13px'
+            borderBottom: '1px solid #2d2d44',
+            fontSize: '13px',
+            color: '#d1d5db'
         },
         goalOption: {
-            background: '#f9fafb',
+            background: '#252542',
             borderRadius: '8px',
             padding: '12px',
             marginBottom: '8px',
             cursor: 'pointer',
             border: '2px solid transparent',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            color: '#e5e7eb'
         }
     };
 
@@ -286,7 +292,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                 <div style={styles.header}>
                     <div>
                         <h2 style={styles.title}>🤖 AI Controls</h2>
-                        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6b7280' }}>
+                        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#9ca3af' }}>
                             {participantName || 'Contact'}
                         </p>
                     </div>
@@ -354,10 +360,10 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                         <div style={{
                                             marginTop: '12px',
                                             padding: '8px 12px',
-                                            background: '#fee2e2',
+                                            background: 'rgba(239, 68, 68, 0.2)',
                                             borderRadius: '6px',
                                             fontSize: '12px',
-                                            color: '#991b1b'
+                                            color: '#f87171'
                                         }}>
                                             ⚠️ Contact has opted out of AI messaging
                                         </div>
@@ -389,7 +395,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                         </div>
                                         <div style={styles.statusRow}>
                                             <span>Next Occurrence</span>
-                                            <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                                            <span style={{ fontSize: '13px', color: '#9ca3af' }}>
                                                 {new Date(bestTime.nextBestTime).toLocaleString()}
                                             </span>
                                         </div>
@@ -453,19 +459,19 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                             style={styles.goalOption}
                                             onClick={() => handleSetGoal(type)}
                                             onMouseEnter={e => {
-                                                e.currentTarget.style.borderColor = '#7c3aed';
-                                                e.currentTarget.style.background = '#f5f3ff';
+                                                e.currentTarget.style.borderColor = '#818cf8';
+                                                e.currentTarget.style.background = '#2d2d44';
                                             }}
                                             onMouseLeave={e => {
                                                 e.currentTarget.style.borderColor = 'transparent';
-                                                e.currentTarget.style.background = '#f9fafb';
+                                                e.currentTarget.style.background = '#252542';
                                             }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                                 <span style={{ fontSize: '24px' }}>{info.icon}</span>
                                                 <div>
                                                     <div style={{ fontWeight: 500 }}>{info.name}</div>
-                                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                                    <div style={{ fontSize: '12px', color: '#9ca3af' }}>
                                                         {info.description}
                                                     </div>
                                                 </div>
@@ -506,7 +512,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                     {new Date(fu.scheduled_at).toLocaleString()}
                                                 </div>
                                                 {fu.reason && (
-                                                    <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                                                    <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
                                                         {fu.reason}
                                                     </div>
                                                 )}
