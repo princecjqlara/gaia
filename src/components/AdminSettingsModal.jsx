@@ -989,6 +989,51 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                     </div>
                   </label>
                 </div>
+
+                {/* Per-Stage Warning Settings */}
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  <h5 style={{ marginBottom: '0.75rem', color: 'var(--text-primary)' }}>📊 Stage Duration Warnings</h5>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    Highlight clients who have been in a pipeline stage too long. Set days before warning triggers. Set to 0 to disable.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                    {[
+                      { key: 'booked', label: '📅 Booked' },
+                      { key: 'follow-up', label: '📞 Follow Up' },
+                      { key: 'preparing', label: '⏳ Preparing' },
+                      { key: 'testing', label: '🧪 Testing' },
+                      { key: 'running', label: '🚀 Running' }
+                    ].map(stage => (
+                      <div key={stage.key} className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>{stage.label}</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={warningSettings.stage_warning_days?.[stage.key] ?? 0}
+                            onChange={(e) => setWarningSettings(prev => ({
+                              ...prev,
+                              stage_warning_days: {
+                                ...prev.stage_warning_days,
+                                [stage.key]: parseInt(e.target.value) || 0
+                              }
+                            }))}
+                            min="0"
+                            max="365"
+                            style={{ width: '70px' }}
+                          />
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>days</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </>
           )}
