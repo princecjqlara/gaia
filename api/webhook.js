@@ -317,14 +317,8 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     try {
         console.log('[WEBHOOK] === AI AUTO-RESPONSE ===');
 
-        // Log to database that AI was triggered (for debugging)
-        await db.from('ai_action_log').insert({
-            conversation_id: conversationId,
-            page_id: pageId,
-            action_type: 'ai_trigger_started',
-            explanation: 'AI auto-response triggered by webhook',
-            action_data: { timestamp: new Date().toISOString() }
-        }).catch(() => { }); // Ignore errors if table doesn't exist
+        // Skip database logging to avoid errors
+        console.log('[WEBHOOK] Conversation:', conversationId, 'Page:', pageId);
 
 
         // Get AI config from settings
