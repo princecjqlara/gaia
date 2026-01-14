@@ -197,21 +197,48 @@ class FacebookService {
                 const participant = conv.participants?.data?.find(p => p.id !== pageId);
                 const lastMessage = conv.messages?.data?.[0];
 
-                // Get participant name - fallback to fetching from user profile if not in conversation
+                // Get participant name - try multiple sources
+                // Source 1: Check if name is in participants data
                 let participantName = participant?.name;
+                console.log(`[SYNC] Conv ${conv.id}: participant=${participant?.id}, name from participants=${participantName || 'null'}`);
+
+                // Source 2: If no name, try fetching from user profile
                 if (!participantName && participant?.id) {
                     try {
+                        console.log(`[SYNC] Fetching profile for participant ${participant.id}`);
                         const userResponse = await fetch(
                             `${GRAPH_API_BASE}/${participant.id}?fields=name,first_name,last_name&access_token=${page.page_access_token}`
                         );
+
+                        const responseText = await userResponse.text();
+                        console.log(`[SYNC] Profile API response: status=${userResponse.status}`);
+
                         if (userResponse.ok) {
-                            const userData = await userResponse.json();
-                            participantName = userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim();
+                            try {
+                                const userData = JSON.parse(responseText);
+                                participantName = userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim();
+                                if (participantName) {
+                                    console.log(`[SYNC] Got name from profile: ${participantName}`);
+                                } else {
+                                    console.log(`[SYNC] Profile returned but no name fields available`);
+                                }
+                            } catch (parseErr) {
+                                console.error(`[SYNC] Error parsing profile response:`, parseErr.message);
+                            }
+                        } else {
+                            // Log error details
+                            try {
+                                const errorData = JSON.parse(responseText);
+                                console.log(`[SYNC] Profile API error: code=${errorData.error?.code}, message=${errorData.error?.message}`);
+                            } catch (e) {
+                                console.log(`[SYNC] Profile API error: ${responseText.substring(0, 200)}`);
+                            }
                         }
                     } catch (err) {
-                        console.log(`Could not fetch name for ${participant.id}:`, err.message);
+                        console.log(`[SYNC] Exception fetching profile for ${participant.id}:`, err.message);
                     }
                 }
+
 
                 // Check if conversation already exists to preserve name
                 const { data: existingConv } = await getSupabase()
@@ -632,30 +659,61 @@ class FacebookService {
      * Fetches the user's profile and updates the conversation
      */
     async refreshContactName(conversationId, participantId, pageId) {
+        console.log(`[REFRESH] Attempting to refresh name for participant: ${participantId}`);
+
         try {
             // Get page access token
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
             if (!page?.page_access_token) {
+                console.error('[REFRESH] Page access token not found for page:', pageId);
                 throw new Error('Page access token not found');
             }
 
             // Fetch user profile from Facebook
-            const response = await fetch(
-                `${GRAPH_API_BASE}/${participantId}?fields=name,first_name,last_name&access_token=${page.page_access_token}`
-            );
+            const url = `${GRAPH_API_BASE}/${participantId}?fields=name,first_name,last_name&access_token=${page.page_access_token}`;
+            console.log(`[REFRESH] Calling Facebook API for user profile`);
+
+            const response = await fetch(url);
+            const responseText = await response.text();
+
+            console.log(`[REFRESH] Facebook API response status: ${response.status}`);
 
             if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Facebook API error:', errorData);
-                throw new Error(errorData.error?.message || 'Failed to fetch profile');
+                try {
+                    const errorData = JSON.parse(responseText);
+                    console.error('[REFRESH] Facebook API error:', {
+                        code: errorData.error?.code,
+                        message: errorData.error?.message,
+                        type: errorData.error?.type
+                    });
+
+                    // Provide more specific error messages
+                    if (errorData.error?.code === 100) {
+                        throw new Error('User profile not accessible - Facebook privacy restrictions');
+                    } else if (errorData.error?.code === 190) {
+                        throw new Error('Page access token expired - please reconnect Facebook page');
+                    } else {
+                        throw new Error(errorData.error?.message || 'Failed to fetch profile');
+                    }
+                } catch (parseError) {
+                    console.error('[REFRESH] Could not parse error response:', responseText);
+                    throw new Error('Failed to fetch profile from Facebook');
+                }
             }
 
-            const profile = await response.json();
+            const profile = JSON.parse(responseText);
+            console.log('[REFRESH] Profile response:', {
+                hasName: !!profile.name,
+                hasFirstName: !!profile.first_name,
+                hasLastName: !!profile.last_name
+            });
+
             const userName = profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
 
             if (!userName) {
-                throw new Error('Name not available from Facebook');
+                console.log('[REFRESH] No name fields in profile response');
+                throw new Error('Name not available from Facebook - user may have privacy settings enabled');
             }
 
             // Update conversation with new name
@@ -667,12 +725,15 @@ class FacebookService {
                 })
                 .eq('conversation_id', conversationId);
 
-            if (error) throw error;
+            if (error) {
+                console.error('[REFRESH] Database update error:', error);
+                throw error;
+            }
 
-            console.log(`Refreshed contact name: ${userName}`);
+            console.log(`[REFRESH] Successfully updated name to: ${userName}`);
             return userName;
         } catch (error) {
-            console.error('Error refreshing contact name:', error);
+            console.error('[REFRESH] Error refreshing contact name:', error.message);
             throw error;
         }
     }
