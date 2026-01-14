@@ -888,6 +888,20 @@ When customer wants to schedule/book, share this: ${config.booking_url}
                         } catch (calErr) {
                             console.error('[WEBHOOK] Calendar insert error:', calErr.message);
                         }
+
+                        // Move contact to 'booked' pipeline stage
+                        try {
+                            await db
+                                .from('facebook_conversations')
+                                .update({
+                                    pipeline_stage: 'booked',
+                                    booking_date: bookingDate.toISOString()
+                                })
+                                .eq('conversation_id', conversationId);
+                            console.log('[WEBHOOK] ✅ Contact moved to BOOKED pipeline');
+                        } catch (pipeErr) {
+                            console.error('[WEBHOOK] Pipeline update error:', pipeErr.message);
+                        }
                     }
 
                     // Remove the BOOKING_CONFIRMED line from the reply (it's internal)
