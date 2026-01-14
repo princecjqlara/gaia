@@ -297,8 +297,194 @@ async function handleIncomingMessage(pageId, event) {
         } else {
             console.log(`[WEBHOOK] Message ${message.mid} saved!`);
         }
+
+        // TRIGGER AI AUTO-RESPONSE for incoming user messages (not echoes)
+        if (!isFromPage && message.text) {
+            console.log('[WEBHOOK] Triggering AI auto-response...');
+            await triggerAIResponse(db, conversationId, pageId, existingConv);
+        }
     } catch (error) {
         console.error('[WEBHOOK] Exception:', error);
+    }
+}
+
+/**
+ * Trigger AI auto-response for a conversation
+ */
+async function triggerAIResponse(db, conversationId, pageId, conversation) {
+    try {
+        console.log('[WEBHOOK] === AI AUTO-RESPONSE ===');
+
+        // Get AI config from settings
+        const { data: settings } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'ai_chatbot_config')
+            .single();
+
+        const config = settings?.value || {};
+
+        // Check if auto-respond is disabled (default: enabled)
+        if (config.auto_respond_to_new_messages === false) {
+            console.log('[WEBHOOK] AI disabled globally');
+            return;
+        }
+
+        // Check per-conversation settings
+        if (conversation?.ai_enabled === false) {
+            console.log('[WEBHOOK] AI disabled for this conversation');
+            return;
+        }
+
+        if (conversation?.human_takeover === true) {
+            console.log('[WEBHOOK] Human takeover active');
+            return;
+        }
+
+        if (conversation?.cooldown_until && new Date(conversation.cooldown_until) > new Date()) {
+            console.log('[WEBHOOK] AI on cooldown');
+            return;
+        }
+
+        // Get page access token
+        const { data: page } = await db
+            .from('facebook_pages')
+            .select('page_access_token')
+            .eq('page_id', pageId)
+            .single();
+
+        if (!page?.page_access_token) {
+            console.error('[WEBHOOK] No page access token');
+            return;
+        }
+
+        // Get recent messages
+        const { data: messages } = await db
+            .from('facebook_messages')
+            .select('*')
+            .eq('conversation_id', conversationId)
+            .order('timestamp', { ascending: false })
+            .limit(15);
+
+        const recentMessages = (messages || []).reverse();
+
+        // Build AI prompt
+        const systemPrompt = config.system_prompt || 'You are a friendly AI assistant for a business. Be helpful and concise.';
+        const knowledgeBase = config.knowledge_base || '';
+
+        let aiPrompt = `${systemPrompt}\n\nPlatform: Facebook Messenger\nContact: ${conversation?.participant_name || 'Unknown'}\n`;
+        if (knowledgeBase) {
+            aiPrompt += `\nKnowledge Base:\n${knowledgeBase}\n`;
+        }
+        if (config.bot_rules_dos) {
+            aiPrompt += `\nDO: ${config.bot_rules_dos}\n`;
+        }
+        if (config.bot_rules_donts) {
+            aiPrompt += `\nDON'T: ${config.bot_rules_donts}\n`;
+        }
+        aiPrompt += `\nKeep responses concise for chat.`;
+
+        const aiMessages = [{ role: 'system', content: aiPrompt }];
+        for (const msg of recentMessages) {
+            aiMessages.push({
+                role: msg.is_from_page ? 'assistant' : 'user',
+                content: msg.message_text || '[Attachment]'
+            });
+        }
+
+        // Call NVIDIA AI
+        const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+        if (!NVIDIA_API_KEY) {
+            console.error('[WEBHOOK] NVIDIA API key not set');
+            return;
+        }
+
+        console.log('[WEBHOOK] Calling NVIDIA AI...');
+        const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${NVIDIA_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+                messages: aiMessages,
+                temperature: 0.7,
+                max_tokens: 400
+            })
+        });
+
+        if (!aiResponse.ok) {
+            console.error('[WEBHOOK] NVIDIA API error:', await aiResponse.text());
+            return;
+        }
+
+        const aiData = await aiResponse.json();
+        const aiReply = aiData.choices?.[0]?.message?.content;
+
+        if (!aiReply) {
+            console.error('[WEBHOOK] No AI reply');
+            return;
+        }
+
+        console.log('[WEBHOOK] AI Reply:', aiReply.substring(0, 80) + '...');
+
+        // Send via Facebook
+        const participantId = conversation?.participant_id || conversationId.replace('t_', '');
+        const sendResponse = await fetch(
+            `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    recipient: { id: participantId },
+                    message: { text: aiReply },
+                    messaging_type: 'RESPONSE'
+                })
+            }
+        );
+
+        if (!sendResponse.ok) {
+            const err = await sendResponse.text();
+            console.error('[WEBHOOK] Send failed:', err);
+
+            // Try with ACCOUNT_UPDATE tag if 24h window issue
+            if (err.includes('allowed window') || err.includes('outside')) {
+                console.log('[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...');
+                const retryResponse = await fetch(
+                    `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            recipient: { id: participantId },
+                            message: { text: aiReply },
+                            messaging_type: 'MESSAGE_TAG',
+                            tag: 'ACCOUNT_UPDATE'
+                        })
+                    }
+                );
+                if (retryResponse.ok) {
+                    console.log('[WEBHOOK] Sent with tag!');
+                } else {
+                    console.error('[WEBHOOK] Retry also failed:', await retryResponse.text());
+                }
+            }
+            return;
+        }
+
+        console.log('[WEBHOOK] AI reply sent successfully!');
+
+        // Set cooldown
+        await db
+            .from('facebook_conversations')
+            .update({
+                cooldown_until: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+            })
+            .eq('conversation_id', conversationId);
+
+    } catch (error) {
+        console.error('[WEBHOOK] AI Error:', error);
     }
 }
 
