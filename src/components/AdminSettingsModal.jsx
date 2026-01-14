@@ -1847,9 +1847,58 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
           {activeMainTab === 'aichatbot' && (
             <div>
               <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🤖 AI Chatbot Configuration</h4>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
                 Configure automated messaging, follow-ups, and AI behavior for your chatbot
               </p>
+
+              {/* IMPORTANT: Save to Database Button */}
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                background: 'rgba(99, 102, 241, 0.1)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(99, 102, 241, 0.3)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'var(--primary)' }}>
+                      ⚠️ Important: Save your settings for the bot to use them
+                    </div>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Settings are saved locally. Click "Save to Database" to activate them for the AI bot.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ whiteSpace: 'nowrap', padding: '0.75rem 1.5rem' }}
+                    onClick={async () => {
+                      try {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        const { getSupabaseClient } = await import('../services/supabase');
+                        const db = getSupabaseClient();
+
+                        // Upsert settings to database
+                        const { error } = await db
+                          .from('settings')
+                          .upsert({
+                            key: 'ai_chatbot_config',
+                            value: config,
+                            updated_at: new Date().toISOString()
+                          }, { onConflict: 'key' });
+
+                        if (error) throw error;
+                        alert('✅ Settings saved to database! The bot will now use these settings.');
+                      } catch (err) {
+                        console.error('Error saving to database:', err);
+                        alert('❌ Failed to save: ' + err.message);
+                      }
+                    }}
+                  >
+                    💾 Save to Database
+                  </button>
+                </div>
+              </div>
 
               {/* Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
