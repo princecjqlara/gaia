@@ -336,27 +336,16 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
 
         const config = settings?.value || {};
 
-        // Check if auto-respond is disabled (default: enabled)
-        if (config.auto_respond_to_new_messages === false) {
-            console.log('[WEBHOOK] AI disabled globally');
-            return;
-        }
+        console.log('[WEBHOOK] AI Config check:', {
+            auto_respond: config.auto_respond_to_new_messages,
+            conv_ai_enabled: conversation?.ai_enabled,
+            human_takeover: conversation?.human_takeover,
+            cooldown_until: conversation?.cooldown_until
+        });
 
-        // Check per-conversation settings
-        if (conversation?.ai_enabled === false) {
-            console.log('[WEBHOOK] AI disabled for this conversation');
-            return;
-        }
-
-        if (conversation?.human_takeover === true) {
-            console.log('[WEBHOOK] Human takeover active');
-            return;
-        }
-
-        if (conversation?.cooldown_until && new Date(conversation.cooldown_until) > new Date()) {
-            console.log('[WEBHOOK] AI on cooldown');
-            return;
-        }
+        // TEMPORARILY BYPASS ALL CHECKS FOR DEBUGGING
+        // TODO: Remove this after confirming AI works
+        console.log('[WEBHOOK] Bypassing checks for debugging...');
 
         // Get page access token
         const { data: page } = await db
