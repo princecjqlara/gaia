@@ -395,7 +395,7 @@ export async function getScheduledFollowUps(conversationId, options = {}) {
             .from('ai_followup_schedule')
             .select('*')
             .eq('conversation_id', conversationId)
-            .order('scheduled_at', { ascending: true })
+            .order('scheduled_for', { ascending: true })
             .limit(limit);
 
         if (!includeAll) {
@@ -443,8 +443,8 @@ export async function getPendingFollowUps(beforeTime = null) {
                 )
             `)
             .eq('status', 'pending')
-            .lte('scheduled_at', targetTime.toISOString())
-            .order('scheduled_at', { ascending: true })
+            .lte('scheduled_for', targetTime.toISOString())
+            .order('scheduled_for', { ascending: true })
             .limit(50);
 
         if (error) throw error;
