@@ -198,11 +198,21 @@ class FacebookService {
                 const lastMessage = conv.messages?.data?.[0];
 
                 // Get participant name - try multiple sources
-                // Source 1: Check if name is in participants data
-                let participantName = participant?.name;
-                console.log(`[SYNC] Conv ${conv.id}: participant=${participant?.id}, name from participants=${participantName || 'null'}`);
+                let participantName = null;
 
-                // Source 2: If no name, try fetching from user profile
+                // Source 1: Check name in participants data
+                if (participant?.name) {
+                    participantName = participant.name;
+                    console.log(`[SYNC] Conv ${conv.id}: Got name from participants: ${participantName}`);
+                }
+
+                // Source 2: Check name in message sender (from field)
+                if (!participantName && lastMessage?.from?.name && lastMessage?.from?.id !== pageId) {
+                    participantName = lastMessage.from.name;
+                    console.log(`[SYNC] Conv ${conv.id}: Got name from message sender: ${participantName}`);
+                }
+
+                // Source 3: If no name, try fetching from user profile API
                 if (!participantName && participant?.id) {
                     try {
                         console.log(`[SYNC] Fetching profile for participant ${participant.id}`);
@@ -211,31 +221,42 @@ class FacebookService {
                         );
 
                         const responseText = await userResponse.text();
-                        console.log(`[SYNC] Profile API response: status=${userResponse.status}`);
 
                         if (userResponse.ok) {
                             try {
                                 const userData = JSON.parse(responseText);
                                 participantName = userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim();
                                 if (participantName) {
-                                    console.log(`[SYNC] Got name from profile: ${participantName}`);
-                                } else {
-                                    console.log(`[SYNC] Profile returned but no name fields available`);
+                                    console.log(`[SYNC] Got name from profile API: ${participantName}`);
                                 }
                             } catch (parseErr) {
                                 console.error(`[SYNC] Error parsing profile response:`, parseErr.message);
                             }
                         } else {
-                            // Log error details
-                            try {
-                                const errorData = JSON.parse(responseText);
-                                console.log(`[SYNC] Profile API error: code=${errorData.error?.code}, message=${errorData.error?.message}`);
-                            } catch (e) {
-                                console.log(`[SYNC] Profile API error: ${responseText.substring(0, 200)}`);
-                            }
+                            // Log but don't fail - this is common due to Facebook privacy restrictions
+                            console.log(`[SYNC] Profile API unavailable for ${participant.id} (privacy restriction)`);
                         }
                     } catch (err) {
                         console.log(`[SYNC] Exception fetching profile for ${participant.id}:`, err.message);
+                    }
+                }
+
+                // Source 4: Try to get name from fetching more messages
+                if (!participantName && participant?.id) {
+                    try {
+                        const msgResponse = await fetch(
+                            `${GRAPH_API_BASE}/${conv.id}?fields=messages.limit(10){from{id,name}}&access_token=${page.page_access_token}`
+                        );
+                        if (msgResponse.ok) {
+                            const msgData = await msgResponse.json();
+                            const customerMsg = msgData.messages?.data?.find(m => m.from?.id === participant.id && m.from?.name);
+                            if (customerMsg?.from?.name) {
+                                participantName = customerMsg.from.name;
+                                console.log(`[SYNC] Got name from message history: ${participantName}`);
+                            }
+                        }
+                    } catch (err) {
+                        console.log(`[SYNC] Exception fetching messages for name:`, err.message);
                     }
                 }
 
