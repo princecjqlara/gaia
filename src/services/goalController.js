@@ -300,6 +300,7 @@ export function evaluateGoalProgress(messages, goal) {
 
 /**
  * Update goal progress in database
+ * When goal is completed: stops proactive follow-ups but AI continues to respond to FAQs
  * @param {string} goalId - Goal ID
  * @param {number} progress - New progress score
  * @param {boolean} completed - Whether goal is completed
@@ -338,22 +339,38 @@ export async function updateGoalProgress(goalId, progress, completed = false) {
                     conversationId: goal.conversation_id,
                     actionType: 'goal_completed',
                     data: { goalId, goalType: goal.goal_type, progress },
-                    explanation: `Goal completed: ${GOAL_TYPES[goal.goal_type]?.name || goal.goal_type}`,
+                    explanation: `Goal completed: ${GOAL_TYPES[goal.goal_type]?.name || goal.goal_type}. Follow-ups stopped, AI still responds to FAQs.`,
                     goalId
                 });
 
-                // Clear active goal from conversation
+                // Clear active goal from conversation but KEEP AI enabled
+                // AI remains on to answer FAQs, just no more proactive outreach
                 await db
                     .from('facebook_conversations')
                     .update({
                         active_goal_id: null,
+                        // ai_enabled stays true - bot continues to respond
                         updated_at: new Date().toISOString()
                     })
                     .eq('conversation_id', goal.conversation_id);
+
+                // Cancel all pending follow-ups for this conversation
+                // Goal achieved = no need for proactive outreach
+                await db
+                    .from('ai_followup_schedule')
+                    .update({
+                        status: 'cancelled',
+                        error_message: 'Goal completed - follow-ups no longer needed',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('conversation_id', goal.conversation_id)
+                    .eq('status', 'pending');
+
+                console.log(`[GOAL] Goal completed for ${goal.conversation_id}. Follow-ups cancelled, AI remains active for FAQs.`);
             }
         }
 
-        return { success: true };
+        return { success: true, completed };
     } catch (error) {
         console.error('[GOAL] Error updating progress:', error);
         return { success: false, error: error.message };
