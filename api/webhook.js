@@ -499,48 +499,91 @@ When customer wants to schedule/book, share this: ${config.booking_url}
 
         console.log('[WEBHOOK] AI Reply:', aiReply.substring(0, 80) + '...');
 
-        // Send via Facebook
-        const participantId = conversation?.participant_id || conversationId.replace('t_', '');
-        const sendResponse = await fetch(
-            `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    recipient: { id: participantId },
-                    message: { text: aiReply },
-                    messaging_type: 'RESPONSE'
-                })
+        // Split long messages (Facebook limit is 2000 chars)
+        const MAX_MSG_LENGTH = 1800; // Leave some buffer
+        const messageParts = [];
+
+        if (aiReply.length <= MAX_MSG_LENGTH) {
+            messageParts.push(aiReply);
+        } else {
+            // Split by paragraphs first, then by sentences
+            let remaining = aiReply;
+            while (remaining.length > 0) {
+                if (remaining.length <= MAX_MSG_LENGTH) {
+                    messageParts.push(remaining);
+                    break;
+                }
+
+                // Try to split at paragraph break
+                let splitIndex = remaining.lastIndexOf('\n\n', MAX_MSG_LENGTH);
+                if (splitIndex === -1 || splitIndex < MAX_MSG_LENGTH / 2) {
+                    // Try sentence break
+                    splitIndex = remaining.lastIndexOf('. ', MAX_MSG_LENGTH);
+                }
+                if (splitIndex === -1 || splitIndex < MAX_MSG_LENGTH / 2) {
+                    // Force split at max length
+                    splitIndex = MAX_MSG_LENGTH;
+                }
+
+                messageParts.push(remaining.substring(0, splitIndex + 1).trim());
+                remaining = remaining.substring(splitIndex + 1).trim();
             }
-        );
+        }
 
-        if (!sendResponse.ok) {
-            const err = await sendResponse.text();
-            console.error('[WEBHOOK] Send failed:', err);
+        console.log(`[WEBHOOK] Sending ${messageParts.length} message part(s)`);
 
-            // Try with ACCOUNT_UPDATE tag if 24h window issue
-            if (err.includes('allowed window') || err.includes('outside')) {
-                console.log('[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...');
-                const retryResponse = await fetch(
-                    `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            recipient: { id: participantId },
-                            message: { text: aiReply },
-                            messaging_type: 'MESSAGE_TAG',
-                            tag: 'ACCOUNT_UPDATE'
-                        })
+        // Send each part via Facebook
+        const participantId = conversation?.participant_id || conversationId.replace('t_', '');
+
+        for (let i = 0; i < messageParts.length; i++) {
+            const part = messageParts[i];
+
+            const sendResponse = await fetch(
+                `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recipient: { id: participantId },
+                        message: { text: part },
+                        messaging_type: 'RESPONSE'
+                    })
+                }
+            );
+
+            if (!sendResponse.ok) {
+                const err = await sendResponse.text();
+                console.error(`[WEBHOOK] Send part ${i + 1} failed:`, err);
+
+                // Try with ACCOUNT_UPDATE tag if 24h window issue
+                if (err.includes('allowed window') || err.includes('outside')) {
+                    console.log('[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...');
+                    const retryResponse = await fetch(
+                        `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                recipient: { id: participantId },
+                                message: { text: part },
+                                messaging_type: 'MESSAGE_TAG',
+                                tag: 'ACCOUNT_UPDATE'
+                            })
+                        }
+                    );
+                    if (!retryResponse.ok) {
+                        console.error('[WEBHOOK] Retry also failed');
+                        return;
                     }
-                );
-                if (retryResponse.ok) {
-                    console.log('[WEBHOOK] Sent with tag!');
                 } else {
-                    console.error('[WEBHOOK] Retry also failed:', await retryResponse.text());
+                    return;
                 }
             }
-            return;
+
+            // Small delay between messages to maintain order
+            if (i < messageParts.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
         }
 
         console.log('[WEBHOOK] AI reply sent successfully!');
