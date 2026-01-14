@@ -404,38 +404,65 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
             });
         }
 
-        // Call NVIDIA AI
+        // Call NVIDIA AI with model rotation
         const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
         if (!NVIDIA_API_KEY) {
             console.error('[WEBHOOK] NVIDIA API key not set');
             return;
         }
 
-        console.log('[WEBHOOK] Calling NVIDIA AI...');
-        const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${NVIDIA_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: 'nvidia/llama-3.1-nemotron-70b-instruct',
-                messages: aiMessages,
-                temperature: 0.7,
-                max_tokens: 400
-            })
-        });
+        // Model rotation - try each model until one works
+        const MODELS = [
+            'deepseek-ai/deepseek-r1',
+            'meta/llama-3.3-70b-instruct',
+            'mistralai/mistral-large-2-instruct',
+            'google/gemma-2-27b-it',
+            'nvidia/llama-3.1-nemotron-70b-instruct'
+        ];
 
-        if (!aiResponse.ok) {
-            console.error('[WEBHOOK] NVIDIA API error:', await aiResponse.text());
-            return;
+        let aiReply = null;
+        let lastError = null;
+
+        for (const model of MODELS) {
+            try {
+                console.log(`[WEBHOOK] Trying model: ${model}`);
+                const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${NVIDIA_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: aiMessages,
+                        temperature: 0.7,
+                        max_tokens: 400
+                    })
+                });
+
+                if (!aiResponse.ok) {
+                    const errorText = await aiResponse.text();
+                    console.log(`[WEBHOOK] Model ${model} failed: ${errorText.substring(0, 100)}`);
+                    lastError = errorText;
+                    continue; // Try next model
+                }
+
+                const aiData = await aiResponse.json();
+                aiReply = aiData.choices?.[0]?.message?.content;
+
+                if (aiReply) {
+                    console.log(`[WEBHOOK] Success with model: ${model}`);
+                    break; // Got a response, exit loop
+                }
+            } catch (err) {
+                console.log(`[WEBHOOK] Model ${model} error: ${err.message}`);
+                lastError = err.message;
+                continue;
+            }
         }
 
-        const aiData = await aiResponse.json();
-        const aiReply = aiData.choices?.[0]?.message?.content;
-
         if (!aiReply) {
-            console.error('[WEBHOOK] No AI reply');
+            console.error('[WEBHOOK] All models failed. Last error:', lastError);
             return;
         }
 
