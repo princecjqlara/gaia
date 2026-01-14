@@ -10,9 +10,9 @@
  */
 
 export default async function handler(req, res) {
-    // Verify cron secret
+    // Optional: Verify cron secret (skip if not configured)
     const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
-    if (cronSecret !== process.env.CRON_SECRET && process.env.NODE_ENV === 'production') {
+    if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
