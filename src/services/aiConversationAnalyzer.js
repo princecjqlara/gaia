@@ -179,6 +179,78 @@ Respond ONLY with JSON:
 };
 
 /**
+ * Analyze if the conversation needs urgent response
+ * Checks if customer's last message is a question or shows dissatisfaction
+ * Returns: { needsUrgentResponse: boolean, reason: string, priority: 'high'|'medium'|'low' }
+ */
+export const analyzeResponseUrgency = async (messages) => {
+    if (!messages || messages.length === 0) {
+        return { needsUrgentResponse: false, reason: 'No messages', priority: 'low' };
+    }
+
+    // Get the last few messages for context
+    const recentMessages = messages.slice(-5);
+    const lastMessage = recentMessages[recentMessages.length - 1];
+
+    // If last message is from the page (agent), no urgent response needed
+    if (lastMessage?.is_from_page) {
+        return { needsUrgentResponse: false, reason: 'Last message from agent', priority: 'low' };
+    }
+
+    const conversationText = recentMessages
+        .map(m => `${m.is_from_page ? 'Agent' : 'Customer'}: ${m.message_text}`)
+        .join('\n');
+
+    const systemPrompt = `You are analyzing a customer conversation to determine if it needs urgent response.
+
+Check if the customer's last message:
+1. Contains an unanswered QUESTION (pricing, availability, how it works, etc.)
+2. Shows DISSATISFACTION or frustration (complaints, negative tone, impatience)
+3. Shows URGENCY (needs help now, deadline, waiting)
+
+Respond ONLY with JSON:
+{
+  "needsUrgentResponse": true/false,
+  "reason": "brief explanation",
+  "priority": "high" | "medium" | "low",
+  "hasQuestion": true/false,
+  "isUnsatisfied": true/false
+}`;
+
+    try {
+        const { nvidiaChat } = await import('./aiService');
+        const result = await nvidiaChat([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: conversationText }
+        ], { temperature: 0.3, maxTokens: 256 });
+
+        const match = result?.match(/\{[\s\S]*\}/);
+        if (match) {
+            const parsed = JSON.parse(match[0]);
+            return {
+                needsUrgentResponse: parsed.needsUrgentResponse || false,
+                reason: parsed.reason || '',
+                priority: parsed.priority || 'low',
+                hasQuestion: parsed.hasQuestion || false,
+                isUnsatisfied: parsed.isUnsatisfied || false
+            };
+        }
+    } catch (e) {
+        console.warn('Failed to analyze response urgency:', e);
+    }
+
+    // Fallback: simple check for question marks in last message
+    const hasQuestionMark = lastMessage?.message_text?.includes('?');
+    return {
+        needsUrgentResponse: hasQuestionMark,
+        reason: hasQuestionMark ? 'Contains question' : 'Unable to analyze',
+        priority: hasQuestionMark ? 'medium' : 'low',
+        hasQuestion: hasQuestionMark,
+        isUnsatisfied: false
+    };
+};
+
+/**
  * Full conversation analysis - combines all analysis types
  */
 export const analyzeConversation = async (messages, participantName) => {
@@ -187,16 +259,18 @@ export const analyzeConversation = async (messages, participantName) => {
             meeting: { hasMeeting: false, datetime: null, confidence: 0 },
             details: {},
             notes: '',
-            leadScore: { score: 'warm', reason: 'No messages to analyze' }
+            leadScore: { score: 'warm', reason: 'No messages to analyze' },
+            urgency: { needsUrgentResponse: false, reason: 'No messages', priority: 'low' }
         };
     }
 
     // Run analyses in parallel for speed
-    const [meeting, details, notes, leadScore] = await Promise.all([
+    const [meeting, details, notes, leadScore, urgency] = await Promise.all([
         analyzeMeetingIntent(messages),
         extractContactDetails(messages, participantName),
         generateNotes(messages, participantName),
-        qualifyLead(messages)
+        qualifyLead(messages),
+        analyzeResponseUrgency(messages)
     ]);
 
     return {
@@ -204,6 +278,7 @@ export const analyzeConversation = async (messages, participantName) => {
         details,
         notes,
         leadScore,
+        urgency,
         analyzedAt: new Date().toISOString()
     };
 };
@@ -213,5 +288,6 @@ export default {
     extractContactDetails,
     generateNotes,
     qualifyLead,
+    analyzeResponseUrgency,
     analyzeConversation
 };

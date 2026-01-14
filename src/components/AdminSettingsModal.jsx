@@ -56,6 +56,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   const [warningSettings, setWarningSettings] = useState({
     warning_hours: 24,
     danger_hours: 48,
+    response_deadline_hours: 24, // Response deadline for unassigned contacts table
     warning_color: '#f59e0b', // amber
     danger_color: '#ef4444',  // red
     enable_no_activity_warning: true,
@@ -845,6 +846,29 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                         placeholder="#ef4444"
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Response Deadline Setting */}
+                <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                  <h5 style={{ marginBottom: '0.75rem', color: 'var(--text-primary)' }}>⏰ Response Deadline</h5>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    Set the deadline for responding to unassigned contacts. This is shown in the Unassigned Contacts Table view.
+                  </p>
+                  <div className="form-group" style={{ maxWidth: '300px' }}>
+                    <label className="form-label">Response Deadline (hours)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={warningSettings.response_deadline_hours || 24}
+                      onChange={(e) => setWarningSettings(prev => ({ ...prev, response_deadline_hours: parseInt(e.target.value) || 24 }))}
+                      min="1"
+                      max="168"
+                      placeholder="24"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Contacts will show overdue status after this many hours without response
+                    </small>
                   </div>
                 </div>
 

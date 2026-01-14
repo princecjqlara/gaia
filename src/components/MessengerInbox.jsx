@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useFacebookMessenger } from '../hooks/useFacebookMessenger';
 import { facebookService } from '../services/facebookService';
 import WarningDashboard from './WarningDashboard';
+import UnassignedContactsTable from './UnassignedContactsTable';
 import { extractContactDetails, generateNotes } from '../services/aiConversationAnalyzer';
 
 const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
@@ -93,6 +94,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [showArchived, setShowArchived] = useState(false);
     const [archivedConversations, setArchivedConversations] = useState([]);
     const [showWarningDashboard, setShowWarningDashboard] = useState(false);
+    const [showTableView, setShowTableView] = useState(false); // Toggle for unassigned contacts table view
 
 
     // Advanced filtering state
@@ -133,6 +135,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         return {
             warning_hours: 24,
             danger_hours: 48,
+            response_deadline_hours: 24,
             warning_color: '#f59e0b',
             danger_color: '#ef4444',
             enable_no_activity_warning: true,
@@ -254,14 +257,36 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
             }
         })
         .sort((a, b) => {
-            // If smart sort enabled, prioritize conversations awaiting reply
+            // If smart sort enabled, prioritize conversations needing urgent response
             if (smartSort) {
-                // Conversations where last message is NOT from page (customer sent last)
+                // Get urgency from AI analysis (stored when conversation is analyzed)
+                const aUrgency = a.ai_analysis?.urgency;
+                const bUrgency = b.ai_analysis?.urgency;
+
+                // Check if customer sent last message AND needs urgent response
                 const aAwaiting = !a.last_message_from_page && a.unread_count > 0;
                 const bAwaiting = !b.last_message_from_page && b.unread_count > 0;
 
-                if (aAwaiting && !bAwaiting) return -1;
-                if (!aAwaiting && bAwaiting) return 1;
+                // Priority scoring: high=3, medium=2, low=1, none=0
+                const getPriorityScore = (conv, awaiting) => {
+                    if (!awaiting) return 0;
+                    const urgency = conv.ai_analysis?.urgency;
+                    if (urgency?.needsUrgentResponse) {
+                        if (urgency.priority === 'high' || urgency.isUnsatisfied) return 3;
+                        if (urgency.priority === 'medium' || urgency.hasQuestion) return 2;
+                        return 1;
+                    }
+                    // Fallback: check if last message has question mark
+                    if (conv.last_message_text?.includes('?')) return 2;
+                    return awaiting ? 1 : 0;
+                };
+
+                const aPriority = getPriorityScore(a, aAwaiting);
+                const bPriority = getPriorityScore(b, bAwaiting);
+
+                if (aPriority !== bPriority) {
+                    return bPriority - aPriority; // Higher priority first
+                }
             }
             // Then sort by time
             return new Date(b.last_message_time) - new Date(a.last_message_time);
@@ -640,6 +665,45 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                 </button>
             </div>
 
+            {/* Unassigned Contacts Table View */}
+            {showTableView && (
+                <div style={{
+                    padding: '1rem',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-lg)',
+                    marginBottom: '1rem',
+                    border: '1px solid var(--border-color)'
+                }}>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '1rem'
+                    }}>
+                        <h3 style={{ margin: 0, fontSize: '1.125rem' }}>
+                            📊 Unassigned Contacts Table
+                        </h3>
+                        <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => setShowTableView(false)}
+                        >
+                            ✕ Close Table View
+                        </button>
+                    </div>
+                    <UnassignedContactsTable
+                        conversations={conversations}
+                        onSelectConversation={(conv) => {
+                            selectConversation(conv);
+                            setMobileView('chat');
+                            setShowTableView(false);
+                        }}
+                        onAssign={assignToUser}
+                        users={users}
+                        responseDeadlineHours={warningSettings.response_deadline_hours || 24}
+                    />
+                </div>
+            )}
+
             <div className="messenger-grid" style={{
                 display: 'grid',
                 gridTemplateColumns: '280px 1fr 260px',
@@ -707,6 +771,14 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             )}
                         </h3>
                         <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <button
+                                className={`btn btn-sm ${showTableView ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setShowTableView(!showTableView)}
+                                title="Toggle unassigned contacts table view"
+                                style={{ minWidth: '32px', padding: '0.35rem 0.5rem' }}
+                            >
+                                📊
+                            </button>
                             <button
                                 className="btn btn-sm btn-secondary"
                                 onClick={() => setShowBulkModal(true)}
@@ -1660,9 +1732,36 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                         selectedConversation.participant_name?.charAt(0)?.toUpperCase() || '?'
                                     )}
                                 </div>
-                                <h4 style={{ margin: 0 }}>
-                                    {selectedConversation.participant_name || 'Unknown'}
-                                </h4>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <h4 style={{ margin: 0 }}>
+                                        {selectedConversation.participant_name || 'Unknown'}
+                                    </h4>
+                                    {!selectedConversation.participant_name && (
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    const result = await facebookService.refreshContactName(
+                                                        selectedConversation.conversation_id,
+                                                        selectedConversation.participant_id,
+                                                        selectedConversation.page_id
+                                                    );
+                                                    if (result) {
+                                                        // Reload conversations to show updated name
+                                                        await loadConversations();
+                                                        alert('Name refreshed: ' + result);
+                                                    }
+                                                } catch (err) {
+                                                    alert('Could not refresh name: ' + err.message);
+                                                }
+                                            }}
+                                            className="btn btn-sm btn-secondary"
+                                            title="Try to fetch name from Facebook"
+                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                                        >
+                                            🔄 Refresh
+                                        </button>
+                                    )}
+                                </div>
                                 {selectedConversation.participant_email && (
                                     <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                                         {selectedConversation.participant_email}
