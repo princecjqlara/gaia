@@ -235,6 +235,9 @@ async function handleIncomingMessage(pageId, event) {
 
         // Upsert conversation
         // Use participant_id + page_id as conflict key to prevent duplicate contacts
+        // AUTO-ENABLE AI for all contacts and set default goal
+        const isNewConversation = !existingConv;
+
         const { error: convError } = await db
             .from('facebook_conversations')
             .upsert({
@@ -246,11 +249,24 @@ async function handleIncomingMessage(pageId, event) {
                 last_message_time: new Date(timestamp).toISOString(),
                 last_message_from_page: isFromPage,
                 unread_count: newUnreadCount,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                // AUTO-ENABLE: AI is enabled by default for all contacts
+                ai_enabled: existingConv?.ai_enabled ?? true,
+                // Set default goal if not already set (can be overridden)
+                active_goal_id: existingConv?.active_goal_id || 'booking',
+                // Allow re-entry: reset goal_completed for re-engagement
+                goal_completed: existingConv?.goal_completed === true
+                    ? (isNewConversation ? false : existingConv.goal_completed)
+                    : false
             }, {
                 onConflict: 'participant_id,page_id',
                 ignoreDuplicates: false
             });
+
+        // Log new contact creation
+        if (isNewConversation) {
+            console.log(`[WEBHOOK] NEW CONTACT: ${participantName || participantId} - AI enabled, goal=booking`);
+        }
 
         if (convError) {
             console.error('[WEBHOOK] Error saving conversation:', convError);
