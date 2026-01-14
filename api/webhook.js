@@ -487,9 +487,34 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
             cooldown_until: conversation?.cooldown_until
         });
 
-        // TEMPORARILY BYPASS ALL CHECKS FOR DEBUGGING
-        // TODO: Remove this after confirming AI works
-        console.log('[WEBHOOK] Bypassing checks for debugging...');
+        // Check admin settings - respect all configurations
+        if (config.auto_respond_to_new_messages === false) {
+            console.log('[WEBHOOK] AI auto-respond disabled in admin settings');
+            return;
+        }
+
+        // Check conversation-level AI settings
+        if (conversation?.ai_enabled === false) {
+            console.log('[WEBHOOK] AI disabled for this conversation');
+            return;
+        }
+
+        // Check if human has taken over
+        if (conversation?.human_takeover === true) {
+            console.log('[WEBHOOK] Human takeover active - AI skipping');
+            return;
+        }
+
+        // Check cooldown
+        if (conversation?.cooldown_until) {
+            const cooldownTime = new Date(conversation.cooldown_until);
+            if (cooldownTime > new Date()) {
+                console.log('[WEBHOOK] AI in cooldown until:', conversation.cooldown_until);
+                return;
+            }
+        }
+
+        console.log('[WEBHOOK] All checks passed - proceeding with AI response');
 
         // Get page access token
         const { data: page } = await db
