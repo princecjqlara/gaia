@@ -50,20 +50,30 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             setBestTime(time);
 
             // Load admin config to check if goals are admin-controlled
+            // Check localStorage first (always available), then try database
+            let loadedConfig = null;
+            try {
+                const localConfig = localStorage.getItem('ai_chatbot_config');
+                if (localConfig) {
+                    loadedConfig = JSON.parse(localConfig);
+                }
+            } catch { }
+
+            // Try database as secondary source
             try {
                 const { data: settings } = await supabase
                     .from('settings')
                     .select('value')
                     .eq('key', 'ai_chatbot_config')
                     .single();
-                setAdminConfig(settings?.value || null);
+                if (settings?.value) {
+                    loadedConfig = settings.value;
+                }
             } catch (e) {
-                // Try localStorage as fallback
-                try {
-                    const localConfig = localStorage.getItem('ai_chatbot_config');
-                    setAdminConfig(localConfig ? JSON.parse(localConfig) : null);
-                } catch { }
+                console.log('[AI Panel] Could not load admin config from DB:', e.message);
             }
+
+            setAdminConfig(loadedConfig);
         } catch (error) {
             console.error('Error loading AI panel data:', error);
         }
