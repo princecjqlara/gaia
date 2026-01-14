@@ -18,7 +18,7 @@ export default function BestTimesOverview({ onClose }) {
 
     const loadBestTimes = async () => {
         try {
-            // Get all conversations with engagement data
+            // Get ALL conversations (not just AI enabled)
             const { data: conversations, error } = await supabase
                 .from('facebook_conversations')
                 .select(`
@@ -26,11 +26,12 @@ export default function BestTimesOverview({ onClose }) {
                     participant_name,
                     participant_id,
                     ai_enabled,
+                    active_goal_id,
+                    goal_completed,
                     last_message_time
                 `)
-                .eq('ai_enabled', true)
                 .order('last_message_time', { ascending: false })
-                .limit(100);
+                .limit(200);
 
             if (error) throw error;
 

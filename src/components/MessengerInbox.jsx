@@ -1245,6 +1245,31 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                                     {conv.unread_count}
                                                 </div>
                                             )}
+
+                                            {/* Goal Badge with Completion Status */}
+                                            {conv.active_goal_id && (
+                                                <div style={{
+                                                    background: conv.goal_completed ? 'var(--success)' : 'var(--bg-tertiary)',
+                                                    color: conv.goal_completed ? 'white' : 'var(--text-muted)',
+                                                    borderRadius: '999px',
+                                                    padding: '0.125rem 0.5rem',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: '500',
+                                                    flexShrink: 0,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                    border: conv.goal_completed ? 'none' : '1px solid var(--border-color)'
+                                                }}>
+                                                    {conv.goal_completed && '✓ '}
+                                                    {conv.active_goal_id === 'booking' && '📅'}
+                                                    {conv.active_goal_id === 'closing' && '💰'}
+                                                    {conv.active_goal_id === 'follow_up' && '🔄'}
+                                                    {conv.active_goal_id === 'qualification' && '🎯'}
+                                                    {conv.active_goal_id === 'information' && 'ℹ️'}
+                                                    {' '}{conv.active_goal_id.replace('_', ' ')}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );

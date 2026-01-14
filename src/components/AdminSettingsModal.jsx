@@ -2023,6 +2023,71 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                       style={{ width: '20px', height: '20px', accentColor: '#6366f1', cursor: 'pointer' }}
                     />
                   </label>
+
+                  {/* Default Goal Selector */}
+                  <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span>🎯 Default Goal for New Contacts</span>
+                    </div>
+                    <select
+                      defaultValue={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.default_goal || 'booking';
+                        } catch { return 'booking'; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.default_goal = e.target.value;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        marginBottom: '0.5rem'
+                      }}
+                    >
+                      <option value="booking">📅 Book a Call</option>
+                      <option value="closing">💰 Close Sale</option>
+                      <option value="follow_up">🔄 Re-engage Lead</option>
+                      <option value="qualification">🎯 Qualify Lead</option>
+                      <option value="information">ℹ️ Provide Information</option>
+                    </select>
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Apply this goal to ALL existing contacts? This cannot be undone.')) return;
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          const goal = config.default_goal || 'booking';
+
+                          const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+                          const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+                          if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
+
+                          const { createClient } = await import('@supabase/supabase-js');
+                          const db = createClient(supabaseUrl, supabaseKey);
+
+                          const { error } = await db
+                            .from('facebook_conversations')
+                            .update({ active_goal_id: goal, goal_completed: false })
+                            .not('opt_out', 'eq', true);
+
+                          if (error) throw error;
+                          alert(`✅ Applied goal "${goal}" to all contacts!`);
+                        } catch (err) {
+                          alert('❌ Failed: ' + err.message);
+                        }
+                      }}
+                      className="btn btn-sm btn-secondary"
+                      style={{ width: '100%', fontSize: '0.75rem' }}
+                    >
+                      🔄 Apply Goal to All Existing Contacts
+                    </button>
+                  </div>
                 </div>
               </div>
 
