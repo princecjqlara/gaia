@@ -889,16 +889,28 @@ When customer wants to schedule/book, share this: ${config.booking_url}
                             console.error('[WEBHOOK] Calendar insert error:', calErr.message);
                         }
 
-                        // Move contact to 'booked' pipeline stage
+                        // Move contact to 'booked' pipeline stage with contact details
                         try {
+                            const updateData = {
+                                pipeline_stage: 'booked',
+                                booking_date: bookingDate.toISOString(),
+                                booked_at: new Date().toISOString()
+                            };
+
+                            // Save phone number if provided
+                            if (phone && phone.length > 5) {
+                                updateData.phone_number = phone;
+                            }
+
                             await db
                                 .from('facebook_conversations')
-                                .update({
-                                    pipeline_stage: 'booked',
-                                    booking_date: bookingDate.toISOString()
-                                })
+                                .update(updateData)
                                 .eq('conversation_id', conversationId);
-                            console.log('[WEBHOOK] ✅ Contact moved to BOOKED pipeline');
+
+                            console.log('[WEBHOOK] ✅ Contact moved to BOOKED pipeline with details:', {
+                                booking_date: bookingDate.toISOString(),
+                                phone: phone || 'not provided'
+                            });
                         } catch (pipeErr) {
                             console.error('[WEBHOOK] Pipeline update error:', pipeErr.message);
                         }
