@@ -505,14 +505,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
             return;
         }
 
-        // Check cooldown
-        if (conversation?.cooldown_until) {
-            const cooldownTime = new Date(conversation.cooldown_until);
-            if (cooldownTime > new Date()) {
-                console.log('[WEBHOOK] AI in cooldown until:', conversation.cooldown_until);
-                return;
-            }
-        }
+        // Cooldown check removed - AI always responds immediately
 
         console.log('[WEBHOOK] All checks passed - proceeding with AI response');
 
