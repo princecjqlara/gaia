@@ -840,35 +840,39 @@ When customer wants to schedule/book, share this: ${config.booking_url}
                     // Try to parse date/time
                     const bookingDate = new Date(dateTimeStr);
                     if (!isNaN(bookingDate.getTime())) {
-                        // Create calendar event
-                        const { error: calError } = await db
-                            .from('calendar_events')
-                            .insert({
-                                title: `Meeting: ${customerName}`,
-                                description: `Booked via AI chatbot\nPhone: ${phone}\nConversation: ${conversationId}`,
-                                start_time: bookingDate.toISOString(),
-                                end_time: new Date(bookingDate.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour
-                                event_type: 'meeting',
-                                status: 'scheduled',
-                                attendees: [customerName],
-                                notes: `AI booked for ${conversation?.participant_name || 'Unknown'}`
-                            });
+                        // Create calendar event - skip if fails, don't block message sending
+                        try {
+                            const { error: calError } = await db
+                                .from('calendar_events')
+                                .insert({
+                                    title: `Meeting: ${customerName}`,
+                                    description: `Booked via AI chatbot\nPhone: ${phone}\nConversation: ${conversationId}`,
+                                    start_time: bookingDate.toISOString(),
+                                    end_time: new Date(bookingDate.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour
+                                    event_type: 'meeting',
+                                    status: 'scheduled',
+                                    attendees: [customerName],
+                                    notes: `AI booked for ${conversation?.participant_name || 'Unknown'}`
+                                });
 
-                        if (calError) {
-                            console.error('[WEBHOOK] Calendar event creation failed:', calError.message);
-                        } else {
-                            console.log('[WEBHOOK] ✅ Calendar event created for', bookingDate);
-
-                            // Mark goal as completed
-                            await db
-                                .from('facebook_conversations')
-                                .update({ goal_completed: true })
-                                .eq('conversation_id', conversationId);
+                            if (calError) {
+                                console.error('[WEBHOOK] Calendar event creation failed:', calError.message);
+                            } else {
+                                console.log('[WEBHOOK] ✅ Calendar event created for', bookingDate);
+                            }
+                        } catch (calErr) {
+                            console.error('[WEBHOOK] Calendar insert error:', calErr.message);
                         }
                     }
 
                     // Remove the BOOKING_CONFIRMED line from the reply (it's internal)
                     aiReply = aiReply.replace(/BOOKING_CONFIRMED:\s*.+/gi, '').trim();
+
+                    // If reply is now empty, add a confirmation message
+                    if (!aiReply) {
+                        aiReply = `Noted po! ✅ I've scheduled your consultation for ${dateTimeStr}. Thank you for booking with us! See you there! 🎉`;
+                        console.log('[WEBHOOK] Added fallback confirmation message');
+                    }
                 }
             } catch (bookingErr) {
                 console.log('[WEBHOOK] Booking parsing error (non-fatal):', bookingErr.message);
