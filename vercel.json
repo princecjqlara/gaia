@@ -1,14 +1,4 @@
 {
-    "crons": [
-        {
-            "path": "/api/cron/ai-followup",
-            "schedule": "* * * * *"
-        },
-        {
-            "path": "/api/cron/ai-silence",
-            "schedule": "* * * * *"
-        }
-    ],
     "rewrites": [
         {
             "source": "/room/:slug*",
