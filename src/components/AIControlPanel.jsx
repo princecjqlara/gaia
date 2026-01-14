@@ -478,6 +478,31 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                     </span>
                                                 </div>
                                             )}
+                                            {nextFollowUp.reason && (
+                                                <div style={{
+                                                    marginTop: '12px',
+                                                    padding: '10px 12px',
+                                                    background: 'rgba(168, 85, 247, 0.15)',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid rgba(168, 85, 247, 0.3)'
+                                                }}>
+                                                    <div style={{
+                                                        fontSize: '11px',
+                                                        color: '#c084fc',
+                                                        fontWeight: 600,
+                                                        marginBottom: '4px'
+                                                    }}>
+                                                        🧠 AI Intuition
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: '12px',
+                                                        color: '#e9d5ff',
+                                                        lineHeight: '1.4'
+                                                    }}>
+                                                        {nextFollowUp.reason}
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div style={{
                                                 fontSize: '11px',
                                                 color: '#9ca3af',
