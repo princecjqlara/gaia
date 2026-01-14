@@ -1997,6 +1997,212 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                 </div>
               </div>
 
+              {/* Knowledge Base */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📚 Knowledge Base</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Add information about your business that the AI should know (services, pricing, FAQs, policies)
+                </p>
+                <textarea
+                  className="form-input"
+                  rows={6}
+                  placeholder={`Example:
+- We are Ares Campy, a digital marketing agency
+- Services: Facebook Ads Management, Content Creation, Funnel Building
+- Pricing: Basic ₱1,799/mo, Star ₱2,999/mo, Fire ₱3,499/mo, Crown ₱5,799/mo
+- Office hours: Mon-Fri 9AM-6PM
+- Payment: GCash, Bank Transfer, PayMaya`}
+                  defaultValue={(() => {
+                    try {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      return config.knowledge_base || '';
+                    } catch { return ''; }
+                  })()}
+                  onChange={(e) => {
+                    const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                    config.knowledge_base = e.target.value;
+                    localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                  }}
+                  style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem' }}
+                />
+              </div>
+
+              {/* System Prompt */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🎯 System Prompt (Bot Personality)</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Define how the AI should behave and respond to customers
+                </p>
+                <textarea
+                  className="form-input"
+                  rows={5}
+                  placeholder={`Example:
+You are a friendly and professional sales assistant for a digital marketing agency. 
+Be helpful, concise, and guide customers toward booking a consultation.
+Use Tagalog/English mix when appropriate. Be enthusiastic but not pushy.
+Always ask for the customer's name and business type early in the conversation.`}
+                  defaultValue={(() => {
+                    try {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      return config.system_prompt || '';
+                    } catch { return ''; }
+                  })()}
+                  onChange={(e) => {
+                    const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                    config.system_prompt = e.target.value;
+                    localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                  }}
+                  style={{ resize: 'vertical', fontSize: '0.875rem' }}
+                />
+              </div>
+
+              {/* Follow-up Prompts */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💬 Follow-up Message Templates</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Templates for automated follow-up messages. Use {'{name}'} for contact's first name.
+                </p>
+
+                <div style={{ display: 'grid', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Initial Follow-up (after 24h silence)</label>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      placeholder="Hi {name}! 👋 Just checking in - did you have any questions about our services?"
+                      defaultValue={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.followup_initial || '';
+                        } catch { return ''; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.followup_initial = e.target.value;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{ resize: 'vertical', fontSize: '0.875rem' }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Second Follow-up (after 48h)</label>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      placeholder="Hey {name}! 😊 I noticed you might still be thinking about it. Would a quick call help answer your questions?"
+                      defaultValue={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.followup_second || '';
+                        } catch { return ''; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.followup_second = e.target.value;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{ resize: 'vertical', fontSize: '0.875rem' }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Re-engagement (after 7+ days)</label>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      placeholder="Hi {name}! We have some new packages that might interest you. Want to hear about them? 🚀"
+                      defaultValue={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.followup_reengagement || '';
+                        } catch { return ''; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.followup_reengagement = e.target.value;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{ resize: 'vertical', fontSize: '0.875rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Conversation Goals/Flow */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🎯 Conversation Goals</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Define what the AI should try to achieve in conversations
+                </p>
+
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {[
+                    { key: 'goal_collect_info', label: 'Collect customer info (name, business, contact)', icon: '📝' },
+                    { key: 'goal_qualify_lead', label: 'Qualify leads (budget, timeline, needs)', icon: '🎯' },
+                    { key: 'goal_book_meeting', label: 'Book consultation/meeting', icon: '📅' },
+                    { key: 'goal_send_pricing', label: 'Send pricing information', icon: '💰' },
+                    { key: 'goal_answer_faq', label: 'Answer common questions', icon: '❓' }
+                  ].map(goal => (
+                    <div
+                      key={goal.key}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.75rem 1rem',
+                        background: 'var(--bg-tertiary)',
+                        borderRadius: 'var(--radius-md)'
+                      }}
+                    >
+                      <span>{goal.icon} {goal.label}</span>
+                      <input
+                        type="checkbox"
+                        defaultChecked={(() => {
+                          try {
+                            const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                            return config[goal.key] !== false;
+                          } catch { return true; }
+                        })()}
+                        onChange={(e) => {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          config[goal.key] = e.target.checked;
+                          localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                        }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Booking Link */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🔗 Booking Link</h5>
+                <div className="form-group">
+                  <label className="form-label">URL for booking appointments</label>
+                  <input
+                    type="url"
+                    className="form-input"
+                    placeholder="https://yoursite.com/book or Calendly link"
+                    defaultValue={(() => {
+                      try {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        return config.booking_url || '';
+                      } catch { return ''; }
+                    })()}
+                    onChange={(e) => {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      config.booking_url = e.target.value;
+                      localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                    }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    The AI will share this link when trying to book meetings
+                  </small>
+                </div>
+              </div>
+
               {/* Info Box */}
               <div style={{
                 padding: '1rem',
