@@ -3,6 +3,7 @@ import { useFacebookMessenger } from '../hooks/useFacebookMessenger';
 import { facebookService } from '../services/facebookService';
 import WarningDashboard from './WarningDashboard';
 import AIControlPanel from './AIControlPanel';
+import AIChatbotSettings from './AIChatbotSettings';
 import { extractContactDetails, generateNotes } from '../services/aiConversationAnalyzer';
 
 const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
@@ -95,6 +96,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [archivedConversations, setArchivedConversations] = useState([]);
     const [showWarningDashboard, setShowWarningDashboard] = useState(false);
     const [showAIControlPanel, setShowAIControlPanel] = useState(false);
+    const [showAIChatbotSettings, setShowAIChatbotSettings] = useState(false);
 
 
     // Advanced filtering state
@@ -732,6 +734,14 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             )}
                         </h3>
                         <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => setShowAIChatbotSettings(true)}
+                                title="AI Chatbot Settings"
+                                style={{ minWidth: '32px', padding: '0.35rem 0.5rem', background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', border: 'none', color: 'white' }}
+                            >
+                                🤖
+                            </button>
                             <button
                                 className="btn btn-sm btn-secondary"
                                 onClick={() => setShowBulkModal(true)}
@@ -2756,6 +2766,13 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     conversationId={selectedConversation.conversation_id}
                     participantName={selectedConversation.participant_name}
                     onClose={() => setShowAIControlPanel(false)}
+                />
+            )}
+
+            {/* AI Chatbot Settings Modal */}
+            {showAIChatbotSettings && (
+                <AIChatbotSettings
+                    onClose={() => setShowAIChatbotSettings(false)}
                 />
             )}
         </>
