@@ -412,12 +412,14 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
         }
 
         // Model rotation - try each model until one works
+        // These are CLOUD API models available on build.nvidia.com (not NIM-only)
         const MODELS = [
-            'deepseek-ai/deepseek-r1',
-            'meta/llama-3.3-70b-instruct',
-            'mistralai/mistral-large-2-instruct',
+            'meta/llama-3.1-405b-instruct',
+            'meta/llama-3.1-70b-instruct',
+            'mistralai/mixtral-8x22b-instruct-v0.1',
+            'mistralai/mistral-7b-instruct-v0.3',
             'google/gemma-2-27b-it',
-            'nvidia/llama-3.1-nemotron-70b-instruct'
+            'microsoft/phi-3-medium-128k-instruct'
         ];
 
         let aiReply = null;
