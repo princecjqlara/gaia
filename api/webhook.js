@@ -233,39 +233,51 @@ async function handleIncomingMessage(pageId, event) {
             }
         }
 
-        // Upsert conversation
-        // Use participant_id + page_id as conflict key to prevent duplicate contacts
-        // AUTO-ENABLE AI for all contacts and set default goal
+
+        // Save/update conversation - use select + insert/update pattern for robustness
+        // This works regardless of whether unique constraint exists
         const isNewConversation = !existingConv;
 
-        const { error: convError } = await db
-            .from('facebook_conversations')
-            .upsert({
-                conversation_id: conversationId,
-                page_id: pageId,
-                participant_id: participantId,
-                participant_name: participantName || null,
-                last_message_text: message.text || '[Attachment]',
-                last_message_time: new Date(timestamp).toISOString(),
-                last_message_from_page: isFromPage,
-                unread_count: newUnreadCount,
-                updated_at: new Date().toISOString(),
-                // AUTO-ENABLE: AI is enabled by default for all contacts
-                ai_enabled: existingConv?.ai_enabled ?? true,
-                // Set default goal if not already set (can be overridden)
-                active_goal_id: existingConv?.active_goal_id || 'booking',
-                // Allow re-entry: reset goal_completed for re-engagement
-                goal_completed: existingConv?.goal_completed === true
-                    ? (isNewConversation ? false : existingConv.goal_completed)
-                    : false
-            }, {
-                onConflict: 'participant_id,page_id',
-                ignoreDuplicates: false
-            });
+        const conversationData = {
+            conversation_id: conversationId,
+            page_id: pageId,
+            participant_id: participantId,
+            participant_name: participantName || null,
+            last_message_text: message.text || '[Attachment]',
+            last_message_time: new Date(timestamp).toISOString(),
+            last_message_from_page: isFromPage,
+            unread_count: newUnreadCount,
+            updated_at: new Date().toISOString(),
+            // AUTO-ENABLE: AI is enabled by default for all contacts
+            ai_enabled: existingConv?.ai_enabled ?? true,
+            // Set default goal if not already set (can be overridden)  
+            active_goal_id: existingConv?.active_goal_id || 'booking',
+            // Allow re-entry: reset goal_completed for re-engagement
+            goal_completed: existingConv?.goal_completed === true
+                ? (isNewConversation ? false : existingConv.goal_completed)
+                : false
+        };
 
-        // Log new contact creation
+        let convError = null;
+
         if (isNewConversation) {
-            console.log(`[WEBHOOK] NEW CONTACT: ${participantName || participantId} - AI enabled, goal=booking`);
+            // INSERT new conversation
+            const { error } = await db
+                .from('facebook_conversations')
+                .insert(conversationData);
+            convError = error;
+
+            if (!error) {
+                console.log(`[WEBHOOK] NEW CONTACT: ${participantName || participantId} - AI enabled, goal=booking`);
+            }
+        } else {
+            // UPDATE existing conversation
+            const { error } = await db
+                .from('facebook_conversations')
+                .update(conversationData)
+                .eq('participant_id', participantId)
+                .eq('page_id', pageId);
+            convError = error;
         }
 
         if (convError) {
