@@ -364,8 +364,11 @@ async function handleIncomingMessage(pageId, event) {
         convError = error;
 
         if (error) {
-            console.error(`[WEBHOOK] CONVERSATION UPSERT FAILED:`, JSON.stringify(error));
-            console.error(`[WEBHOOK] Data attempted:`, JSON.stringify(conversationData));
+            console.error(`[WEBHOOK] UPSERT FAILED - Code: ${error.code}`);
+            console.error(`[WEBHOOK] UPSERT FAILED - Message: ${error.message}`);
+            console.error(`[WEBHOOK] UPSERT FAILED - Details: ${error.details}`);
+            console.error(`[WEBHOOK] UPSERT FAILED - Hint: ${error.hint}`);
+            console.error(`[WEBHOOK] Conv ID: ${conversationId}, Page: ${pageId}, Participant: ${participantId}`);
             console.error('[WEBHOOK] Aborting - conversation not saved');
             return;
         }
