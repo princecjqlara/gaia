@@ -429,10 +429,27 @@ Respond in ${language} (mix of Tagalog and English). Be natural and conversation
 Contact Name: ${conversation?.participant_name || 'Customer'}
 `;
 
+        // Add ACTIVE GOAL for the conversation
+        const activeGoal = conversation?.active_goal_id || 'booking';
+        const goalDescriptions = {
+            'booking': 'Get the customer to book a consultation or meeting. Guide them towards scheduling.',
+            'qualification': 'Qualify the lead - understand their needs, budget, and timeline.',
+            'information': 'Provide information about services and answer questions helpfully.',
+            'follow_up': 'Re-engage the contact and move them towards next steps.',
+            'closing': 'Close the deal - confirm package selection and payment.'
+        };
+
+        aiPrompt += `
+## 🎯 YOUR CURRENT GOAL (CRITICAL - This is your PRIMARY objective)
+Goal: ${activeGoal.toUpperCase()}
+Instructions: ${goalDescriptions[activeGoal] || 'Help the customer and guide them towards taking action.'}
+Every response should move the conversation closer to achieving this goal.
+`;
+
         // Add Knowledge Base (company info, services, etc.)
         if (knowledgeBase) {
             aiPrompt += `
-## Knowledge Base (About the Business)
+## 📚 Knowledge Base (About the Business - USE THIS INFO)
 ${knowledgeBase}
 `;
         }
@@ -440,24 +457,36 @@ ${knowledgeBase}
         // Add FAQ section for RAG
         if (faqContent) {
             aiPrompt += `
-## Frequently Asked Questions (Use these to answer queries)
+## ❓ FAQ (MUST USE these exact answers when relevant)
 ${faqContent}
 `;
         }
 
-        // Add bot rules
+        // Add bot rules with stronger emphasis
         if (config.bot_rules_dos) {
             aiPrompt += `
-## DO's
+## ✅ STRICT RULES - DO's (YOU MUST FOLLOW THESE)
 ${config.bot_rules_dos}
 `;
         }
         if (config.bot_rules_donts) {
             aiPrompt += `
-## DON'Ts
+## ❌ STRICT RULES - DON'Ts (NEVER DO THESE)
 ${config.bot_rules_donts}
 `;
         }
+
+        // Debug: Log all config being used
+        console.log('[WEBHOOK] AI Config Applied:', {
+            hasSystemPrompt: !!config.system_prompt,
+            hasKnowledgeBase: !!knowledgeBase,
+            hasFaq: !!faqContent,
+            hasDos: !!config.bot_rules_dos,
+            hasDonts: !!config.bot_rules_donts,
+            hasBookingUrl: !!config.booking_url,
+            activeGoal: activeGoal,
+            language: language
+        });
 
         // Add booking info if configured
         if (config.booking_url) {
