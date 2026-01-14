@@ -258,7 +258,7 @@ You must respond with ONLY valid JSON (no markdown, no explanation):
 {
   "skip_followup": <true/false>,
   "skip_reason": "<if skip is true, why>",
-  "wait_minutes": <number between 5-120>,
+  "wait_minutes": <number between 5-720>,
   "reason": "<brief explanation>",
   "conversation_summary": {
     "interest_level": "<hot|warm|cold|unknown>",
@@ -276,15 +276,23 @@ WHEN TO SKIP:
 - Customer is busy (in a meeting, etc.)
 - Already booked/converted
 
-ULTRA-AGGRESSIVE TIMING (IN MINUTES!):
+SMART TIMING (avoid spamming!):
+
+⚡ AGGRESSIVE (within first 2 hours of silence):
 - Silent 5-15 mins: wait 5-10 mins (they might be typing)
 - Silent 15-30 mins: wait 10-15 mins (quick check-in)
 - Silent 30-60 mins: wait 15-30 mins (are you still there?)  
 - Silent 1-2 hours: wait 30-60 mins (let me know if busy)
-- Silent 2+ hours: wait 60-120 mins (following up)
 - Showed buying intent: wait 5-10 mins (DON'T LET THEM GO!)
 - Was about to book: wait 5 mins (IMMEDIATE!)
-- Asked questions: wait 10-15 mins`;
+
+🐢 SLOW DOWN (after 2+ hours of silence - they need space):
+- Silent 2-4 hours: wait 90-120 mins (give them time)
+- Silent 4-8 hours: wait 2-3 hours (120-180 mins)
+- Silent 8-24 hours: wait 4-6 hours (240-360 mins)  
+- Silent 24+ hours: wait 6-12 hours (they may be busy for longer)
+
+IMPORTANT: If we've already followed up 2-3 times with no response, give them MORE space (longer waits).`;
 
                             const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
                                 method: 'POST',
@@ -313,8 +321,8 @@ ULTRA-AGGRESSIVE TIMING (IN MINUTES!):
                                     continue; // Skip to next conversation
                                 }
 
-                                // Use MINUTES for ultra-aggressive follow-up
-                                const waitMinutes = Math.min(Math.max(parsed.wait_minutes || 30, 5), 120);
+                                // Smart timing: min 5 mins, max 720 mins (12 hours) for slowdown
+                                const waitMinutes = Math.min(Math.max(parsed.wait_minutes || 30, 5), 720);
                                 analysis = {
                                     wait_minutes: waitMinutes,
                                     reason: parsed.reason || `Silent for ${minutesSince} mins - urgent follow-up`,
