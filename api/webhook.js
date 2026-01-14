@@ -277,8 +277,8 @@ async function handleIncomingMessage(pageId, event) {
             updated_at: new Date().toISOString(),
             // AUTO-ENABLE: AI is enabled by default for all contacts
             ai_enabled: existingConv?.ai_enabled ?? true,
-            // Set default goal if not already set (can be overridden)  
-            active_goal_id: existingConv?.active_goal_id || 'booking',
+            // Set default goal if not already set - use null for new (column is UUID type)  
+            active_goal_id: existingConv?.active_goal_id || null,
             // Allow re-entry: reset goal_completed for re-engagement
             goal_completed: existingConv?.goal_completed === true
                 ? (isNewConversation ? false : existingConv.goal_completed)
