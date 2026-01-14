@@ -527,50 +527,79 @@ class FacebookService {
 
     /**
      * Send a message via Facebook Graph API
+     * Automatically uses ACCOUNT_UPDATE tag when outside 24-hour messaging window
      */
-    async sendMessage(pageId, recipientId, messageText) {
+    async sendMessage(pageId, recipientId, messageText, conversationId = null) {
         try {
             // Get page access token
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
             if (!page) throw new Error('Page not found');
 
+            // Check if we need to use a message tag (outside 24h window)
+            let useMessageTag = false;
+            let lastMessageTime = null;
+
+            // Get conversation to check last_message_time
+            const { data: conv } = await getSupabase()
+                .from('facebook_conversations')
+                .select('conversation_id, last_message_time')
+                .eq('participant_id', recipientId)
+                .eq('page_id', pageId)
+                .single();
+
+            if (conv?.last_message_time) {
+                const hoursSinceLastActivity = (Date.now() - new Date(conv.last_message_time).getTime()) / (1000 * 60 * 60);
+                useMessageTag = hoursSinceLastActivity > 24;
+                console.log(`[SEND] Hours since last activity: ${hoursSinceLastActivity.toFixed(1)}, Using tag: ${useMessageTag}`);
+            }
+
+            // Build request body
+            const requestBody = {
+                recipient: { id: recipientId },
+                message: { text: messageText }
+            };
+
+            // Add MESSAGE_TAG if outside 24-hour window
+            if (useMessageTag) {
+                requestBody.messaging_type = 'MESSAGE_TAG';
+                requestBody.tag = 'ACCOUNT_UPDATE';
+                console.log(`[SEND] Using ACCOUNT_UPDATE tag (outside 24h window)`);
+            }
+
             const response = await fetch(
                 `${GRAPH_API_BASE}/${pageId}/messages?access_token=${page.page_access_token}`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        recipient: { id: recipientId },
-                        message: { text: messageText }
-                    })
+                    body: JSON.stringify(requestBody)
                 }
             );
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'Failed to send message');
+                const errorMessage = errorData.error?.message || 'Failed to send message';
+
+                // If it's a 24-hour window error and we didn't use a tag, retry with tag
+                if (errorMessage.includes('24 hour') && !useMessageTag) {
+                    console.log(`[SEND] Retrying with ACCOUNT_UPDATE tag due to 24h window error`);
+                    return this.sendMessageWithTag(pageId, recipientId, messageText, 'ACCOUNT_UPDATE');
+                }
+
+                throw new Error(errorMessage);
             }
 
             const result = await response.json();
 
             // Pre-save message with sent_source='app' so webhook can detect it
             if (result.message_id) {
-                // Get conversation_id for this recipient
-                const { data: conv } = await getSupabase()
-                    .from('facebook_conversations')
-                    .select('conversation_id')
-                    .eq('participant_id', recipientId)
-                    .eq('page_id', pageId)
-                    .single();
-
-                const conversationId = conv?.conversation_id || `t_${recipientId}`;
+                const targetConvId = conv?.conversation_id || conversationId || `t_${recipientId}`;
 
                 await getSupabase()
                     .from('facebook_messages')
                     .upsert({
                         message_id: result.message_id,
-                        conversation_id: conversationId,
+                        conversation_id: targetConvId,
                         sender_id: pageId,
                         message_text: messageText,
                         is_from_page: true,
@@ -579,7 +608,7 @@ class FacebookService {
                         is_read: true
                     }, { onConflict: 'message_id' });
 
-                console.log(`[SEND] Message ${result.message_id} saved with sent_source='app'`);
+                console.log(`[SEND] Message ${result.message_id} saved with sent_source='app'${useMessageTag ? ' (used tag)' : ''}`);
             }
 
             return result;
