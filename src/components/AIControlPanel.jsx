@@ -328,21 +328,23 @@ export default function AIControlPanel({ conversationId, participantName, onClos
 
                 {/* Tabs */}
                 <div style={styles.tabs}>
-                    {['status', 'goals', 'followups', 'history'].map(tab => (
-                        <button
-                            key={tab}
-                            style={{
-                                ...styles.tab,
-                                ...(activeTab === tab ? styles.activeTab : {})
-                            }}
-                            onClick={() => setActiveTab(tab)}
-                        >
-                            {tab === 'status' && '📊 Status'}
-                            {tab === 'goals' && '🎯 Goals'}
-                            {tab === 'followups' && '📅 Follow-ups'}
-                            {tab === 'history' && '📜 History'}
-                        </button>
-                    ))}
+                    {['status', 'goals', 'followups', 'history']
+                        .filter(tab => !(tab === 'goals' && adminConfig?.default_goal))
+                        .map(tab => (
+                            <button
+                                key={tab}
+                                style={{
+                                    ...styles.tab,
+                                    ...(activeTab === tab ? styles.activeTab : {})
+                                }}
+                                onClick={() => setActiveTab(tab)}
+                            >
+                                {tab === 'status' && '📊 Status'}
+                                {tab === 'goals' && '🎯 Goals'}
+                                {tab === 'followups' && '📅 Follow-ups'}
+                                {tab === 'history' && '📜 History'}
+                            </button>
+                        ))}
                 </div>
 
                 {/* Content */}
@@ -412,14 +414,48 @@ export default function AIControlPanel({ conversationId, participantName, onClos
 
                             {bestTime && (
                                 <div style={styles.section}>
-                                    <h3 style={styles.sectionTitle}>Best Time to Contact</h3>
+                                    <h3 style={styles.sectionTitle}>Best Times to Contact</h3>
                                     <div style={styles.statusCard}>
-                                        <div style={styles.statusRow}>
-                                            <span>Optimal Time</span>
-                                            <span style={{ fontWeight: 500 }}>
-                                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][bestTime.dayOfWeek]} at {bestTime.hourOfDay}:00
-                                            </span>
-                                        </div>
+                                        {/* Show all best time slots */}
+                                        {bestTime.bestSlots && bestTime.bestSlots.length > 0 ? (
+                                            <div style={{ marginBottom: '12px' }}>
+                                                {bestTime.bestSlots.map((slot, idx) => (
+                                                    <div key={idx} style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        padding: '8px 12px',
+                                                        background: idx === 0 ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                                                        borderRadius: '6px',
+                                                        marginBottom: '4px'
+                                                    }}>
+                                                        <span style={{
+                                                            color: idx === 0 ? '#a5b4fc' : '#9ca3af',
+                                                            fontWeight: idx === 0 ? 600 : 400
+                                                        }}>
+                                                            {idx === 0 ? '⭐ ' : ''}
+                                                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][slot.dayOfWeek]} at {slot.hourOfDay}:00
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '11px',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '10px',
+                                                            background: 'rgba(139, 92, 246, 0.2)',
+                                                            color: '#c4b5fd'
+                                                        }}>
+                                                            {(slot.score * 100).toFixed(0)}%
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div style={styles.statusRow}>
+                                                <span>Optimal Time</span>
+                                                <span style={{ fontWeight: 500 }}>
+                                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][bestTime.dayOfWeek]} at {bestTime.hourOfDay}:00
+                                                </span>
+                                            </div>
+                                        )}
                                         <div style={styles.statusRow}>
                                             <span>Next Occurrence</span>
                                             <span style={{ fontSize: '13px', color: '#9ca3af' }}>
@@ -432,6 +468,16 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                 {(bestTime.confidence * 100).toFixed(0)}%
                                             </span>
                                         </div>
+                                        {bestTime.dataPoints === 0 && (
+                                            <div style={{
+                                                fontSize: '11px',
+                                                color: '#6b7280',
+                                                marginTop: '8px',
+                                                fontStyle: 'italic'
+                                            }}>
+                                                📊 Based on defaults. Times will improve as contact engages.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
