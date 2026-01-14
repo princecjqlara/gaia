@@ -457,15 +457,47 @@ When customer wants to schedule/book, share this: ${config.booking_url}
 - Use Taglish naturally - mix English and Tagalog as Filipinos do
 - Be friendly but professional
 - If unsure about something, say you'll have a team member follow up
+- If user sends an image, describe what you see and respond appropriately
 `;
 
+        // Build messages array, handling images for vision models
         const aiMessages = [{ role: 'system', content: aiPrompt }];
+        let hasImages = false;
+
         for (const msg of recentMessages) {
-            aiMessages.push({
-                role: msg.is_from_page ? 'assistant' : 'user',
-                content: msg.message_text || '[Attachment]'
-            });
+            // Check if message has image attachments
+            const attachments = msg.attachments;
+            let imageUrl = null;
+
+            if (attachments && Array.isArray(attachments)) {
+                for (const att of attachments) {
+                    if (att.type === 'image' && att.payload?.url) {
+                        imageUrl = att.payload.url;
+                        hasImages = true;
+                        console.log('[WEBHOOK] Found image in message:', imageUrl.substring(0, 50) + '...');
+                        break;
+                    }
+                }
+            }
+
+            if (imageUrl) {
+                // For vision models, include image in content
+                aiMessages.push({
+                    role: msg.is_from_page ? 'assistant' : 'user',
+                    content: [
+                        { type: 'text', text: msg.message_text || 'The customer sent an image:' },
+                        { type: 'image_url', image_url: { url: imageUrl } }
+                    ]
+                });
+            } else {
+                aiMessages.push({
+                    role: msg.is_from_page ? 'assistant' : 'user',
+                    content: msg.message_text || '[Attachment]'
+                });
+            }
         }
+
+        console.log('[WEBHOOK] Has images:', hasImages);
 
         // Call NVIDIA AI with model rotation
         const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
@@ -475,15 +507,28 @@ When customer wants to schedule/book, share this: ${config.booking_url}
         }
 
         // Model rotation - try each model until one works
-        // These are CLOUD API models available on build.nvidia.com (not NIM-only)
-        const MODELS = [
-            'meta/llama-3.1-405b-instruct',
-            'meta/llama-3.1-70b-instruct',
-            'mistralai/mixtral-8x22b-instruct-v0.1',
-            'mistralai/mistral-7b-instruct-v0.3',
-            'google/gemma-2-27b-it',
-            'microsoft/phi-3-medium-128k-instruct'
-        ];
+        // Use vision models if images are present, otherwise text models
+        let MODELS;
+        if (hasImages) {
+            // Vision-capable models on NVIDIA API
+            MODELS = [
+                'nvidia/vila',                           // NVIDIA VILA vision model
+                'liuhaotian/llava-v1.6-mistral-7b',     // LLaVA vision model
+                'adept/fuyu-8b',                         // Fuyu vision model
+                'meta/llama-3.2-11b-vision-instruct',   // Llama 3.2 Vision
+            ];
+            console.log('[WEBHOOK] Using VISION models for image analysis');
+        } else {
+            // Text-only models
+            MODELS = [
+                'meta/llama-3.1-405b-instruct',
+                'meta/llama-3.1-70b-instruct',
+                'mistralai/mixtral-8x22b-instruct-v0.1',
+                'mistralai/mistral-7b-instruct-v0.3',
+                'google/gemma-2-27b-it',
+                'microsoft/phi-3-medium-128k-instruct'
+            ];
+        }
 
         let aiReply = null;
         let lastError = null;
@@ -532,14 +577,16 @@ When customer wants to schedule/book, share this: ${config.booking_url}
         }
 
         console.log('[WEBHOOK] AI Reply:', aiReply.substring(0, 80) + '...');
+        console.log('[WEBHOOK] AI Reply length:', aiReply.length);
 
-        // Split long messages (Facebook limit is 2000 chars)
-        const MAX_MSG_LENGTH = 1800; // Leave some buffer
+        // Split long messages (Facebook limit is 2000 chars, but shorter is better for chat)
+        const MAX_MSG_LENGTH = 500; // Reduced for better chat experience
         const messageParts = [];
 
         if (aiReply.length <= MAX_MSG_LENGTH) {
             messageParts.push(aiReply);
         } else {
+            console.log('[WEBHOOK] Splitting long message...');
             // Split by paragraphs first, then by sentences
             let remaining = aiReply;
             while (remaining.length > 0) {
