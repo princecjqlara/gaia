@@ -194,6 +194,33 @@ async function handleIncomingMessage(pageId, event) {
     }
 
     try {
+        // CRITICAL: Ensure the page exists in facebook_pages before inserting conversation
+        // (foreign key constraint requires this)
+        const { data: existingPage } = await db
+            .from('facebook_pages')
+            .select('page_id')
+            .eq('page_id', pageId)
+            .single();
+
+        if (!existingPage) {
+            console.log(`[WEBHOOK] Page ${pageId} not in database, creating minimal entry...`);
+            const { error: pageInsertError } = await db
+                .from('facebook_pages')
+                .insert({
+                    page_id: pageId,
+                    page_name: `Page ${pageId}`,
+                    page_access_token: 'pending', // Will be updated when page is properly connected
+                    is_active: true
+                });
+
+            if (pageInsertError) {
+                console.error('[WEBHOOK] Failed to create page entry:', pageInsertError);
+                // Continue anyway - the page might have been created by another request
+            } else {
+                console.log(`[WEBHOOK] Created minimal page entry for ${pageId}`);
+            }
+        }
+
         // Look up existing conversation by participant_id first (matches synced conversations)
         const { data: existingConv } = await db
             .from('facebook_conversations')
