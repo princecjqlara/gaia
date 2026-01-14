@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '../services/supabase';
+import AttendanceDashboard from './AttendanceDashboard';
 
 /**
  * TeamOnlinePanel
@@ -11,6 +12,7 @@ const TeamOnlinePanel = ({ onClose }) => {
     const [autoAssignEnabled, setAutoAssignEnabled] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [activeTab, setActiveTab] = useState('team'); // 'team' or 'attendance'
 
     // Calculate duration from clock in time
     const calculateDuration = (clockInTime) => {
@@ -183,14 +185,54 @@ const TeamOnlinePanel = ({ onClose }) => {
 
     return (
         <div className="modal-overlay active" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
-            <div className="modal" style={{ maxWidth: '600px' }}>
+            <div className="modal" style={{ maxWidth: activeTab === 'attendance' ? '900px' : '600px', transition: 'max-width 0.3s' }}>
                 <div className="modal-header">
                     <h2>👥 Team & Auto-Assign</h2>
                     <button className="modal-close" onClick={onClose}>×</button>
                 </div>
 
-                <div className="modal-body" style={{ padding: '1.5rem' }}>
-                    {loading ? (
+                {/* Tabs */}
+                <div style={{
+                    display: 'flex',
+                    borderBottom: '1px solid var(--border-color)',
+                    padding: '0 1.5rem'
+                }}>
+                    <button
+                        onClick={() => setActiveTab('team')}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'team' ? '2px solid var(--primary)' : '2px solid transparent',
+                            color: activeTab === 'team' ? 'var(--primary)' : 'var(--text-secondary)',
+                            fontWeight: activeTab === 'team' ? '600' : '400',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        👥 Team
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('attendance')}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'attendance' ? '2px solid var(--primary)' : '2px solid transparent',
+                            color: activeTab === 'attendance' ? 'var(--primary)' : 'var(--text-secondary)',
+                            fontWeight: activeTab === 'attendance' ? '600' : '400',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        📊 Attendance
+                    </button>
+                </div>
+
+                <div className="modal-body" style={{ padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                    {activeTab === 'attendance' ? (
+                        <AttendanceDashboard users={allUsers} />
+                    ) : loading ? (
                         <div style={{ textAlign: 'center', padding: '2rem' }}>
                             Loading...
                         </div>
