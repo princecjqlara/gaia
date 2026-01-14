@@ -191,11 +191,118 @@ export default async function handler(req, res) {
             }
         }
 
+        // ===== ALSO PROCESS AI INTUITION FOLLOW-UPS =====
+        let aiFollowupsSent = 0;
+        let aiFollowupsFailed = 0;
+
+        try {
+            // Get pending AI follow-ups that are due
+            const { data: aiFollowups, error: aiError } = await supabase
+                .from('ai_followup_schedule')
+                .select('*, facebook_conversations!inner(participant_id, participant_name)')
+                .eq('status', 'pending')
+                .lte('scheduled_at', now)
+                .order('scheduled_at', { ascending: true })
+                .limit(20);
+
+            if (!aiError && aiFollowups && aiFollowups.length > 0) {
+                console.log(`[AI FOLLOWUP] Found ${aiFollowups.length} due follow-ups`);
+
+                for (const followup of aiFollowups) {
+                    try {
+                        // Get page access token
+                        const { data: page } = await supabase
+                            .from('facebook_pages')
+                            .select('page_access_token')
+                            .eq('page_id', followup.page_id)
+                            .single();
+
+                        if (!page?.page_access_token) {
+                            console.log(`[AI FOLLOWUP] No token for page ${followup.page_id}`);
+                            continue;
+                        }
+
+                        // Get conversation for recipient
+                        const recipientId = followup.facebook_conversations?.participant_id;
+                        const contactName = followup.facebook_conversations?.participant_name || 'there';
+
+                        if (!recipientId) {
+                            console.log(`[AI FOLLOWUP] No recipient for ${followup.conversation_id}`);
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({ status: 'failed', error_message: 'No recipient ID' })
+                                .eq('id', followup.id);
+                            continue;
+                        }
+
+                        // Generate a natural follow-up message
+                        const messages = [
+                            `Hi ${contactName}! 👋 Just checking in - did you have any questions about what we discussed?`,
+                            `Hey ${contactName}! 😊 I wanted to follow up - are you still interested?`,
+                            `Hi ${contactName}! Just wanted to check if you had a chance to think about it?`,
+                            `Hey ${contactName}! 👋 Still here if you need any help or have questions!`,
+                            `Hi ${contactName}! Just following up - let me know if you'd like to continue our conversation!`
+                        ];
+                        const message = messages[Math.floor(Math.random() * messages.length)];
+
+                        // Send via Messenger
+                        const response = await fetch(
+                            `https://graph.facebook.com/v18.0/${followup.page_id}/messages?access_token=${page.page_access_token}`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    recipient: { id: recipientId },
+                                    message: { text: message },
+                                    messaging_type: 'MESSAGE_TAG',
+                                    tag: 'ACCOUNT_UPDATE'
+                                })
+                            }
+                        );
+
+                        if (response.ok) {
+                            // Mark as sent
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({
+                                    status: 'sent',
+                                    sent_at: new Date().toISOString()
+                                })
+                                .eq('id', followup.id);
+
+                            console.log(`[AI FOLLOWUP] ✅ Sent to ${contactName}`);
+                            aiFollowupsSent++;
+                        } else {
+                            const err = await response.json();
+                            console.error(`[AI FOLLOWUP] Failed:`, err.error?.message);
+
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({
+                                    status: 'failed',
+                                    error_message: err.error?.message || 'Send failed'
+                                })
+                                .eq('id', followup.id);
+
+                            aiFollowupsFailed++;
+                        }
+                    } catch (err) {
+                        console.error(`[AI FOLLOWUP] Error:`, err.message);
+                        aiFollowupsFailed++;
+                    }
+                }
+            }
+        } catch (aiProcessError) {
+            console.log('[AI FOLLOWUP] Error processing:', aiProcessError.message);
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Scheduled messages processed',
             processed,
-            failed
+            failed,
+            aiFollowupsSent,
+            aiFollowupsFailed
         });
     } catch (error) {
         console.error('Error processing scheduled messages:', error);
