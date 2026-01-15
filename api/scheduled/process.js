@@ -6,10 +6,17 @@ import { createClient } from '@supabase/supabase-js';
  * Updated: 2026-01-15 11:30 - Fixed to always process AI follow-ups
  */
 export default async function handler(req, res) {
+    // Disable caching for this API route
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     // Allow both GET and POST for cron job compatibility
     if (req.method !== 'GET' && req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
+
+    console.log('[SCHEDULED] Processing started at', new Date().toISOString());
 
     try {
         // Initialize Supabase client
