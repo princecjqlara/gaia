@@ -1068,7 +1068,7 @@ You must respond with ONLY valid JSON (no markdown, no explanation):
 {
   "wait_hours": <number between 1-168>,
   "reason": "<brief explanation why this wait time is appropriate>",
-  "follow_up_type": "<one of: immediate|gentle_reminder|check_in|urgent|re_engagement>",
+  "follow_up_type": "<one of: best_time|intuition|reminder|flow|manual>",
   "urgency": "<one of: low|medium|high>"
 }
 
@@ -1127,7 +1127,7 @@ GUIDELINES:
             analysis = JSON.parse(cleanJson);
         } catch (parseErr) {
             console.log('[WEBHOOK] Could not parse follow-up analysis, using defaults');
-            analysis = { wait_hours: 24, reason: 'Standard follow-up', follow_up_type: 'gentle_reminder', urgency: 'low' };
+            analysis = { wait_hours: 24, reason: 'Standard follow-up', follow_up_type: 'reminder', urgency: 'low' };
         }
 
         // Calculate scheduled time
@@ -1148,6 +1148,23 @@ GUIDELINES:
             .eq('conversation_id', conversationId)
             .eq('status', 'pending');
 
+        // SANITIZE follow_up_type to ensure it's a valid DB value
+        const validTypes = ['best_time', 'intuition', 'manual', 'flow', 'reminder'];
+        let sanitizedType = analysis.follow_up_type || 'reminder';
+        if (!validTypes.includes(sanitizedType)) {
+            // Map common AI responses to valid values
+            const typeMapping = {
+                'gentle_reminder': 'reminder',
+                'check_in': 'reminder',
+                'immediate': 'intuition',
+                'urgent': 'intuition',
+                're_engagement': 'reminder',
+                'follow_up': 'reminder'
+            };
+            sanitizedType = typeMapping[sanitizedType] || 'reminder';
+            console.log(`[WEBHOOK] Sanitized follow_up_type from "${analysis.follow_up_type}" to "${sanitizedType}"`);
+        }
+
         // Schedule the new intelligent follow-up
         const { error: scheduleError } = await db
             .from('ai_followup_schedule')
@@ -1155,7 +1172,7 @@ GUIDELINES:
                 conversation_id: conversationId,
                 page_id: pageId,
                 scheduled_at: scheduledAt.toISOString(),
-                follow_up_type: analysis.follow_up_type || 'gentle_reminder',
+                follow_up_type: sanitizedType,
                 reason: analysis.reason || 'AI scheduled follow-up',
                 status: 'pending'
             });
