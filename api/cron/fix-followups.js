@@ -1,11 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * Debug endpoint to check and fix AI follow-up schedule
- * Call via: GET /api/cron/fix-followups
+ * Debug endpoint to check AI follow-up schedule status
+ * Shows failed records with their error messages
  */
 export default async function handler(req, res) {
-    // Disable caching
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -21,70 +20,62 @@ export default async function handler(req, res) {
     const now = new Date().toISOString();
 
     try {
-        // First, check what's in the table
-        const { data: allRecords, error: fetchError } = await supabase
+        // Check failed records to see error messages
+        const { data: failedRecords } = await supabase
             .from('ai_followup_schedule')
-            .select('id, conversation_id, scheduled_at, status, created_at')
+            .select('id, conversation_id, page_id, status, error_message, created_at')
+            .eq('status', 'failed')
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(10);
 
-        if (fetchError) {
-            return res.status(500).json({ error: fetchError.message });
-        }
+        // Check pending records
+        const { data: pendingRecords } = await supabase
+            .from('ai_followup_schedule')
+            .select('id, conversation_id, page_id, scheduled_at, status, created_at')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(10);
 
         // Count by status
-        const statusCounts = {
-            pending: 0,
-            cancelled: 0,
-            sent: 0,
-            failed: 0,
-            other: 0
-        };
+        const { data: allRecords } = await supabase
+            .from('ai_followup_schedule')
+            .select('status');
 
-        for (const record of allRecords || []) {
-            if (statusCounts[record.status] !== undefined) {
-                statusCounts[record.status]++;
-            } else {
-                statusCounts.other++;
-            }
+        const statusCounts = {};
+        for (const r of allRecords || []) {
+            statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
         }
 
-        // Update all pending follow-ups to be due 5 minutes in the PAST so they're definitely due
+        // If there are pending records, update them to be due NOW for testing
         const pastTime = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const { data: updatedRecords, error: updateError } = await supabase
+        const { data: updated } = await supabase
             .from('ai_followup_schedule')
             .update({ scheduled_at: pastTime })
             .eq('status', 'pending')
-            .select('id, scheduled_at');
+            .select('id');
 
-        const updatedCount = updatedRecords?.length || 0;
-
-        // Now query exactly like process.js does to see if we find any due
-        const { data: dueFollowups, error: dueError } = await supabase
+        // Query what would be due
+        const { data: dueNow } = await supabase
             .from('ai_followup_schedule')
-            .select('id, scheduled_at, status')
+            .select('id, conversation_id, page_id, scheduled_at')
             .eq('status', 'pending')
             .lte('scheduled_at', now)
-            .order('scheduled_at', { ascending: true })
-            .limit(50);
+            .limit(10);
 
         return res.status(200).json({
-            message: 'Debug info and fix applied',
             currentTime: now,
-            pastTimeSet: pastTime,
             statusCounts,
-            recentRecords: allRecords?.slice(0, 5).map(r => ({
+            pendingCount: pendingRecords?.length || 0,
+            pendingRecords: pendingRecords?.slice(0, 3),
+            failedCount: failedRecords?.length || 0,
+            failedWithErrors: failedRecords?.map(r => ({
                 id: r.id,
-                status: r.status,
-                scheduled_at: r.scheduled_at,
-                created_at: r.created_at
+                conversation_id: r.conversation_id,
+                page_id: r.page_id,
+                error: r.error_message
             })),
-            fixApplied: `Updated ${updatedCount} pending follow-ups to be due at ${pastTime}`,
-            updateError: updateError?.message || null,
-            updatedRecordsSample: updatedRecords?.slice(0, 3),
-            dueFollowupsFound: dueFollowups?.length || 0,
-            dueError: dueError?.message || null,
-            dueFollowupsSample: dueFollowups?.slice(0, 3)
+            updatedToBeeDue: updated?.length || 0,
+            dueNowCount: dueNow?.length || 0
         });
     } catch (error) {
         return res.status(500).json({ error: error.message });
