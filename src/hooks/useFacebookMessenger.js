@@ -667,6 +667,36 @@ export function useFacebookMessenger() {
         }
     }, [selectedConversation]);
 
+    // Manually set contact name (when Facebook API fails)
+    const setContactName = useCallback(async (newName) => {
+        if (!selectedConversation) return null;
+
+        try {
+            const savedName = await facebookService.setContactName(
+                selectedConversation.conversation_id,
+                newName
+            );
+
+            // Update local state
+            setSelectedConversation(prev => ({
+                ...prev,
+                participant_name: savedName
+            }));
+
+            // Update conversations list
+            setConversations(prev => prev.map(conv =>
+                conv.conversation_id === selectedConversation.conversation_id
+                    ? { ...conv, participant_name: savedName }
+                    : conv
+            ));
+
+            return savedName;
+        } catch (err) {
+            console.error('Error setting contact name:', err);
+            throw err;
+        }
+    }, [selectedConversation]);
+
     // Assign conversation to user
     const assignToUser = useCallback(async (conversationId, userId) => {
         try {
@@ -946,6 +976,7 @@ export function useFacebookMessenger() {
         syncMessages,
         linkToClient,
         refreshContactName,
+        setContactName,
         assignToUser,
         deleteConversation,
         loadSettings,

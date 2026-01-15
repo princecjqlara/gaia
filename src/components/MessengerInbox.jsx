@@ -21,6 +21,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         syncAllConversations,
         linkToClient,
         refreshContactName,
+        setContactName,
         assignToUser,
         deleteConversation,
         clearError,
@@ -1344,13 +1345,26 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                             <button
                                                 onClick={async () => {
                                                     try {
+                                                        // First try to fetch from Facebook
                                                         await refreshContactName();
                                                     } catch (err) {
                                                         console.error('Failed to refresh name:', err);
-                                                        alert('Could not fetch name from Facebook. The user may have privacy settings enabled.');
+                                                        // If Facebook fails, prompt user to enter a custom name
+                                                        const customName = window.prompt(
+                                                            'Facebook could not provide this contact\'s name (privacy restriction).\n\nEnter a name for this contact:',
+                                                            ''
+                                                        );
+                                                        if (customName && customName.trim()) {
+                                                            try {
+                                                                await setContactName(customName.trim());
+                                                            } catch (setErr) {
+                                                                console.error('Failed to set custom name:', setErr);
+                                                                alert('Failed to save the name. Please try again.');
+                                                            }
+                                                        }
                                                     }
                                                 }}
-                                                title="Refresh name from Facebook"
+                                                title="Refresh name from Facebook or set custom name"
                                                 style={{
                                                     background: 'var(--bg-secondary)',
                                                     border: '1px solid var(--border-color)',
@@ -1361,7 +1375,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                                     color: 'var(--text-muted)'
                                                 }}
                                             >
-                                                🔄 Refresh
+                                                🔄 Set Name
                                             </button>
                                         )}
                                     </div>
@@ -1779,25 +1793,32 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                         <button
                                             onClick={async () => {
                                                 try {
-                                                    const result = await facebookService.refreshContactName(
-                                                        selectedConversation.conversation_id,
-                                                        selectedConversation.participant_id,
-                                                        selectedConversation.page_id
-                                                    );
-                                                    if (result) {
-                                                        // Reload conversations to show updated name
-                                                        await loadConversations();
-                                                        alert('Name refreshed: ' + result);
-                                                    }
+                                                    // First try to fetch from Facebook
+                                                    await refreshContactName();
+                                                    alert('Name refreshed successfully!');
                                                 } catch (err) {
-                                                    alert('Could not refresh name: ' + err.message);
+                                                    console.error('Failed to refresh name:', err);
+                                                    // If Facebook fails, prompt user to enter a custom name
+                                                    const customName = window.prompt(
+                                                        'Facebook could not provide this contact\'s name (privacy restriction).\n\nEnter a name for this contact:',
+                                                        ''
+                                                    );
+                                                    if (customName && customName.trim()) {
+                                                        try {
+                                                            await setContactName(customName.trim());
+                                                            alert('Name set successfully!');
+                                                        } catch (setErr) {
+                                                            console.error('Failed to set custom name:', setErr);
+                                                            alert('Failed to save the name. Please try again.');
+                                                        }
+                                                    }
                                                 }
                                             }}
                                             className="btn btn-sm btn-secondary"
-                                            title="Try to fetch name from Facebook"
+                                            title="Fetch name from Facebook or set custom name"
                                             style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
                                         >
-                                            🔄 Refresh
+                                            🔄 Set Name
                                         </button>
                                     )}
                                 </div>
