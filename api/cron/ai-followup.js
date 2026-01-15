@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * AI Silence Detection Cron
- * Finds conversations with no activity for 24+ hours and schedules follow-ups
- * at the contact's best time to contact (not just a fixed interval)
- * Runs every 30 minutes via Vercel cron
+ * AI Silence Detection Cron (OPTIMIZED FOR SPEED)
+ * Finds conversations with no activity for X hours and schedules follow-ups
+ * Uses fast heuristic-based timing instead of slow AI API calls
+ * Runs every 30 minutes via Vercel cron or external cron service
  */
 
 let supabase = null;
@@ -18,119 +18,23 @@ function getSupabase() {
     return supabase;
 }
 
-/**
- * Calculate best time to contact based on engagement history
- * Simplified version for cron (doesn't import from client-side module)
- */
-async function calculateBestTimeForContact(db, conversationId) {
-    try {
-        // Get engagement history for this contact
-        const { data: engagements } = await db
-            .from('contact_engagement')
-            .select('day_of_week, hour_of_day, response_latency_seconds, engagement_score')
-            .eq('conversation_id', conversationId)
-            .eq('message_direction', 'inbound')
-            .order('message_timestamp', { ascending: false })
-            .limit(20);
-
-        const now = new Date();
-
-        // If no engagement data, use default business hours
-        if (!engagements || engagements.length === 0) {
-            // Default: next occurrence of 10 AM
-            return getNextOccurrenceOfHour(10);
-        }
-
-        // Calculate weighted scores for each day/hour
-        const timeScores = {};
-        for (const eng of engagements) {
-            const key = `${eng.day_of_week}-${eng.hour_of_day}`;
-            if (!timeScores[key]) {
-                timeScores[key] = {
-                    dayOfWeek: eng.day_of_week,
-                    hourOfDay: eng.hour_of_day,
-                    count: 0,
-                    totalScore: 0
-                };
-            }
-            timeScores[key].count++;
-            timeScores[key].totalScore += eng.engagement_score || 1;
-        }
-
-        // Find best slot
-        let bestSlot = null;
-        let bestScore = 0;
-        for (const slot of Object.values(timeScores)) {
-            const score = slot.count * (slot.totalScore / slot.count);
-            if (score > bestScore) {
-                bestScore = score;
-                bestSlot = slot;
-            }
-        }
-
-        if (!bestSlot) {
-            return getNextOccurrenceOfHour(10);
-        }
-
-        // Get next occurrence of best day/hour
-        return getNextOccurrence(bestSlot.dayOfWeek, bestSlot.hourOfDay);
-
-    } catch (error) {
-        console.error('[CRON] Error calculating best time:', error);
-        // Fallback to default
-        return getNextOccurrenceOfHour(10);
-    }
-}
-
-/**
- * Get next occurrence of a specific day and hour
- * Schedules at the actual best time - messaging code handles 24h window with tags
- */
-function getNextOccurrence(targetDay, targetHour) {
-    const now = new Date();
-    const result = new Date(now);
-    result.setHours(targetHour, 0, 0, 0);
-
-    // Calculate days until target day
-    const currentDay = now.getDay();
-    let daysUntil = targetDay - currentDay;
-
-    if (daysUntil < 0 || (daysUntil === 0 && now.getHours() >= targetHour)) {
-        daysUntil += 7;
-    }
-
-    result.setDate(result.getDate() + daysUntil);
-
-    // If it's today but in the past, add 7 days
-    if (result <= now) {
-        result.setDate(result.getDate() + 7);
-    }
-
-    // No cap - follow-ups can be scheduled at the true best time
-    // The sendMessage function handles 24h window by using ACCOUNT_UPDATE tag
-
-    return result;
-}
-
-/**
- * Get next occurrence of a specific hour (today or tomorrow)
- */
-function getNextOccurrenceOfHour(targetHour) {
-    const now = new Date();
-    const result = new Date(now);
-    result.setHours(targetHour, 0, 0, 0);
-
-    if (result <= now) {
-        result.setDate(result.getDate() + 1);
-    }
-
-    return result;
-}
-
 export default async function handler(req, res) {
+    // Track start time for timeout protection
+    const startTime = Date.now();
+    const MAX_EXECUTION_TIME = 25000; // 25 seconds (5s buffer before 30s timeout)
+
+    const checkTimeout = () => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed > MAX_EXECUTION_TIME) {
+            console.log(`[CRON] ⏰ Approaching timeout at ${elapsed}ms, returning early`);
+            return true;
+        }
+        return false;
+    };
+
     // Verify cron authorization (optional - only checked if CRON_SECRET is set)
     const authHeader = req.headers.authorization;
-    const vercelCron = req.headers['x-vercel-cron']; // Vercel's built-in cron header
+    const vercelCron = req.headers['x-vercel-cron'];
     const cronSecret = process.env.CRON_SECRET;
 
     // Skip auth if Vercel cron OR if no secret is configured
@@ -138,7 +42,7 @@ export default async function handler(req, res) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    console.log('[CRON] Silence detection started');
+    console.log('[CRON] AI Follow-up silence detection started');
 
     try {
         const db = getSupabase();
@@ -151,36 +55,31 @@ export default async function handler(req, res) {
             scanned: 0,
             scheduled: 0,
             skipped: 0,
-            cleanedUp: 0
+            cleanedUp: 0,
+            timedOut: false
         };
 
-        // DEBUG: First, let's see what pending follow-ups actually exist
-        const { data: allPendingFollowups } = await db
-            .from('ai_followup_schedule')
-            .select('id, conversation_id, scheduled_at, created_at, status')
-            .eq('status', 'pending')
-            .limit(5);
-
-        console.log(`[CRON] DEBUG - Total pending follow-ups in DB: ${allPendingFollowups?.length || 0}`);
-        if (allPendingFollowups && allPendingFollowups.length > 0) {
-            console.log(`[CRON] DEBUG - Sample: created_at=${allPendingFollowups[0].created_at}, scheduled_at=${allPendingFollowups[0].scheduled_at}`);
-            console.log(`[CRON] DEBUG - Current time: ${now.toISOString()}`);
-        }
-
-        // ONE-TIME AGGRESSIVE CLEANUP: Cancel ALL pending follow-ups to reset the system
-        // This will allow fresh follow-ups to be created with proper timing
-        const { data: allPendingToCancel } = await db
+        // Quick cleanup of stale pending follow-ups (scheduled more than 2 hours ago)
+        const staleThreshold = new Date(now.getTime() - (2 * 60 * 60 * 1000)).toISOString();
+        const { data: staleFollowups } = await db
             .from('ai_followup_schedule')
             .select('id')
-            .eq('status', 'pending');
+            .eq('status', 'pending')
+            .lt('scheduled_at', staleThreshold)
+            .limit(50);
 
-        if (allPendingToCancel && allPendingToCancel.length > 0) {
-            console.log(`[CRON] 🧹 AGGRESSIVE CLEANUP: Cancelling ALL ${allPendingToCancel.length} pending follow-ups`);
+        if (staleFollowups && staleFollowups.length > 0) {
+            console.log(`[CRON] 🧹 Cleaning up ${staleFollowups.length} stale follow-ups`);
             await db
                 .from('ai_followup_schedule')
-                .update({ status: 'cancelled', error_message: 'One-time cleanup: resetting all pending follow-ups' })
-                .in('id', allPendingToCancel.map(f => f.id));
-            results.cleanedUp = allPendingToCancel.length;
+                .update({ status: 'cancelled', error_message: 'Cancelled - stale pending followup' })
+                .in('id', staleFollowups.map(f => f.id));
+            results.cleanedUp = staleFollowups.length;
+        }
+
+        if (checkTimeout()) {
+            results.timedOut = true;
+            return res.status(200).json({ message: 'Partial completion - cleanup only', ...results });
         }
 
         // Get AI chatbot config
@@ -191,15 +90,13 @@ export default async function handler(req, res) {
             .single();
 
         const config = settings?.value || {};
-        // AGGRESSIVE SETTINGS: Reduced silence hours, increased capacity
-        const silenceHours = config.intuition_silence_hours || 4; // Was 24, now 4 hours default
-        const maxPerRun = config.max_followups_per_cron || 100; // Was 20, now 100 per run
+        const silenceHours = config.intuition_silence_hours || 4;
+        const maxPerRun = 10; // Small batch size to prevent timeout
 
         // Calculate cutoff time (conversations inactive for X hours)
         const cutoffTime = new Date(now.getTime() - (silenceHours * 60 * 60 * 1000));
 
         // Find conversations that need follow-up
-        // REMOVED: last_message_from_page requirement - follow up even if user ghosted
         const { data: conversations, error } = await db
             .from('facebook_conversations')
             .select(`
@@ -211,7 +108,7 @@ export default async function handler(req, res) {
                 last_message_from_page,
                 active_goal_id
             `)
-            .or('ai_enabled.is.null,ai_enabled.eq.true') // Default to enabled
+            .or('ai_enabled.is.null,ai_enabled.eq.true')
             .or('human_takeover.is.null,human_takeover.eq.false')
             .or('opt_out.is.null,opt_out.eq.false')
             .lt('last_message_time', cutoffTime.toISOString())
@@ -233,163 +130,65 @@ export default async function handler(req, res) {
         results.scanned = conversations.length;
 
         for (const conv of conversations) {
+            // Check timeout before processing each conversation
+            if (checkTimeout()) {
+                console.log(`[CRON] ⏰ Timeout reached after processing ${results.scheduled + results.skipped} conversations`);
+                results.timedOut = true;
+                break;
+            }
+
             try {
                 // Check for existing pending follow-ups
                 const { data: existingFollowups } = await db
                     .from('ai_followup_schedule')
-                    .select('id, scheduled_at')
+                    .select('id')
                     .eq('conversation_id', conv.conversation_id)
                     .eq('status', 'pending');
 
                 if (existingFollowups && existingFollowups.length > 0) {
-                    // Check if the pending follow-up is stale (scheduled for more than 2 hours ago but still pending)
-                    const staleThreshold = new Date(now.getTime() - (2 * 60 * 60 * 1000)); // 2 hours ago
-                    const staleFollowups = existingFollowups.filter(f => new Date(f.scheduled_at) < staleThreshold);
-
-                    if (staleFollowups.length > 0) {
-                        // Cancel stale follow-ups so we can create fresh ones
-                        console.log(`[CRON] Cancelling ${staleFollowups.length} stale follow-ups for ${conv.participant_name || conv.conversation_id}`);
-                        await db
-                            .from('ai_followup_schedule')
-                            .update({ status: 'cancelled', error_message: 'Cancelled - stale pending followup replaced' })
-                            .in('id', staleFollowups.map(f => f.id));
-                    } else {
-                        // There's a valid pending follow-up (scheduled_at is still in the future or recent past)
-                        results.skipped++;
-                        continue;
-                    }
+                    // Already has a pending follow-up
+                    results.skipped++;
+                    continue;
                 }
 
-                // Calculate hours since last message
-                const hoursSince = Math.floor((now - new Date(conv.last_message_time)) / (1000 * 60 * 60));
+                // Calculate minutes since last message for smart timing
+                const minutesSince = Math.floor((now - new Date(conv.last_message_time)) / (1000 * 60));
+                const hoursSince = Math.floor(minutesSince / 60);
 
-                // Get recent messages for AI analysis
-                const { data: recentMessages } = await db
-                    .from('facebook_messages')
-                    .select('message_text, is_from_page, timestamp')
-                    .eq('conversation_id', conv.conversation_id)
-                    .order('timestamp', { ascending: false })
-                    .limit(20);
+                // FAST heuristic-based timing (no slow AI API calls)
+                let waitMinutes;
+                let reason;
 
-                // Use AI to analyze conversation and determine follow-up timing
-                // Default: AGGRESSIVE 30 MINUTES wait
-                let analysis = { wait_minutes: 30, reason: `No response for ${hoursSince}h - urgent follow-up`, follow_up_type: 'best_time' };
-
-                if (recentMessages && recentMessages.length > 0) {
-                    const nvidiaKey = process.env.NVIDIA_API_KEY;
-                    if (nvidiaKey) {
-                        try {
-                            // Build conversation summary
-                            const messagesSummary = recentMessages.reverse().map(m =>
-                                `${m.is_from_page ? 'AI' : 'Customer'}: ${m.message_text || '[attachment]'}`
-                            ).join('\n');
-
-                            // Calculate minutes since last activity for AI context
-                            const minutesSince = Math.floor((now - new Date(conv.last_message_time)) / (1000 * 60));
-
-                            const analysisPrompt = `You are an ULTRA-AGGRESSIVE sales AI. Your job is to keep leads HOT by following up in MINUTES, not hours!
-
-CONVERSATION (last activity ${minutesSince} minutes ago):
-${messagesSummary}
-
-⚡ KEEP THIS LEAD WARM! If they go cold, we lose them!
-
-You must respond with ONLY valid JSON (no markdown, no explanation):
-{
-  "skip_followup": <true/false>,
-  "skip_reason": "<if skip is true, why>",
-  "wait_minutes": <number between 5-720>,
-  "reason": "<brief explanation>",
-  "conversation_summary": {
-    "interest_level": "<hot|warm|cold|unknown>",
-    "interested_in": "<what product/service they asked about>",
-    "contact_status": "<actively engaged|waiting for response|went silent|busy|thinking>",
-    "last_topic": "<what was last discussed>",
-    "buying_signals": "<any buying intent shown, or 'none'>",
-    "objections": "<any concerns raised, or 'none'>",
-    "next_action": "<what AI should do next>"
-  }
-}
-
-WHEN TO SKIP:
-- Customer said they'll message later
-- Customer is busy (in a meeting, etc.)
-- Already booked/converted
-
-SMART TIMING (avoid spamming!):
-
-⚡ AGGRESSIVE (within first 2 hours of silence):
-- Silent 5-15 mins: wait 5-10 mins (they might be typing)
-- Silent 15-30 mins: wait 10-15 mins (quick check-in)
-- Silent 30-60 mins: wait 15-30 mins (are you still there?)  
-- Silent 1-2 hours: wait 30-60 mins (let me know if busy)
-- Showed buying intent: wait 5-10 mins (DON'T LET THEM GO!)
-- Was about to book: wait 5 mins (IMMEDIATE!)
-
-🐢 SLOW DOWN (after 2+ hours of silence - they need space):
-- Silent 2-4 hours: wait 90-120 mins (give them time)
-- Silent 4-8 hours: wait 2-3 hours (120-180 mins)
-- Silent 8-24 hours: wait 4-6 hours (240-360 mins)  
-- Silent 24+ hours: wait 6-12 hours (they may be busy for longer)
-
-IMPORTANT: If we've already followed up 2-3 times with no response, give them MORE space (longer waits).`;
-
-                            const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${nvidiaKey} `,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    model: 'meta/llama-3.1-8b-instruct',
-                                    messages: [{ role: 'user', content: analysisPrompt }],
-                                    max_tokens: 200,
-                                    temperature: 0.3
-                                })
-                            });
-
-                            if (response.ok) {
-                                const aiResult = await response.json();
-                                const analysisText = aiResult.choices?.[0]?.message?.content?.trim();
-                                const cleanJson = analysisText.replace(/```json\n ?|\n ? ```/g, '').trim();
-                                const parsed = JSON.parse(cleanJson);
-
-                                // Check if AI says to skip follow-up
-                                if (parsed.skip_followup === true) {
-                                    console.log(`[CRON] ⏸️ SKIPPING ${conv.participant_name}: ${parsed.skip_reason || 'Customer specified callback time or busy'}`);
-                                    results.skipped++;
-                                    continue; // Skip to next conversation
-                                }
-
-                                // Smart timing: min 5 mins, max 720 mins (12 hours) for slowdown
-                                const waitMinutes = Math.min(Math.max(parsed.wait_minutes || 30, 5), 720);
-                                analysis = {
-                                    wait_minutes: waitMinutes,
-                                    reason: parsed.reason || `Silent for ${minutesSince} mins - urgent follow-up`,
-                                    follow_up_type: 'best_time',
-                                    conversation_summary: parsed.conversation_summary || null
-                                };
-                                console.log(`[CRON] 🔥 AI: ${conv.participant_name} - wait ${waitMinutes}m | Interest: ${parsed.conversation_summary?.interest_level || 'unknown'} | ${analysis.reason}`);
-                            }
-                        } catch (aiErr) {
-                            console.log(`[CRON] AI analysis error (using 30 min default):`, aiErr.message);
-                        }
-                    }
+                if (minutesSince < 60) {
+                    waitMinutes = 30;
+                    reason = `Silent for ${minutesSince} mins - quick check-in`;
+                } else if (minutesSince < 120) {
+                    waitMinutes = 45;
+                    reason = `Silent for ${hoursSince}h - gentle follow-up`;
+                } else if (minutesSince < 240) {
+                    waitMinutes = 60;
+                    reason = `Silent for ${hoursSince}h - check back in`;
+                } else if (minutesSince < 480) {
+                    waitMinutes = 120;
+                    reason = `Silent for ${hoursSince}h - giving space`;
+                } else {
+                    waitMinutes = 180;
+                    reason = `Silent for ${hoursSince}h - longer follow-up`;
                 }
 
-                // Calculate scheduled time based on AI analysis - USE MINUTES
-                const waitMs = (analysis.wait_minutes || 30) * 60 * 1000;
+                // Calculate scheduled time
+                const waitMs = waitMinutes * 60 * 1000;
                 const scheduledAt = new Date(now.getTime() + waitMs);
 
-                // Create follow-up with AI-determined timing
+                // Create follow-up
                 const { error: insertError } = await db
                     .from('ai_followup_schedule')
                     .insert({
                         conversation_id: conv.conversation_id,
                         page_id: conv.page_id,
                         scheduled_at: scheduledAt.toISOString(),
-                        follow_up_type: 'best_time',  // Database only allows 'best_time'
-                        reason: analysis.reason,
+                        follow_up_type: 'best_time',
+                        reason: reason,
                         status: 'pending'
                     });
 
@@ -397,33 +196,32 @@ IMPORTANT: If we've already followed up 2-3 times with no response, give them MO
                     console.error(`[CRON] Error scheduling for ${conv.conversation_id}:`, insertError);
                     results.skipped++;
                 } else {
-                    console.log(`[CRON] ✅ Scheduled follow-up for ${conv.participant_name || conv.conversation_id} at ${scheduledAt.toISOString()} (in ${analysis.wait_minutes} mins from ${now.toISOString()})`);
+                    console.log(`[CRON] ✅ Scheduled follow-up for ${conv.participant_name || conv.conversation_id} at ${scheduledAt.toISOString()} (in ${waitMinutes} mins)`);
                     results.scheduled++;
 
-                    // Log the action with conversation summary
+                    // Log the action
                     await db.from('ai_action_log').insert({
                         conversation_id: conv.conversation_id,
                         page_id: conv.page_id,
                         action_type: 'silence_detected',
                         action_data: {
                             hoursSince,
-                            waitMinutes: analysis.wait_minutes,
-                            reason: analysis.reason,
-                            conversation_summary: analysis.conversation_summary
+                            waitMinutes,
+                            reason
                         },
-                        explanation: `AI intuition: ${analysis.reason} `
+                        explanation: `AI intuition: ${reason}`
                     });
                 }
             } catch (err) {
-                console.error(`[CRON] Error processing ${conv.conversation_id}: `, err);
+                console.error(`[CRON] Error processing ${conv.conversation_id}:`, err);
                 results.skipped++;
             }
         }
 
-        console.log(`[CRON] Completed: ${results.scheduled} scheduled, ${results.skipped} skipped, ${results.cleanedUp || 0} cleaned up`);
+        console.log(`[CRON] Completed: ${results.scheduled} scheduled, ${results.skipped} skipped, ${results.cleanedUp} cleaned up${results.timedOut ? ' (timed out)' : ''}`);
 
         return res.status(200).json({
-            message: 'Silence detection complete',
+            message: results.timedOut ? 'Partial completion due to timeout' : 'Silence detection complete',
             ...results
         });
 
@@ -438,4 +236,3 @@ export const config = {
         bodyParser: true
     }
 };
-
