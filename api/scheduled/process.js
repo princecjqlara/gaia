@@ -419,6 +419,26 @@ Generate ONLY the follow-up message, nothing else:`;
 
                             console.log(`[AI FOLLOWUP] ✅ Sent to ${contactName}`);
                             aiFollowupsSent++;
+
+                            // Schedule the NEXT follow-up so UI shows when it will occur
+                            // Default to 4 hours from now, AI cron will adjust if contact responds
+                            const nextFollowupTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
+                            const { error: scheduleError } = await supabase
+                                .from('ai_followup_schedule')
+                                .insert({
+                                    conversation_id: followup.conversation_id,
+                                    page_id: followup.page_id,
+                                    scheduled_at: nextFollowupTime.toISOString(),
+                                    follow_up_type: 'intuition',
+                                    reason: 'Auto-scheduled after previous follow-up sent',
+                                    status: 'pending'
+                                });
+
+                            if (scheduleError) {
+                                console.log(`[AI FOLLOWUP] Could not schedule next: ${scheduleError.message}`);
+                            } else {
+                                console.log(`[AI FOLLOWUP] 📅 Next follow-up scheduled for ${nextFollowupTime.toISOString()}`);
+                            }
                         } else {
                             const err = await response.json();
                             console.error(`[AI FOLLOWUP] Failed:`, err.error?.message);
