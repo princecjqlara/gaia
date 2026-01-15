@@ -55,29 +55,12 @@ export default async function handler(req, res) {
             scanned: 0,
             scheduled: 0,
             skipped: 0,
-            cleanedUp: 0,
             timedOut: false
         };
 
-        // ONE-TIME RESET: Cancel ALL pending follow-ups to test with new timing
-        // This allows fresh follow-ups to be created with 1-5 min timing
-        const { data: allPending } = await db
-            .from('ai_followup_schedule')
-            .select('id')
-            .eq('status', 'pending');
-
-        if (allPending && allPending.length > 0) {
-            console.log(`[CRON] 🧹 ONE-TIME RESET: Cancelling ALL ${allPending.length} pending follow-ups for fresh timing`);
-            await db
-                .from('ai_followup_schedule')
-                .update({ status: 'cancelled', error_message: 'Reset for new timing' })
-                .in('id', allPending.map(f => f.id));
-            results.cleanedUp = allPending.length;
-        }
-
         if (checkTimeout()) {
             results.timedOut = true;
-            return res.status(200).json({ message: 'Partial completion - cleanup only', ...results });
+            return res.status(200).json({ message: 'Partial completion - timeout before processing', ...results });
         }
 
         // Get AI chatbot config
@@ -216,7 +199,7 @@ export default async function handler(req, res) {
             }
         }
 
-        console.log(`[CRON] Completed: ${results.scheduled} scheduled, ${results.skipped} skipped, ${results.cleanedUp} cleaned up${results.timedOut ? ' (timed out)' : ''}`);
+        console.log(`[CRON] Completed: ${results.scheduled} scheduled, ${results.skipped} skipped${results.timedOut ? ' (timed out)' : ''}`);
 
         return res.status(200).json({
             message: results.timedOut ? 'Partial completion due to timeout' : 'Silence detection complete',
