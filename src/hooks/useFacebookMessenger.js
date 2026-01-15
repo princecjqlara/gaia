@@ -506,32 +506,6 @@ export function useFacebookMessenger() {
         }
     }, [selectedConversation, loadMessages]);
 
-    // Load more messages (pagination)
-    const loadMoreMessages = useCallback(async () => {
-        if (!selectedConversation || !hasMoreMessages || loading) return;
-
-        try {
-            setLoading(true);
-            const nextPage = messagePage + 1;
-
-            const result = await facebookService.getMessagesWithPagination(
-                selectedConversation.conversation_id,
-                nextPage
-            );
-
-            setMessages(prev => [...result.messages, ...prev]);
-            setMessagePage(nextPage);
-            setHasMoreMessages(result.hasMore);
-
-            return result;
-        } catch (err) {
-            console.error('Error loading more messages:', err);
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedConversation, hasMoreMessages, loading, messagePage]);
-
     // Search messages
     const searchMessagesAction = useCallback(async (searchTerm) => {
         if (!searchTerm.trim()) {
@@ -970,7 +944,6 @@ export function useFacebookMessenger() {
         searchConversations: searchConversationsAction,
         syncAllConversations,
         syncMessages,
-        loadMoreMessages,
         linkToClient,
         refreshContactName,
         assignToUser,
