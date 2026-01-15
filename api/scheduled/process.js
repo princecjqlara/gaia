@@ -302,15 +302,95 @@ export default async function handler(req, res) {
                             continue;
                         }
 
-                        // Generate a natural follow-up message
-                        const messages = [
-                            `Hi ${contactName}! 👋 Just checking in - did you have any questions about what we discussed?`,
-                            `Hey ${contactName}! 😊 I wanted to follow up - are you still interested?`,
-                            `Hi ${contactName}! Just wanted to check if you had a chance to think about it?`,
-                            `Hey ${contactName}! 👋 Still here if you need any help or have questions!`,
-                            `Hi ${contactName}! Just following up - let me know if you'd like to continue our conversation!`
-                        ];
-                        const message = messages[Math.floor(Math.random() * messages.length)];
+                        // Generate AI-powered contextual follow-up
+                        // Load admin AI config for prompt and settings
+                        const { data: aiSettings } = await supabase
+                            .from('settings')
+                            .select('value')
+                            .eq('key', 'ai_chatbot_config')
+                            .single();
+
+                        const aiConfig = aiSettings?.value || {};
+                        const systemPrompt = aiConfig.system_prompt || 'You are a friendly AI assistant.';
+                        const knowledgeBase = aiConfig.knowledge_base || '';
+                        const language = aiConfig.language || 'Taglish';
+
+                        // Get recent conversation messages for context
+                        const { data: recentMessages } = await supabase
+                            .from('facebook_messages')
+                            .select('message_text, is_from_page, timestamp')
+                            .eq('conversation_id', followup.conversation_id)
+                            .order('timestamp', { ascending: false })
+                            .limit(10);
+
+                        // Build conversation context
+                        const conversationContext = (recentMessages || [])
+                            .reverse()
+                            .map(m => `${m.is_from_page ? 'AI' : 'Customer'}: ${m.message_text || '[attachment]'}`)
+                            .join('\n');
+
+                        // Generate contextual follow-up using AI
+                        let message;
+                        const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+
+                        if (NVIDIA_API_KEY && conversationContext) {
+                            try {
+                                const followUpPrompt = `${systemPrompt}
+
+${knowledgeBase ? `## Knowledge Base:\n${knowledgeBase}\n` : ''}
+## Language: Respond in ${language}
+
+## Task: Generate a natural follow-up message for this conversation.
+The customer hasn't responded in a while. Create a friendly, contextual follow-up that:
+1. References what was discussed (don't repeat word-for-word)
+2. Keeps it short (1-2 sentences like a real text message)
+3. Feels natural, not automated
+4. Gently moves the conversation forward
+
+## Recent Conversation:
+${conversationContext}
+
+## Customer Name: ${contactName}
+
+Generate ONLY the follow-up message, nothing else:`;
+
+                                const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${NVIDIA_API_KEY}`
+                                    },
+                                    body: JSON.stringify({
+                                        model: 'meta/llama-3.1-8b-instruct',
+                                        messages: [{ role: 'user', content: followUpPrompt }],
+                                        temperature: 0.8,
+                                        max_tokens: 150
+                                    })
+                                });
+
+                                if (aiResponse.ok) {
+                                    const aiData = await aiResponse.json();
+                                    const generatedMessage = aiData.choices?.[0]?.message?.content?.trim();
+                                    if (generatedMessage && generatedMessage.length > 5) {
+                                        message = generatedMessage;
+                                        console.log(`[AI FOLLOWUP] Generated contextual message: ${message.substring(0, 50)}...`);
+                                    }
+                                }
+                            } catch (aiErr) {
+                                console.log(`[AI FOLLOWUP] AI generation failed, using fallback: ${aiErr.message}`);
+                            }
+                        }
+
+                        // Fallback to simple messages if AI fails
+                        if (!message) {
+                            const fallbackMessages = [
+                                `Hi ${contactName}! 👋 Just checking in - any questions?`,
+                                `Hey ${contactName}! 😊 Still interested? Let me know!`,
+                                `Hi ${contactName}! Following up - happy to help if you need anything!`
+                            ];
+                            message = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
+                            console.log(`[AI FOLLOWUP] Using fallback message`);
+                        }
 
                         // Send via Messenger
                         const response = await fetch(
