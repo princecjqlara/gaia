@@ -77,7 +77,12 @@ export default async function handler(req, res) {
         // Calculate cutoff time (conversations inactive for X hours)
         const cutoffTime = new Date(now.getTime() - (silenceHours * 60 * 60 * 1000));
 
+        // Maximum age: 23 hours (1 hour buffer before Facebook's 24h window expires)
+        // This prevents trying to message users who are outside the messaging window
+        const maxAgeTime = new Date(now.getTime() - (23 * 60 * 60 * 1000));
+
         // Find conversations that need follow-up
+        // Must be: inactive for silenceHours BUT not older than 23 hours
         const { data: conversations, error } = await db
             .from('facebook_conversations')
             .select(`
@@ -93,8 +98,9 @@ export default async function handler(req, res) {
             .or('human_takeover.is.null,human_takeover.eq.false')
             .or('opt_out.is.null,opt_out.eq.false')
             .lt('last_message_time', cutoffTime.toISOString())
+            .gt('last_message_time', maxAgeTime.toISOString())
             .or(`cooldown_until.is.null,cooldown_until.lt.${now.toISOString()}`)
-            .order('last_message_time', { ascending: true })
+            .order('last_message_time', { ascending: false })
             .limit(maxPerRun);
 
         if (error) {
