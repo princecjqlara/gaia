@@ -203,6 +203,27 @@ export default async function handler(req, res) {
         let aiFollowupsFailed = 0;
 
         try {
+            // Check global bot enabled setting
+            const { data: botSettings } = await supabase
+                .from('settings')
+                .select('value')
+                .eq('key', 'ai_chatbot_config')
+                .single();
+
+            const botConfig = botSettings?.value || {};
+            if (botConfig.global_bot_enabled === false) {
+                console.log('[AI FOLLOWUP] ⛔ Global bot is DISABLED - skipping follow-up sending');
+                return res.status(200).json({
+                    success: true,
+                    message: 'Bot is globally disabled',
+                    disabled: true,
+                    processed,
+                    failed,
+                    aiFollowupsSent: 0,
+                    aiFollowupsFailed: 0
+                });
+            }
+
             // DEBUG: First, let's see ALL pending follow-ups to understand what's in the table
             const { data: allPendingFollowups, error: debugError } = await supabase
                 .from('ai_followup_schedule')

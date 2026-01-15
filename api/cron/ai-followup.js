@@ -71,6 +71,17 @@ export default async function handler(req, res) {
             .single();
 
         const config = settings?.value || {};
+
+        // Check global bot enabled - if false, skip all processing
+        if (config.global_bot_enabled === false) {
+            console.log('[CRON] ⛔ Global bot is DISABLED - skipping follow-up scheduling');
+            return res.status(200).json({
+                message: 'Bot is globally disabled',
+                disabled: true,
+                ...results
+            });
+        }
+
         const silenceHours = config.intuition_silence_hours || 4;
         const maxPerRun = 10; // Small batch size to prevent timeout
 

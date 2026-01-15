@@ -1949,6 +1949,108 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                 </div>
               </div>
 
+              {/* GLOBAL BOT KILL SWITCH */}
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1.25rem',
+                background: (() => {
+                  try {
+                    const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                    return config.global_bot_enabled === false
+                      ? 'rgba(239, 68, 68, 0.15)'
+                      : 'rgba(34, 197, 94, 0.15)';
+                  } catch { return 'rgba(34, 197, 94, 0.15)'; }
+                })(),
+                borderRadius: 'var(--radius-lg)',
+                border: (() => {
+                  try {
+                    const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                    return config.global_bot_enabled === false
+                      ? '2px solid rgba(239, 68, 68, 0.5)'
+                      : '2px solid rgba(34, 197, 94, 0.5)';
+                  } catch { return '2px solid rgba(34, 197, 94, 0.5)'; }
+                })()
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                  <div>
+                    <div style={{
+                      fontWeight: '700',
+                      fontSize: '1.1rem',
+                      marginBottom: '0.25rem',
+                      color: (() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.global_bot_enabled === false ? '#ef4444' : '#22c55e';
+                        } catch { return '#22c55e'; }
+                      })()
+                    }}>
+                      {(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.global_bot_enabled === false
+                            ? '🔴 BOT IS STOPPED'
+                            : '🟢 BOT IS RUNNING';
+                        } catch { return '🟢 BOT IS RUNNING'; }
+                      })()}
+                    </div>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Global kill switch - stops ALL AI messages and follow-ups
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: 'none',
+                      fontWeight: '600',
+                      fontSize: '1rem',
+                      cursor: 'pointer',
+                      background: (() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.global_bot_enabled === false ? '#22c55e' : '#ef4444';
+                        } catch { return '#ef4444'; }
+                      })(),
+                      color: 'white',
+                      minWidth: '140px'
+                    }}
+                    onClick={async () => {
+                      try {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        const newState = config.global_bot_enabled === false ? true : false;
+                        config.global_bot_enabled = newState;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+
+                        // Also save to database immediately
+                        const { getSupabaseClient } = await import('../services/supabase');
+                        const db = getSupabaseClient();
+                        await db
+                          .from('settings')
+                          .upsert({
+                            key: 'ai_chatbot_config',
+                            value: config,
+                            updated_at: new Date().toISOString()
+                          }, { onConflict: 'key' });
+
+                        alert(newState ? '✅ Bot is now RUNNING!' : '⛔ Bot is now STOPPED!');
+                        window.location.reload();
+                      } catch (err) {
+                        console.error('Error toggling bot:', err);
+                        alert('❌ Failed to toggle: ' + err.message);
+                      }
+                    }}
+                  >
+                    {(() => {
+                      try {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        return config.global_bot_enabled === false ? '▶️ START BOT' : '⏹️ STOP BOT';
+                      } catch { return '⏹️ STOP BOT'; }
+                    })()}
+                  </button>
+                </div>
+              </div>
+
               {/* Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 <div style={{ background: 'var(--bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
