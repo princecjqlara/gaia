@@ -199,14 +199,20 @@ export default async function handler(req, res) {
             // Get pending AI follow-ups that are due
             const { data: aiFollowups, error: aiError } = await supabase
                 .from('ai_followup_schedule')
-                .select('*, facebook_conversations!inner(participant_id, participant_name)')
+                .select('*')
                 .eq('status', 'pending')
                 .lte('scheduled_at', now)
                 .order('scheduled_at', { ascending: true })
-                .limit(20);
+                .limit(50);
+
+            console.log(`[AI FOLLOWUP] Query result: ${aiFollowups?.length || 0} follow-ups, error: ${aiError?.message || 'none'}`);
+
+            if (aiError) {
+                console.error('[AI FOLLOWUP] Query error:', aiError);
+            }
 
             if (!aiError && aiFollowups && aiFollowups.length > 0) {
-                console.log(`[AI FOLLOWUP] Found ${aiFollowups.length} due follow-ups`);
+                console.log(`[AI FOLLOWUP] Found ${aiFollowups.length} due follow-ups to send`);
 
                 for (const followup of aiFollowups) {
                     try {
@@ -219,12 +225,23 @@ export default async function handler(req, res) {
 
                         if (!page?.page_access_token) {
                             console.log(`[AI FOLLOWUP] No token for page ${followup.page_id}`);
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({ status: 'failed', error_message: 'No page token' })
+                                .eq('id', followup.id);
+                            aiFollowupsFailed++;
                             continue;
                         }
 
-                        // Get conversation for recipient
-                        const recipientId = followup.facebook_conversations?.participant_id;
-                        const contactName = followup.facebook_conversations?.participant_name || 'there';
+                        // Get conversation details separately
+                        const { data: conversation } = await supabase
+                            .from('facebook_conversations')
+                            .select('participant_id, participant_name')
+                            .eq('conversation_id', followup.conversation_id)
+                            .single();
+
+                        const recipientId = conversation?.participant_id;
+                        const contactName = conversation?.participant_name || 'there';
 
                         if (!recipientId) {
                             console.log(`[AI FOLLOWUP] No recipient for ${followup.conversation_id}`);
