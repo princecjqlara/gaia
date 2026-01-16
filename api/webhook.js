@@ -452,9 +452,26 @@ async function handleIncomingMessage(pageId, event) {
             }
 
             // Source 3: Try conversation API with participants (this is how sync works!)
-            if (!participantName && conversationId && !conversationId.startsWith('t_')) {
-                console.log(`[WEBHOOK] Trying conversation API for name (sync method)...`);
-                participantName = await fetchNameFromConversation(conversationId, participantId, pageId);
+            // If we have a temp ID, first try to get the real conversation ID
+            if (!participantName) {
+                let convIdForLookup = conversationId;
+
+                // For temporary IDs (t_xxx), try to get the real conversation ID first
+                if (conversationId.startsWith('t_')) {
+                    console.log(`[WEBHOOK] Temp ID detected, fetching real conversation ID for name lookup...`);
+                    const realId = await fetchRealConversationId(participantId, pageId);
+                    if (realId) {
+                        convIdForLookup = realId;
+                        // Also update our conversationId so it's saved correctly
+                        conversationId = realId;
+                        console.log(`[WEBHOOK] Updated to real conversation ID: ${realId}`);
+                    }
+                }
+
+                if (convIdForLookup && !convIdForLookup.startsWith('t_')) {
+                    console.log(`[WEBHOOK] Trying conversation API for name (sync method)...`);
+                    participantName = await fetchNameFromConversation(convIdForLookup, participantId, pageId);
+                }
             }
 
             // Source 3: Try to extract name from message content using patterns
