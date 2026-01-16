@@ -161,9 +161,10 @@ export default async function handler(req, res) {
         // =============================================
         console.log('Checking calendar events for reminders...');
 
+        // Query calendar events directly (no FK join needed)
         const { data: calendarEvents, error: calError } = await supabase
             .from('calendar_events')
-            .select('*, facebook_conversations!conversation_id(participant_id, page_id)')
+            .select('*')
             .eq('status', 'scheduled')
             .gte('start_time', now.toISOString())
             .lte('start_time', in24Hours.toISOString());
@@ -189,9 +190,23 @@ export default async function handler(req, res) {
 
             if (!reminderType) continue;
 
-            // Get conversation info for sending message
-            const participantId = event.contact_psid || event.facebook_conversations?.participant_id;
-            const pageId = event.facebook_conversations?.page_id;
+            // Get participant and page info from event or conversation
+            let participantId = event.contact_psid;
+            let pageId = null;
+
+            // If no contact_psid on event, look up from conversation
+            if (event.conversation_id) {
+                const { data: conv } = await supabase
+                    .from('facebook_conversations')
+                    .select('participant_id, page_id')
+                    .eq('conversation_id', event.conversation_id)
+                    .single();
+
+                if (conv) {
+                    participantId = participantId || conv.participant_id;
+                    pageId = conv.page_id;
+                }
+            }
 
             if (!participantId || !pageId) {
                 console.log(`Event ${event.id}: Missing contact info, skipping reminder`);
