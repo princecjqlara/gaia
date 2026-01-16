@@ -520,7 +520,42 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
             return;
         }
 
-        // Cooldown check removed - AI always responds immediately
+        // SPAM PREVENTION: Check if we already sent the last message
+        // If AI/page sent the last message, don't respond again until customer replies
+        const { data: lastMessages } = await db
+            .from('facebook_messages')
+            .select('is_from_page, timestamp')
+            .eq('conversation_id', conversationId)
+            .order('timestamp', { ascending: false })
+            .limit(3);
+
+        if (lastMessages && lastMessages.length >= 2) {
+            // Count consecutive messages from page
+            let consecutivePageMessages = 0;
+            for (const msg of lastMessages) {
+                if (msg.is_from_page) {
+                    consecutivePageMessages++;
+                } else {
+                    break;
+                }
+            }
+
+            // If we already sent 2+ consecutive messages, wait for customer to reply
+            if (consecutivePageMessages >= 2) {
+                console.log(`[WEBHOOK] AI already sent ${consecutivePageMessages} consecutive messages - waiting for customer reply`);
+                return;
+            }
+        }
+
+        // COOLDOWN: Don't respond if we responded in the last 30 seconds
+        if (conversation?.last_ai_response_at) {
+            const lastResponse = new Date(conversation.last_ai_response_at);
+            const secondsSinceLastResponse = (Date.now() - lastResponse.getTime()) / 1000;
+            if (secondsSinceLastResponse < 30) {
+                console.log(`[WEBHOOK] AI cooling down - last response ${secondsSinceLastResponse}s ago`);
+                return;
+            }
+        }
 
         console.log('[WEBHOOK] All checks passed - proceeding with AI response');
 

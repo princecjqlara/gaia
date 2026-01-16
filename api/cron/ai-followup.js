@@ -152,26 +152,44 @@ export default async function handler(req, res) {
                 // Calculate minutes since last message for smart timing
                 const minutesSince = Math.floor((now - new Date(conv.last_message_time)) / (1000 * 60));
                 const hoursSince = Math.floor(minutesSince / 60);
+                const daysSince = Math.floor(hoursSince / 24);
 
-                // FAST timing for testing (1-5 minutes instead of 30-180)
+                // GRADUATED FOLLOW-UP STRATEGY:
+                // - 0-2 hours: AGGRESSIVE - follow up every 30 minutes
+                // - 2-6 hours: MODERATE - follow up every 2 hours  
+                // - 6-24 hours: MILD - follow up every 4 hours
+                // - 24-72 hours: LIGHT - follow up every 8 hours
+                // - 72+ hours: MINIMAL - follow up once daily
+
                 let waitMinutes;
                 let reason;
+                let aggressiveness;
 
-                if (minutesSince < 60) {
-                    waitMinutes = 1; // 1 min for testing
-                    reason = `Silent for ${minutesSince} mins - quick check-in`;
-                } else if (minutesSince < 120) {
-                    waitMinutes = 2;
-                    reason = `Silent for ${hoursSince}h - gentle follow-up`;
-                } else if (minutesSince < 240) {
-                    waitMinutes = 3;
-                    reason = `Silent for ${hoursSince}h - check back in`;
-                } else if (minutesSince < 480) {
-                    waitMinutes = 4;
-                    reason = `Silent for ${hoursSince}h - giving space`;
+                if (hoursSince < 2) {
+                    // AGGRESSIVE: Fresh lead, they just responded - act fast!
+                    waitMinutes = 30;
+                    reason = `Hot lead! Last contact ${minutesSince} mins ago - quick follow-up`;
+                    aggressiveness = 'aggressive';
+                } else if (hoursSince < 6) {
+                    // MODERATE: Still warm, but give them some space
+                    waitMinutes = 120; // 2 hours
+                    reason = `Warm lead, ${hoursSince}h silent - moderate follow-up`;
+                    aggressiveness = 'moderate';
+                } else if (hoursSince < 24) {
+                    // MILD: They may be busy, check in periodically
+                    waitMinutes = 240; // 4 hours
+                    reason = `${hoursSince}h silent - gentle check-in`;
+                    aggressiveness = 'mild';
+                } else if (hoursSince < 72) {
+                    // LIGHT: Been a day or more, less frequent
+                    waitMinutes = 480; // 8 hours
+                    reason = `${daysSince} day(s) silent - light touch`;
+                    aggressiveness = 'light';
                 } else {
-                    waitMinutes = 5;
-                    reason = `Silent for ${hoursSince}h - longer follow-up`;
+                    // MINIMAL: Long time no reply, daily at most
+                    waitMinutes = 1440; // 24 hours (daily)
+                    reason = `${daysSince} days silent - daily check-in`;
+                    aggressiveness = 'minimal';
                 }
 
                 // Calculate scheduled time
