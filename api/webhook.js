@@ -189,10 +189,11 @@ async function fetchNameFromConversation(conversationId, participantId, pageId) 
 /**
  * Fetch the real Facebook conversation ID for a participant
  * This queries Facebook's Conversations API to find the thread ID
+ * Returns both conversation ID and participant name if found
  */
 async function fetchRealConversationId(participantId, pageId) {
     const db = getSupabase();
-    if (!db) return null;
+    if (!db) return { conversationId: null, name: null };
 
     try {
         // Get page access token
@@ -204,17 +205,17 @@ async function fetchRealConversationId(participantId, pageId) {
 
         if (!page?.page_access_token || page.page_access_token === 'pending') {
             console.log('[WEBHOOK] No valid page access token for conversation lookup');
-            return null;
+            return { conversationId: null, name: null };
         }
 
-        // Query Facebook's conversations endpoint to find the thread with this participant
-        const url = `https://graph.facebook.com/v21.0/${pageId}/conversations?fields=id,participants&access_token=${page.page_access_token}`;
+        // Query Facebook's conversations endpoint - include participant NAME for efficiency
+        const url = `https://graph.facebook.com/v21.0/${pageId}/conversations?fields=id,participants{id,name}&access_token=${page.page_access_token}`;
         console.log(`[WEBHOOK] Fetching conversations to find thread for participant: ${participantId}`);
 
         const response = await fetch(url);
         if (!response.ok) {
-            console.error('[WEBHOOK] Failed to fetch conversations from Facebook');
-            return null;
+            console.error('[WEBHOOK] Failed to fetch conversations from Facebook:', response.status);
+            return { conversationId: null, name: null };
         }
 
         const data = await response.json();
@@ -222,18 +223,21 @@ async function fetchRealConversationId(participantId, pageId) {
         // Find the conversation that includes this participant
         for (const conv of data.data || []) {
             const participants = conv.participants?.data || [];
-            const hasParticipant = participants.some(p => p.id === participantId);
-            if (hasParticipant) {
-                console.log(`[WEBHOOK] Found real conversation ID: ${conv.id} for participant ${participantId}`);
-                return conv.id;
+            const participant = participants.find(p => p.id === participantId);
+            if (participant) {
+                console.log(`[WEBHOOK] Found real conversation ID: ${conv.id}, name: ${participant.name || 'not available'}`);
+                return {
+                    conversationId: conv.id,
+                    name: participant.name || null
+                };
             }
         }
 
         console.log(`[WEBHOOK] Conversation not found for participant ${participantId} in first page of results`);
-        return null;
+        return { conversationId: null, name: null };
     } catch (err) {
         console.error('[WEBHOOK] Error fetching real conversation ID:', err.message);
-        return null;
+        return { conversationId: null, name: null };
     }
 }
 
@@ -413,9 +417,9 @@ async function handleIncomingMessage(pageId, event) {
             // Try to get the real Facebook conversation ID
             console.log(`[WEBHOOK] STEP 3: Fetching real conversation ID from Facebook...`);
             try {
-                const realConvId = await fetchRealConversationId(participantId, pageId);
-                if (realConvId) {
-                    conversationId = realConvId;
+                const result = await fetchRealConversationId(participantId, pageId);
+                if (result.conversationId) {
+                    conversationId = result.conversationId;
                     console.log(`[WEBHOOK] STEP 3 RESULT: Using real Facebook conversation ID: ${conversationId}`);
                 } else {
                     // Fallback to temporary ID only if we can't get the real one
@@ -459,16 +463,23 @@ async function handleIncomingMessage(pageId, event) {
                 // For temporary IDs (t_xxx), try to get the real conversation ID first
                 if (conversationId.startsWith('t_')) {
                     console.log(`[WEBHOOK] Temp ID detected, fetching real conversation ID for name lookup...`);
-                    const realId = await fetchRealConversationId(participantId, pageId);
-                    if (realId) {
-                        convIdForLookup = realId;
+                    const result = await fetchRealConversationId(participantId, pageId);
+                    if (result.conversationId) {
+                        convIdForLookup = result.conversationId;
                         // Also update our conversationId so it's saved correctly
-                        conversationId = realId;
-                        console.log(`[WEBHOOK] Updated to real conversation ID: ${realId}`);
+                        conversationId = result.conversationId;
+                        console.log(`[WEBHOOK] Updated to real conversation ID: ${result.conversationId}`);
+
+                        // If we also got a name, use it!
+                        if (result.name) {
+                            participantName = result.name;
+                            console.log(`[WEBHOOK] ✅ Got name from conversation lookup: ${result.name}`);
+                        }
                     }
                 }
 
-                if (convIdForLookup && !convIdForLookup.startsWith('t_')) {
+                // If still no name, try the fetchNameFromConversation method
+                if (!participantName && convIdForLookup && !convIdForLookup.startsWith('t_')) {
                     console.log(`[WEBHOOK] Trying conversation API for name (sync method)...`);
                     participantName = await fetchNameFromConversation(convIdForLookup, participantId, pageId);
                 }
