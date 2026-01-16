@@ -879,22 +879,29 @@ When customer wants to schedule/book, share this: ${config.booking_url}
 - Example: "Hi! 😊 ||| Ang basic package natin is ₱1,799/month. ||| Kasama na lahat ng essentials tulad ng: ||| - 2 videos ||| - 2 photos ||| - Ad management ||| Gusto mo ba malaman pa?"
 - Another example: "Hello po! ||| I'd be happy to help. ||| What specific service are you interested in?"
 
-## 📅 BOOKING CONFIRMATION (CRITICAL - FOLLOW EXACTLY)
-When a customer confirms a specific date and time for a meeting/booking:
-1. Confirm the booking in your message to them
-2. At the VERY END of your message (after all |||), add this marker on its own line:
-   BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber
-   
-Example: If customer says "Yes, book me for January 20 at 2pm" and their name is Maria with phone 09171234567:
-Your response: "Perfect po! ✅ ||| Booked ka na for January 20, 2026 at 2:00 PM. ||| See you then!
-BOOKING_CONFIRMED: 2026-01-20 14:00 | Maria | 09171234567"
+## 📅 BOOKING CONFIRMATION — MANDATORY SYSTEM MARKER (YOU MUST DO THIS)
+⚠️ THIS IS REQUIRED - THE SYSTEM CANNOT CREATE CALENDAR EVENTS WITHOUT THIS MARKER ⚠️
 
-Notes:
-- Use 24-hour format for time (14:00 not 2pm)
-- Use PIPE character | as separator (NOT dash -)
-- If phone number is unknown, leave blank after the last pipe
+When a customer confirms/agrees to a specific date and time for a booking or meeting:
+
+STEP 1: Confirm the booking in your message to them (in Taglish)
+STEP 2: ALWAYS add this marker at the VERY END (this is for the SYSTEM, customer won't see it):
+
+BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber
+
+EXAMPLE CONVERSATION:
+Customer: "okay"
+Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 17, 2026 at 6:00 PM. ||| See you there!
+BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
+
+⚠️ CRITICAL RULES:
+- You MUST add BOOKING_CONFIRMED even if you just say "Noted po!" - if they confirmed a booking, ADD THE MARKER
+- Use 24-hour format: 18:00 (not 6pm), 14:00 (not 2pm)
+- Use PIPE | as separator, NOT dash -
+- If phone was mentioned in conversation, include it
+- If customer name is known (from conversation), include it
 - This marker MUST be on its own line at the very end
-- Only use this when customer CONFIRMS a specific date/time, not when just asking about availability
+- The marker is invisible to the customer - it's processed by the system
 `;
 
         // Build messages array, handling images for vision models
