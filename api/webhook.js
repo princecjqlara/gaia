@@ -1051,14 +1051,12 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
                             const { error: calError } = await db
                                 .from('calendar_events')
                                 .insert({
-                                    title: `Meeting: ${customerName}`,
-                                    description: `Booked via AI chatbot\nPhone: ${phone}\nConversation: ${conversationId}`,
+                                    title: `📅 Booking: ${customerName}`,
+                                    description: `Booked via AI chatbot\nPhone: ${phone}\nConversation: ${conversationId}\nCustomer: ${customerName}`,
                                     start_time: bookingDate.toISOString(),
                                     end_time: new Date(bookingDate.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour
                                     event_type: 'meeting',
-                                    status: 'scheduled',
-                                    attendees: [customerName],
-                                    notes: `AI booked for ${conversation?.participant_name || 'Unknown'}`
+                                    status: 'scheduled'
                                 });
 
                             if (calError) {
@@ -1248,10 +1246,19 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
                         // Get customer name from conversation
                         const customerName = conversation?.participant_name || 'Customer';
 
-                        // Try to extract phone from conversation (look in last few messages)
+                        // Try to extract phone from recent messages
                         let phone = '';
-                        const phoneMatch = message.text?.match(/0\d{10}/) || message.text?.match(/\+63\d{10}/);
-                        if (phoneMatch) phone = phoneMatch[0];
+                        if (recentMessages && recentMessages.length > 0) {
+                            for (const msg of recentMessages) {
+                                const msgText = msg.message_text || '';
+                                const phoneMatch = msgText.match(/09\d{9}/) || msgText.match(/0\d{10}/) || msgText.match(/\+63\d{10}/);
+                                if (phoneMatch) {
+                                    phone = phoneMatch[0];
+                                    console.log('[WEBHOOK] FALLBACK: Found phone in messages:', phone);
+                                    break;
+                                }
+                            }
+                        }
 
                         // Create calendar event
                         try {
