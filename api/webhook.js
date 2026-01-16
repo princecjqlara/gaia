@@ -37,8 +37,19 @@ function extractNameFromText(text) {
         const match = text.match(pattern);
         if (match && match[1]) {
             const name = match[1].trim();
-            // Validate: 2-25 chars, letters/spaces only, no common words
-            const invalidNames = ['interested', 'here', 'yes', 'no', 'ok', 'okay', 'thanks', 'thank', 'hello', 'hi', 'hey'];
+            // Validate: 2-25 chars, letters/spaces only, no common words (English + Filipino)
+            const invalidNames = [
+                // English common words
+                'interested', 'here', 'yes', 'no', 'ok', 'okay', 'thanks', 'thank', 'hello', 'hi', 'hey',
+                'good', 'great', 'nice', 'sure', 'fine', 'well', 'please', 'help', 'want', 'need',
+                // Filipino common words that might match patterns
+                'gusto', 'ako', 'ikaw', 'siya', 'kami', 'kayo', 'sila', 'tayo', 'namin', 'nila',
+                'ito', 'yan', 'yun', 'dito', 'dyan', 'doon', 'sino', 'ano', 'saan', 'kailan',
+                'paano', 'bakit', 'oo', 'hindi', 'wala', 'meron', 'may', 'mga', 'lang', 'din',
+                'rin', 'nga', 'naman', 'pala', 'daw', 'raw', 'kasi', 'pero', 'at', 'o',
+                'pwede', 'puwede', 'kaya', 'talaga', 'sobra', 'grabe', 'nako', 'hala', 'sige',
+                'salamat', 'maraming', 'pasensya', 'sorry', 'kuya', 'ate', 'boss', 'sir', 'maam'
+            ];
             if (name.length >= 2 && name.length <= 25 && /^[A-Za-z\s]+$/.test(name) && !invalidNames.includes(name.toLowerCase())) {
                 return name;
             }
@@ -262,12 +273,20 @@ async function handleIncomingMessage(pageId, event) {
     }
 
     // Check if this is an echo (message sent FROM the page, not received)
-    const isEcho = message.is_echo === true;
+    // Method 1: Facebook sets is_echo flag for echoed messages
+    // Method 2: Sender ID matches page ID (for Business Suite messages)
+    const isEcho = message.is_echo === true || senderId === pageId;
 
     // For echoes: sender is the page, recipient is the user
     // For regular messages: sender is the user, recipient is the page
     const participantId = isEcho ? recipientId : senderId;
     const isFromPage = isEcho;
+
+    // Additional validation: participantId should not be the page
+    if (!participantId || participantId === pageId) {
+        console.log(`[WEBHOOK] Skipping - no valid participant (participantId=${participantId}, pageId=${pageId})`);
+        return;
+    }
 
     const db = getSupabase();
     if (!db) {
