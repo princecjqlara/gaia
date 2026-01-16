@@ -826,10 +826,106 @@ class FacebookService {
 
             if (error) throw error;
             console.log(`[LEAD_STATUS] Updated ${conversationId} to ${status}`);
+
+            // Sync to Facebook Custom Labels
+            try {
+                await this.syncLabelToFacebook(data.page_id, data.participant_id, status);
+            } catch (fbError) {
+                console.log(`[LEAD_STATUS] Facebook sync failed (non-fatal): ${fbError.message}`);
+            }
+
             return data;
         } catch (error) {
             console.error('Error updating lead status:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Sync lead status to Facebook Custom Labels
+     * Creates the label if it doesn't exist, then associates with PSID
+     */
+    async syncLabelToFacebook(pageId, participantId, status) {
+        if (!pageId || !participantId || !status) return;
+
+        try {
+            // Get page access token
+            const pages = await this.getConnectedPages();
+            const page = pages.find(p => p.page_id === pageId);
+            if (!page?.page_access_token) {
+                console.log('[FB_LABEL] No page access token');
+                return;
+            }
+
+            // Map our status to Facebook label name
+            const labelNames = {
+                'intake': 'Intake',
+                'qualified': 'Qualified',
+                'unqualified': 'Unqualified',
+                'appointment_booked': 'Appointment Booked',
+                'converted': 'Converted'
+            };
+            const labelName = labelNames[status] || status;
+
+            console.log(`[FB_LABEL] Syncing label "${labelName}" for ${participantId}`);
+
+            // Step 1: Get or create the label
+            // First, fetch existing labels to find if it exists
+            const labelsUrl = `${GRAPH_API_BASE}/${pageId}/custom_labels?fields=id,page_label_name&access_token=${page.page_access_token}`;
+            const labelsResponse = await fetch(labelsUrl);
+
+            let labelId = null;
+
+            if (labelsResponse.ok) {
+                const labelsData = await labelsResponse.json();
+                const existingLabel = (labelsData.data || []).find(
+                    l => (l.page_label_name || l.name || '').toLowerCase() === labelName.toLowerCase()
+                );
+
+                if (existingLabel) {
+                    labelId = existingLabel.id;
+                    console.log(`[FB_LABEL] Found existing label: ${labelId}`);
+                }
+            }
+
+            // If label doesn't exist, create it
+            if (!labelId) {
+                console.log(`[FB_LABEL] Creating new label: ${labelName}`);
+                const createUrl = `${GRAPH_API_BASE}/${pageId}/custom_labels?access_token=${page.page_access_token}`;
+                const createResponse = await fetch(createUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ page_label_name: labelName })
+                });
+
+                if (createResponse.ok) {
+                    const createData = await createResponse.json();
+                    labelId = createData.id;
+                    console.log(`[FB_LABEL] Created label: ${labelId}`);
+                } else {
+                    const errorText = await createResponse.text();
+                    console.log(`[FB_LABEL] Failed to create label: ${errorText}`);
+                    return;
+                }
+            }
+
+            // Step 2: Associate the label with the PSID
+            console.log(`[FB_LABEL] Associating label ${labelId} with ${participantId}`);
+            const associateUrl = `${GRAPH_API_BASE}/${labelId}/label?access_token=${page.page_access_token}`;
+            const associateResponse = await fetch(associateUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user: participantId })
+            });
+
+            if (associateResponse.ok) {
+                console.log(`[FB_LABEL] ✅ Successfully synced label to Facebook`);
+            } else {
+                const errorText = await associateResponse.text();
+                console.log(`[FB_LABEL] Failed to associate label: ${errorText}`);
+            }
+        } catch (err) {
+            console.error('[FB_LABEL] Error:', err.message);
         }
     }
 
