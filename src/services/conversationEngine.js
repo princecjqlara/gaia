@@ -703,7 +703,7 @@ export async function sendAIMessage(conversationId, pageId, options = {}) {
  */
 async function sendFacebookMessage(pageId, recipientId, text, accessToken) {
     try {
-        const GRAPH_API_BASE = 'https://graph.facebook.com/v18.0';
+        const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
 
         const response = await fetch(
             `${GRAPH_API_BASE}/${pageId}/messages?access_token=${accessToken}`,

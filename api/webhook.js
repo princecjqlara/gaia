@@ -47,7 +47,7 @@ async function fetchFacebookUserName(userId, pageId) {
         }
 
         // Try to fetch user profile from Facebook using PSID
-        const url = `https://graph.facebook.com/v18.0/${userId}?fields=name,first_name,last_name&access_token=${page.page_access_token}`;
+        const url = `https://graph.facebook.com/v21.0/${userId}?fields=name,first_name,last_name&access_token=${page.page_access_token}`;
         console.log(`[WEBHOOK] Fetching user profile for PSID: ${userId}`);
 
         const response = await fetch(url);
@@ -115,7 +115,7 @@ async function fetchRealConversationId(participantId, pageId) {
         }
 
         // Query Facebook's conversations endpoint to find the thread with this participant
-        const url = `https://graph.facebook.com/v18.0/${pageId}/conversations?fields=id,participants&access_token=${page.page_access_token}`;
+        const url = `https://graph.facebook.com/v21.0/${pageId}/conversations?fields=id,participants&access_token=${page.page_access_token}`;
         console.log(`[WEBHOOK] Fetching conversations to find thread for participant: ${participantId}`);
 
         const response = await fetch(url);
@@ -986,7 +986,7 @@ When customer wants to schedule/book, share this: ${config.booking_url}
             console.log(`[WEBHOOK] Sending part ${i + 1}/${messageParts.length}: "${part.substring(0, 50)}..."`);
 
             const sendResponse = await fetch(
-                `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
+                `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1006,7 +1006,7 @@ When customer wants to schedule/book, share this: ${config.booking_url}
                 if (err.includes('allowed window') || err.includes('outside')) {
                     console.log('[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...');
                     const retryResponse = await fetch(
-                        `https://graph.facebook.com/v18.0/${pageId}/messages?access_token=${page.page_access_token}`,
+                        `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
                         {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },

@@ -88,8 +88,11 @@ export default async function handler(req, res) {
         // Calculate cutoff time (conversations inactive for X hours)
         const cutoffTime = new Date(now.getTime() - (silenceHours * 60 * 60 * 1000));
 
-        // Find conversations that need follow-up
-        // Uses MESSAGE_TAG with ACCOUNT_UPDATE to bypass 24h window
+        // Find conversations that need follow-up:
+        // - AI is enabled (or null = default enabled)
+        // - Human hasn't taken over
+        // - Last message was from the page (meaning we're waiting for user reply)
+        // - Last message time is older than cutoff (silence period passed)
         const { data: conversations, error } = await db
             .from('facebook_conversations')
             .select(`
@@ -99,13 +102,14 @@ export default async function handler(req, res) {
                 participant_id,
                 last_message_time,
                 last_message_from_page,
-                active_goal_id
+                active_goal_id,
+                ai_enabled,
+                human_takeover
             `)
-            .or('ai_enabled.is.null,ai_enabled.eq.true')
-            .or('human_takeover.is.null,human_takeover.eq.false')
-            .or('opt_out.is.null,opt_out.eq.false')
+            .neq('ai_enabled', false) // Include null (default enabled) and true
+            .neq('human_takeover', true) // Include null and false
+            .eq('last_message_from_page', true) // Only follow up when WE sent the last message
             .lt('last_message_time', cutoffTime.toISOString())
-            .or(`cooldown_until.is.null,cooldown_until.lt.${now.toISOString()}`)
             .order('last_message_time', { ascending: false })
             .limit(maxPerRun);
 

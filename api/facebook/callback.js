@@ -22,7 +22,7 @@ export default async function handler(req, res) {
         const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://arescampy.vercel.app'}/api/facebook/callback`;
 
         // Exchange code for access token
-        const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
+        const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
 
         const tokenResponse = await fetch(tokenUrl);
         const tokenData = await tokenResponse.json();
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
         const userAccessToken = tokenData.access_token;
 
         // Get user's pages with relevant fields
-        const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,picture&access_token=${userAccessToken}`;
+        const pagesUrl = `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,picture&access_token=${userAccessToken}`;
         const pagesResponse = await fetch(pagesUrl);
         const pagesData = await pagesResponse.json();
 

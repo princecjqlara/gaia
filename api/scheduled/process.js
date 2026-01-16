@@ -142,7 +142,7 @@ export default async function handler(req, res) {
                     for (const recipient of recipients) {
                         try {
                             const response = await fetch(
-                                `https://graph.facebook.com/v18.0/${scheduledMsg.page_id}/messages?access_token=${page.page_access_token}`,
+                                `https://graph.facebook.com/v21.0/${scheduledMsg.page_id}/messages?access_token=${page.page_access_token}`,
                                 {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
@@ -394,7 +394,7 @@ Generate ONLY the follow-up message, nothing else:`;
 
                         // Send via Messenger
                         const response = await fetch(
-                            `https://graph.facebook.com/v18.0/${followup.page_id}/messages?access_token=${page.page_access_token}`,
+                            `https://graph.facebook.com/v21.0/${followup.page_id}/messages?access_token=${page.page_access_token}`,
                             {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },

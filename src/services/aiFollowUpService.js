@@ -106,7 +106,7 @@ Keep it short (2-3 sentences max), include the date/time, use emojis sparingly. 
  * @param {string} accessToken - Page access token
  */
 export async function sendFollowUpMessage(pageId, psid, message, accessToken) {
-    const GRAPH_API_BASE = 'https://graph.facebook.com/v18.0';
+    const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
 
     const response = await fetch(
         `${GRAPH_API_BASE}/${pageId}/messages?access_token=${accessToken}`,

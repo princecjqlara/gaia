@@ -75,7 +75,7 @@ export const useScheduledMessageProcessor = (isActive = true) => {
                     for (const recipient of recipients) {
                         try {
                             const response = await fetch(
-                                `https://graph.facebook.com/v18.0/${msg.page_id}/messages`,
+                                `https://graph.facebook.com/v21.0/${msg.page_id}/messages`,
                                 {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
