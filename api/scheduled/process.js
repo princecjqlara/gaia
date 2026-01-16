@@ -300,12 +300,22 @@ export default async function handler(req, res) {
                             continue;
                         }
 
-                        // Get conversation details separately
+                        // Get conversation details and check if AI is enabled
                         const { data: conversation } = await supabase
                             .from('facebook_conversations')
-                            .select('participant_id, participant_name')
+                            .select('participant_id, participant_name, ai_enabled')
                             .eq('conversation_id', followup.conversation_id)
                             .single();
+
+                        // Check if AI is disabled for this conversation
+                        if (conversation?.ai_enabled === false) {
+                            console.log(`[AI FOLLOWUP] AI disabled for ${followup.conversation_id} - cancelling`);
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({ status: 'cancelled', error_message: 'AI disabled for this contact' })
+                                .eq('id', followup.id);
+                            continue;
+                        }
 
                         const recipientId = conversation?.participant_id;
                         const contactName = conversation?.participant_name || 'there';
