@@ -20,6 +20,8 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     const [activeTab, setActiveTab] = useState('status');
     const [showGoalSelector, setShowGoalSelector] = useState(false);
     const [adminConfig, setAdminConfig] = useState(null); // Admin AI chatbot config
+    const [agentContext, setAgentContext] = useState(''); // External context for AI
+    const [savingContext, setSavingContext] = useState(false);
 
     const supabase = getSupabaseClient();
 
@@ -33,13 +35,14 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     const loadAllData = async () => {
         setLoading(true);
         try {
-            const [safety, goal, followUps, logs, templates, time] = await Promise.all([
+            const [safety, goal, followUps, logs, templates, time, convData] = await Promise.all([
                 checkSafetyStatus(conversationId),
                 getActiveGoal(conversationId),
                 getScheduledFollowUps(conversationId, { includeAll: true }),
                 loadActionLog(),
                 getGoalTemplates(),
-                calculateBestTimeToContact(conversationId)
+                calculateBestTimeToContact(conversationId),
+                supabase.from('facebook_conversations').select('agent_context').eq('conversation_id', conversationId).single()
             ]);
 
             setSafetyStatus(safety);
@@ -48,6 +51,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             setActionLog(logs);
             setGoalTemplates(templates);
             setBestTime(time);
+            setAgentContext(convData?.data?.agent_context || '');
 
             // Load admin config to check if goals are admin-controlled
             // Check localStorage first (always available), then try database
@@ -133,6 +137,21 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             reason: 'Manual follow-up scheduled'
         });
         await loadAllData();
+    };
+
+    // Save agent context
+    const handleSaveContext = async () => {
+        setSavingContext(true);
+        try {
+            await supabase
+                .from('facebook_conversations')
+                .update({ agent_context: agentContext })
+                .eq('conversation_id', conversationId);
+            console.log('[AI Panel] Agent context saved');
+        } catch (err) {
+            console.error('[AI Panel] Error saving context:', err);
+        }
+        setSavingContext(false);
     };
 
     // Styles - Dark theme to match system
@@ -410,6 +429,47 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                 >
                                     {safetyStatus?.canAIRespond ? '⏸️ Pause AI' : '▶️ Resume AI'}
                                 </button>
+                            </div>
+
+                            {/* Agent Context Section */}
+                            <div style={styles.section}>
+                                <h3 style={styles.sectionTitle}>📝 External Context for AI</h3>
+                                <div style={styles.statusCard}>
+                                    <textarea
+                                        value={agentContext}
+                                        onChange={(e) => setAgentContext(e.target.value)}
+                                        placeholder="Add any external context here (phone calls, emails, etc.) that the AI should know about when following up..."
+                                        style={{
+                                            width: '100%',
+                                            minHeight: '80px',
+                                            padding: '10px',
+                                            background: '#1a1a2e',
+                                            border: '1px solid #3d3d5c',
+                                            borderRadius: '6px',
+                                            color: '#e5e7eb',
+                                            fontSize: '13px',
+                                            resize: 'vertical',
+                                            fontFamily: 'inherit'
+                                        }}
+                                    />
+                                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                                            AI will use this context when generating responses
+                                        </span>
+                                        <button
+                                            style={{
+                                                ...styles.button,
+                                                ...styles.buttonPrimary,
+                                                padding: '6px 14px',
+                                                fontSize: '12px'
+                                            }}
+                                            onClick={handleSaveContext}
+                                            disabled={savingContext}
+                                        >
+                                            {savingContext ? 'Saving...' : '💾 Save Context'}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Next Intuition Follow-up Section */}
