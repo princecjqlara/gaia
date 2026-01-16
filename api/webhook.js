@@ -1076,6 +1076,73 @@ Notes:
                         } catch (pipeErr) {
                             console.error('[WEBHOOK] Pipeline update error:', pipeErr.message);
                         }
+
+                        // Also add to clients table (the actual pipeline)
+                        try {
+                            // Check if client already exists by name or phone
+                            let existingClient = null;
+
+                            if (phone && phone.length > 5) {
+                                const { data: byPhone } = await db
+                                    .from('clients')
+                                    .select('id')
+                                    .ilike('contact_details', `%${phone}%`)
+                                    .limit(1)
+                                    .maybeSingle();
+                                existingClient = byPhone;
+                            }
+
+                            if (!existingClient && customerName) {
+                                const { data: byName } = await db
+                                    .from('clients')
+                                    .select('id')
+                                    .ilike('client_name', customerName)
+                                    .limit(1)
+                                    .maybeSingle();
+                                existingClient = byName;
+                            }
+
+                            if (!existingClient) {
+                                // Create new client in pipeline
+                                const clientData = {
+                                    client_name: customerName,
+                                    contact_details: phone || null,
+                                    notes: `Booked via AI on ${bookingDate.toLocaleDateString()}`,
+                                    phase: 'booked',
+                                    payment_status: 'unpaid',
+                                    source: 'ai_chatbot',
+                                    created_at: new Date().toISOString()
+                                };
+
+                                const { data: newClient, error: clientError } = await db
+                                    .from('clients')
+                                    .insert(clientData)
+                                    .select()
+                                    .single();
+
+                                if (clientError) {
+                                    // Try without source column if it doesn't exist
+                                    if (clientError.message?.includes('source')) {
+                                        delete clientData.source;
+                                        await db.from('clients').insert(clientData);
+                                        console.log('[WEBHOOK] ✅ Added to clients pipeline (without source)');
+                                    } else {
+                                        console.log('[WEBHOOK] Could not add to clients:', clientError.message);
+                                    }
+                                } else {
+                                    console.log('[WEBHOOK] ✅ Added to clients pipeline:', newClient?.id);
+                                }
+                            } else {
+                                // Update existing client to booked phase
+                                await db
+                                    .from('clients')
+                                    .update({ phase: 'booked' })
+                                    .eq('id', existingClient.id);
+                                console.log('[WEBHOOK] ✅ Updated existing client to booked:', existingClient.id);
+                            }
+                        } catch (clientErr) {
+                            console.log('[WEBHOOK] Clients table sync error (non-critical):', clientErr.message);
+                        }
                     }
 
                     // Remove the BOOKING_CONFIRMED line from the reply (it's internal)
