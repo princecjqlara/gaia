@@ -212,15 +212,32 @@ export default async function handler(req, res) {
 
             const botConfig = botSettings?.value || {};
             if (botConfig.global_bot_enabled === false) {
-                console.log('[AI FOLLOWUP] ⛔ Global bot is DISABLED - skipping follow-up sending');
+                console.log('[AI FOLLOWUP] ⛔ Global bot is DISABLED - cancelling all pending follow-ups');
+
+                // Cancel ALL pending follow-ups so they don't get sent later
+                const { data: cancelledCount, error: cancelError } = await supabase
+                    .from('ai_followup_schedule')
+                    .update({
+                        status: 'cancelled',
+                        error_message: 'Bot was globally disabled'
+                    })
+                    .eq('status', 'pending')
+                    .select('id');
+
+                if (cancelError) {
+                    console.error('[AI FOLLOWUP] Error cancelling follow-ups:', cancelError.message);
+                } else {
+                    console.log(`[AI FOLLOWUP] ✅ Cancelled ${cancelledCount?.length || 0} pending follow-ups`);
+                }
+
                 return res.status(200).json({
                     success: true,
-                    message: 'Bot is globally disabled',
+                    message: 'Bot is globally disabled - cancelled all pending follow-ups',
                     disabled: true,
                     processed,
                     failed,
                     aiFollowupsSent: 0,
-                    aiFollowupsFailed: 0
+                    aiFollowupsCancelled: cancelledCount?.length || 0
                 });
             }
 
