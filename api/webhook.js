@@ -1063,6 +1063,25 @@ Notes:
                             console.error('[WEBHOOK] Calendar insert error:', calErr.message);
                         }
 
+                        // Cancel any pending follow-ups for this conversation (they booked!)
+                        try {
+                            const { data: cancelledFollowups, error: cancelError } = await db
+                                .from('ai_followup_schedule')
+                                .update({
+                                    status: 'cancelled',
+                                    error_message: 'Contact booked - no follow-up needed'
+                                })
+                                .eq('conversation_id', conversationId)
+                                .eq('status', 'pending')
+                                .select('id');
+
+                            if (cancelledFollowups?.length > 0) {
+                                console.log(`[WEBHOOK] ✅ Cancelled ${cancelledFollowups.length} pending follow-ups - contact booked!`);
+                            }
+                        } catch (cancelErr) {
+                            console.log('[WEBHOOK] Could not cancel follow-ups:', cancelErr.message);
+                        }
+
                         // Move contact to 'booked' pipeline stage with contact details
                         try {
                             const updateData = {
