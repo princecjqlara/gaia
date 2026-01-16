@@ -872,6 +872,22 @@ When customer wants to schedule/book, share this: ${config.booking_url}
 - EVERY response with more than 2 sentences MUST be split
 - Example: "Hi! 😊 ||| Ang basic package natin is ₱1,799/month. ||| Kasama na lahat ng essentials tulad ng: ||| - 2 videos ||| - 2 photos ||| - Ad management ||| Gusto mo ba malaman pa?"
 - Another example: "Hello po! ||| I'd be happy to help. ||| What specific service are you interested in?"
+
+## 📅 BOOKING CONFIRMATION (CRITICAL - FOLLOW EXACTLY)
+When a customer confirms a specific date and time for a meeting/booking:
+1. Confirm the booking in your message to them
+2. At the VERY END of your message (after all |||), add this marker on its own line:
+   BOOKING_CONFIRMED: YYYY-MM-DD HH:MM - CustomerName - PhoneNumber
+   
+Example: If customer says "Yes, book me for January 20 at 2pm" and their name is Maria:
+Your response: "Perfect po! ✅ ||| Booked ka na for January 20, 2026 at 2:00 PM. ||| See you then!
+BOOKING_CONFIRMED: 2026-01-20 14:00 - Maria - "
+
+Notes:
+- Use 24-hour format for time (14:00 not 2pm)
+- If phone number is unknown, leave blank after the last dash
+- This marker MUST be on its own line at the very end
+- Only use this when customer CONFIRMS a specific date/time, not when just asking about availability
 `;
 
         // Build messages array, handling images for vision models
