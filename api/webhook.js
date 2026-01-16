@@ -1124,20 +1124,22 @@ ${messagesSummary}
 
 You must respond with ONLY valid JSON (no markdown, no explanation):
 {
-  "wait_hours": <number between 1-168>,
+  "wait_minutes": <number between 15-240>,
   "reason": "<brief explanation why this wait time is appropriate>",
   "follow_up_type": "<one of: best_time|intuition|reminder|flow|manual>",
   "urgency": "<one of: low|medium|high>"
 }
 
-GUIDELINES:
-- If customer asked for time to think/consult someone: 24-48 hours
-- If customer is comparing prices/competitors: 48-72 hours  
-- If customer said they're busy today: 12-24 hours
-- If conversation ended abruptly mid-discussion: 4-8 hours
-- If customer showed buying intent but didn't commit: 2-4 hours
-- If customer just received info: 24 hours
-- If customer went silent after booking question: 6-12 hours`;
+AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
+- Hot lead showing interest: 15-30 minutes
+- Customer asked a question: 30-60 minutes
+- Customer is comparing options: 60-120 minutes (1-2 hours)
+- Conversation ended mid-discussion: 30-60 minutes
+- Customer showed buying intent: 15-30 minutes
+- Customer just received info: 60-120 minutes
+- Customer went silent after question: 30-60 minutes
+- Customer said they're busy: 120-180 minutes (2-3 hours)
+- Customer asked for time to think: 120-240 minutes (2-4 hours MAX)`;
 
     try {
         // Get page access token for AI call
@@ -1185,15 +1187,15 @@ GUIDELINES:
             analysis = JSON.parse(cleanJson);
         } catch (parseErr) {
             console.log('[WEBHOOK] Could not parse follow-up analysis, using defaults');
-            analysis = { wait_hours: 24, reason: 'Standard follow-up', follow_up_type: 'reminder', urgency: 'low' };
+            analysis = { wait_minutes: 30, reason: 'Quick follow-up', follow_up_type: 'intuition', urgency: 'medium' };
         }
 
-        // Calculate scheduled time
-        const waitHours = Math.min(Math.max(analysis.wait_hours || 24, 1), 168); // 1 hour to 7 days
-        const scheduledAt = new Date(Date.now() + waitHours * 60 * 60 * 1000);
+        // Calculate scheduled time - use minutes, cap at 4 hours max
+        const waitMinutes = Math.min(Math.max(analysis.wait_minutes || 30, 15), 240); // 15 mins to 4 hours max
+        const scheduledAt = new Date(Date.now() + waitMinutes * 60 * 1000);
 
         console.log('[WEBHOOK] Follow-up decision:', {
-            wait_hours: waitHours,
+            wait_minutes: waitMinutes,
             reason: analysis.reason,
             type: analysis.follow_up_type,
             scheduled_at: scheduledAt.toISOString()
