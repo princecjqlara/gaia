@@ -1199,7 +1199,10 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
 
         // FALLBACK: Detect booking confirmations from natural language (if AI forgot the marker)
         // Look for patterns like "scheduled for 2026-01-17 18:00" or "booked for January 17"
+        console.log('[WEBHOOK] FALLBACK CHECK: aiReply contains BOOKING_CONFIRMED?', aiReply.includes('BOOKING_CONFIRMED:'));
+        console.log('[WEBHOOK] FALLBACK CHECK: aiReply preview:', aiReply.substring(0, 150));
         if (!aiReply.includes('BOOKING_CONFIRMED:')) {
+            console.log('[WEBHOOK] FALLBACK: Entering fallback detection...');
             try {
                 // Pattern 1: Look for ISO date format (2026-01-17 18:00)
                 const isoDateMatch = aiReply.match(/(?:scheduled|booked|confirmed).*?for\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})/i);
