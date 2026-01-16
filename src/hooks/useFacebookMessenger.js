@@ -929,6 +929,16 @@ export function useFacebookMessenger() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Empty deps - only run on mount
 
+    // Auto-refresh conversations every 30 seconds to catch name updates and new messages
+    useEffect(() => {
+        const refreshInterval = setInterval(() => {
+            // Silent refresh - doesn't show loading spinner
+            loadConversations(null, true, true);
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(refreshInterval);
+    }, [loadConversations]);
+
     return {
         // State
         conversations,
