@@ -476,23 +476,46 @@ Generate ONLY the follow-up message, nothing else:`;
 
                             // Only schedule the NEXT follow-up if no pending one exists
                             if (!existingPending || existingPending.length === 0) {
-                                // Default to 4 hours from now, AI cron will adjust if contact responds
-                                const nextFollowupTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
+                                // Get last customer message time to determine appropriate interval
+                                const { data: convData } = await supabase
+                                    .from('facebook_conversations')
+                                    .select('last_message_time, last_message_from_page')
+                                    .eq('conversation_id', followup.conversation_id)
+                                    .single();
+
+                                const lastMsgTime = convData?.last_message_time ? new Date(convData.last_message_time) : null;
+                                const now = new Date();
+                                const hoursSinceLastMsg = lastMsgTime ? (now - lastMsgTime) / (1000 * 60 * 60) : 999;
+
+                                // Determine next follow-up time based on graduated strategy:
+                                // 0-1h: 30min, 1-4h: 1h, 4-24h: 6h, 24h+: 24h (once per day)
+                                let nextIntervalHours;
+                                if (hoursSinceLastMsg < 1) {
+                                    nextIntervalHours = 0.5; // 30 mins
+                                } else if (hoursSinceLastMsg < 4) {
+                                    nextIntervalHours = 1;
+                                } else if (hoursSinceLastMsg < 24) {
+                                    nextIntervalHours = 6;
+                                } else {
+                                    nextIntervalHours = 24; // Once per day for 24h+ silent contacts
+                                }
+
+                                const nextFollowupTime = new Date(Date.now() + nextIntervalHours * 60 * 60 * 1000);
                                 const { error: scheduleError } = await supabase
                                     .from('ai_followup_schedule')
                                     .insert({
                                         conversation_id: followup.conversation_id,
                                         page_id: followup.page_id,
                                         scheduled_at: nextFollowupTime.toISOString(),
-                                        follow_up_type: 'intuition',
-                                        reason: 'Auto-scheduled after previous follow-up sent',
+                                        follow_up_type: hoursSinceLastMsg >= 24 ? 'best_time' : 'intuition',
+                                        reason: `Auto-scheduled: ${nextIntervalHours}h interval (${Math.round(hoursSinceLastMsg)}h since last customer msg)`,
                                         status: 'pending'
                                     });
 
                                 if (scheduleError) {
                                     console.log(`[AI FOLLOWUP] Could not schedule next: ${scheduleError.message}`);
                                 } else {
-                                    console.log(`[AI FOLLOWUP] 📅 Next follow-up scheduled for ${nextFollowupTime.toISOString()}`);
+                                    console.log(`[AI FOLLOWUP] 📅 Next follow-up in ${nextIntervalHours}h at ${nextFollowupTime.toISOString()}`);
                                 }
                             } else {
                                 console.log(`[AI FOLLOWUP] ⏭️ Pending follow-up already exists for ${followup.conversation_id} - skipping reschedule`);
