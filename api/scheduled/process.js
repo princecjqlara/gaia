@@ -303,16 +303,26 @@ export default async function handler(req, res) {
                         // Get conversation details and check if AI is enabled
                         const { data: conversation } = await supabase
                             .from('facebook_conversations')
-                            .select('participant_id, participant_name, ai_enabled, lead_status')
+                            .select('participant_id, participant_name, ai_enabled, lead_status, human_takeover, intuition_followup_disabled')
                             .eq('conversation_id', followup.conversation_id)
                             .single();
 
-                        // Check if AI is disabled for this conversation
-                        if (conversation?.ai_enabled === false) {
-                            console.log(`[AI FOLLOWUP] AI disabled for ${followup.conversation_id} - cancelling`);
+                        // Check if AI is disabled or human takeover is active
+                        if (conversation?.ai_enabled === false || conversation?.human_takeover === true) {
+                            console.log(`[AI FOLLOWUP] AI disabled/human takeover for ${followup.conversation_id} - cancelling`);
                             await supabase
                                 .from('ai_followup_schedule')
-                                .update({ status: 'cancelled', error_message: 'AI disabled for this contact' })
+                                .update({ status: 'cancelled', error_message: 'AI disabled or human takeover active' })
+                                .eq('id', followup.id);
+                            continue;
+                        }
+
+                        // Check if intuition follow-ups are specifically disabled (bot still responds to messages)
+                        if (conversation?.intuition_followup_disabled === true) {
+                            console.log(`[AI FOLLOWUP] Intuition follow-ups disabled for ${followup.conversation_id} - cancelling`);
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({ status: 'cancelled', error_message: 'Intuition follow-ups disabled by user' })
                                 .eq('id', followup.id);
                             continue;
                         }
