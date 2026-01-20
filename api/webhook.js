@@ -2230,8 +2230,21 @@ async function handlePostbackEvent(pageId, event) {
         });
 
         // Trigger AI response - treat the postback as the first message
-        console.log('[WEBHOOK] Triggering AI response for postback...');
-        await triggerAIResponse(db, conversationId, pageId, existingConv);
+        // Check if auto_greet_new_contacts is enabled
+        const { data: aiSettings } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'ai_chatbot_config')
+            .single();
+
+        const autoGreetEnabled = aiSettings?.value?.auto_greet_new_contacts !== false;
+
+        if (autoGreetEnabled) {
+            console.log('[WEBHOOK] Triggering AI greeting for postback (new contact)...');
+            await triggerAIResponse(db, conversationId, pageId, existingConv);
+        } else {
+            console.log('[WEBHOOK] Auto-greet disabled - skipping AI greeting for postback');
+        }
 
     } catch (error) {
         console.error('[WEBHOOK] Postback handler error:', error.message);
@@ -2366,8 +2379,21 @@ async function handleReferralEvent(pageId, event) {
         });
 
         // Trigger AI response
-        console.log('[WEBHOOK] Triggering AI response for referral...');
-        await triggerAIResponse(db, conversationId, pageId, existingConv);
+        // Check if auto_greet_new_contacts is enabled
+        const { data: aiSettings } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'ai_chatbot_config')
+            .single();
+
+        const autoGreetEnabled = aiSettings?.value?.auto_greet_new_contacts !== false;
+
+        if (autoGreetEnabled) {
+            console.log('[WEBHOOK] Triggering AI greeting for referral (ad click)...');
+            await triggerAIResponse(db, conversationId, pageId, existingConv);
+        } else {
+            console.log('[WEBHOOK] Auto-greet disabled - skipping AI greeting for referral');
+        }
 
     } catch (error) {
         console.error('[WEBHOOK] Referral handler error:', error.message);

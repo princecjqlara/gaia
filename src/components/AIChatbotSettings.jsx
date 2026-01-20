@@ -18,6 +18,7 @@ export default function AIChatbotSettings({ onClose }) {
         intuition_silence_hours: 24,
         best_time_lookback_days: 30,
         auto_respond_to_new_messages: true,
+        auto_greet_new_contacts: true, // Send greeting when new contact clicks ad/button
         enable_silence_followups: true,
         enable_intuition_followups: true
     });
@@ -389,6 +390,19 @@ export default function AIChatbotSettings({ onClose }) {
                             <Toggle
                                 value={config.auto_respond_to_new_messages}
                                 onChange={v => setConfig(p => ({ ...p, auto_respond_to_new_messages: v }))}
+                            />
+                        </div>
+
+                        <div style={styles.formRow}>
+                            <div>
+                                <span style={styles.label}>Auto-greet new contacts (ads/buttons)</span>
+                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                                    AI sends welcome message when someone clicks an ad or button
+                                </div>
+                            </div>
+                            <Toggle
+                                value={config.auto_greet_new_contacts}
+                                onChange={v => setConfig(p => ({ ...p, auto_greet_new_contacts: v }))}
                             />
                         </div>
 
