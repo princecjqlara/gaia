@@ -118,6 +118,11 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [activeFilter, setActiveFilter] = useState('all');
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
+    // Date filter state - filter contacts by when they first messaged
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
+    const [showDateFilter, setShowDateFilter] = useState(false);
+
     // Selection state for bulk actions
     const [selectedConversations, setSelectedConversations] = useState(new Set());
     const [selectMode, setSelectMode] = useState(false);
@@ -253,6 +258,26 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                 }
             }
 
+            // Date filter - filter by when contact first messaged (created_at)
+            if (filterDateFrom || filterDateTo) {
+                const contactDate = conv.created_at ? new Date(conv.created_at) : null;
+                if (!contactDate) return false;
+
+                // Normalize to start of day for comparison
+                const contactDateOnly = new Date(contactDate.getFullYear(), contactDate.getMonth(), contactDate.getDate());
+
+                if (filterDateFrom) {
+                    const fromDate = new Date(filterDateFrom);
+                    const fromDateOnly = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+                    if (contactDateOnly < fromDateOnly) return false;
+                }
+
+                if (filterDateTo) {
+                    const toDate = new Date(filterDateTo);
+                    const toDateOnly = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+                    if (contactDateOnly > toDateOnly) return false;
+                }
+            }
             // Advanced filters
             switch (activeFilter) {
                 case 'no_reply':
@@ -1026,6 +1051,74 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                             {opt.label}
                                         </button>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Date Filter - Filter by when contact first messaged */}
+                        <div style={{ marginBottom: '0.5rem' }}>
+                            <button
+                                className={`btn btn-sm ${showDateFilter || filterDateFrom || filterDateTo ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setShowDateFilter(!showDateFilter)}
+                                style={{
+                                    width: '100%',
+                                    fontSize: '0.75rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}
+                            >
+                                <span>📅 {filterDateFrom || filterDateTo
+                                    ? `Date: ${filterDateFrom || '...'} → ${filterDateTo || '...'}`
+                                    : 'Filter by First Contact Date'}</span>
+                                <span>{showDateFilter ? '▲' : '▼'}</span>
+                            </button>
+
+                            {showDateFilter && (
+                                <div style={{
+                                    padding: '0.5rem',
+                                    background: 'var(--bg-tertiary)',
+                                    borderRadius: 'var(--radius-md)',
+                                    marginTop: '0.25rem',
+                                    border: '1px solid var(--border-color)'
+                                }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                        Filter contacts by when they first messaged:
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>From:</label>
+                                            <input
+                                                type="date"
+                                                value={filterDateFrom}
+                                                onChange={(e) => setFilterDateFrom(e.target.value)}
+                                                className="form-input"
+                                                style={{ fontSize: '0.75rem', padding: '0.35rem' }}
+                                            />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>To:</label>
+                                            <input
+                                                type="date"
+                                                value={filterDateTo}
+                                                onChange={(e) => setFilterDateTo(e.target.value)}
+                                                className="form-input"
+                                                style={{ fontSize: '0.75rem', padding: '0.35rem' }}
+                                            />
+                                        </div>
+                                    </div>
+                                    {(filterDateFrom || filterDateTo) && (
+                                        <button
+                                            className="btn btn-sm btn-secondary"
+                                            onClick={() => {
+                                                setFilterDateFrom('');
+                                                setFilterDateTo('');
+                                            }}
+                                            style={{ fontSize: '0.65rem', width: '100%' }}
+                                        >
+                                            ✕ Clear Date Filter
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
