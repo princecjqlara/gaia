@@ -1160,7 +1160,7 @@ ${conversation?.agent_context ? `## 📝 IMPORTANT CONTEXT (Agent Notes - REMEMB
 ${conversation.agent_context}
 ---
 The above context was provided by a team member. Use this information to personalize responses and remember key details about this customer.` : ''}
-
+`;
 
         // Add ACTIVE GOAL for the conversation
         const activeGoal = conversation?.active_goal_id || 'booking';
@@ -1173,9 +1173,9 @@ The above context was provided by a team member. Use this information to persona
         };
 
         aiPrompt += `
-## 🎯 YOUR CURRENT GOAL(CRITICAL - This is your PRIMARY objective)
-        Goal: ${ activeGoal.toUpperCase() }
-        Instructions: ${ goalDescriptions[activeGoal] || 'Help the customer and guide them towards taking action.' }
+## 🎯 YOUR CURRENT GOAL (CRITICAL - This is your PRIMARY objective)
+Goal: ${activeGoal.toUpperCase()}
+Instructions: ${goalDescriptions[activeGoal] || 'Help the customer and guide them towards taking action.'}
 Every response should move the conversation closer to achieving this goal.
 `;
 
@@ -1242,20 +1242,20 @@ Every response should move the conversation closer to achieving this goal.
                         if (!hasConflict) {
                             const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek];
                             const dateStr = dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                            const timeStr = hour > 12 ? `${ hour - 12 }:00 PM` : (hour === 12 ? '12:00 PM' : `${ hour }:00 AM`);
-                            availableSlots.push(`${ dayName } ${ dateStr }, ${ timeStr } `);
+                            const timeStr = hour > 12 ? `${hour - 12}:00 PM` : (hour === 12 ? '12:00 PM' : `${hour}:00 AM`);
+                            availableSlots.push(`${dayName} ${dateStr}, ${timeStr} `);
                         }
                     }
                 }
 
                 if (availableSlots.length > 0) {
                     aiPrompt += `
-## 📅 AVAILABLE BOOKING SLOTS(Use these when customer wants to schedule)
-${ availableSlots.slice(0, 15).join('\n') }
+## 📅 AVAILABLE BOOKING SLOTS (Use these when customer wants to schedule)
+${availableSlots.slice(0, 15).join('\n')}
 
-When customer wants to book, suggest one of these times.If they confirm a time, respond with:
-        "BOOKING_CONFIRMED: [DATE] [TIME] - [CUSTOMER_NAME] - [PHONE_NUMBER if available]"
-            `;
+When customer wants to book, suggest one of these times. If they confirm a time, respond with:
+"BOOKING_CONFIRMED: [DATE] [TIME] - [CUSTOMER_NAME] - [PHONE_NUMBER if available]"
+`;
                     console.log('[WEBHOOK] Added', availableSlots.length, 'available slots to prompt');
                 }
             } catch (calErr) {
@@ -1266,31 +1266,31 @@ When customer wants to book, suggest one of these times.If they confirm a time, 
         // Add Knowledge Base (company info, services, etc.)
         if (knowledgeBase) {
             aiPrompt += `
-## 📚 Knowledge Base(About the Business - USE THIS INFO)
-${ knowledgeBase }
-        `;
+## 📚 Knowledge Base (About the Business - USE THIS INFO)
+${knowledgeBase}
+`;
         }
 
         // Add FAQ section for RAG
         if (faqContent) {
             aiPrompt += `
-## ❓ FAQ(MUST USE these exact answers when relevant)
-${ faqContent }
-        `;
+## ❓ FAQ (MUST USE these exact answers when relevant)
+${faqContent}
+`;
         }
 
         // Add bot rules with stronger emphasis
         if (config.bot_rules_dos) {
             aiPrompt += `
 ## ✅ STRICT RULES - DO's (YOU MUST FOLLOW THESE)
-${ config.bot_rules_dos }
-        `;
+${config.bot_rules_dos}
+`;
         }
         if (config.bot_rules_donts) {
             aiPrompt += `
 ## ❌ STRICT RULES - DON'Ts (NEVER DO THESE)
-${ config.bot_rules_donts }
-        `;
+${config.bot_rules_donts}
+`;
         }
 
         // Debug: Log all config being used
@@ -1309,57 +1309,57 @@ ${ config.bot_rules_donts }
         if (config.booking_url) {
             aiPrompt += `
 ## Booking Link
-When customer wants to schedule / book, share this: ${ config.booking_url }
-        `;
+When customer wants to schedule/book, share this: ${config.booking_url}
+`;
         }
 
         aiPrompt += `
 ## Important Guidelines
-            - Use Taglish naturally - mix English and Tagalog as Filipinos do
-            - Be friendly but professional
-                - If unsure about something, say you'll have a team member follow up
-                    - If user sends an image, describe what you see and respond appropriately
+- Use Taglish naturally - mix English and Tagalog as Filipinos do
+- Be friendly but professional
+- If unsure about something, say you'll have a team member follow up
+- If user sends an image, describe what you see and respond appropriately
 
-## ⚠️ CRITICAL: NAME RULES(MUST FOLLOW)
-            - The customer's name is: "${conversation?.participant_name || 'NOT PROVIDED'}"
-                - If name is "NOT PROVIDED" or "Customer", DO NOT use any name at all
-                    - NEVER invent, assume, or make up a customer name
-                        - NEVER use names like "Jeff", "John", or any other name unless it was explicitly provided above
-                            - Instead of using a name, use "po" for respect(e.g., "Kumusta po?" instead of "Kumusta Jeff?")
-                                - If the customer mentions a name in the conversation, you MAY acknowledge it but do NOT assume that's their name
+## ⚠️ CRITICAL: NAME RULES (MUST FOLLOW)
+- The customer's name is: "${conversation?.participant_name || 'NOT PROVIDED'}"
+- If name is "NOT PROVIDED" or "Customer", DO NOT use any name at all
+- NEVER invent, assume, or make up a customer name
+- NEVER use names like "Jeff", "John", or any other name unless it was explicitly provided above
+- Instead of using a name, use "po" for respect (e.g., "Kumusta po?" instead of "Kumusta Jeff?")
+- If the customer mentions a name in the conversation, you MAY acknowledge it but do NOT assume that's their name
 
-## ⚠️ MESSAGE SPLITTING RULES(VERY IMPORTANT - FOLLOW STRICTLY)
-            - ALWAYS split your response into multiple messages for better chat experience
-                - Use ||| to separate each message part
-                    - Each part should be 1 - 2 sentences MAX(like real texting)
-                        - EVERY response with more than 2 sentences MUST be split
-                            - Example: "Hi! 😊 ||| Ang basic package natin is ₱1,799/month. ||| Kasama na lahat ng essentials tulad ng: ||| - 2 videos ||| - 2 photos ||| - Ad management ||| Gusto mo ba malaman pa?"
-                                - Another example: "Hello po! ||| I'd be happy to help. ||| What specific service are you interested in?"
+## ⚠️ MESSAGE SPLITTING RULES (VERY IMPORTANT - FOLLOW STRICTLY)
+- ALWAYS split your response into multiple messages for better chat experience
+- Use ||| to separate each message part
+- Each part should be 1-2 sentences MAX (like real texting)
+- EVERY response with more than 2 sentences MUST be split
+- Example: "Hi! 😊 ||| Ang basic package natin is ₱1,799/month. ||| Kasama na lahat ng essentials tulad ng: ||| - 2 videos ||| - 2 photos ||| - Ad management ||| Gusto mo ba malaman pa?"
+- Another example: "Hello po! ||| I'd be happy to help. ||| What specific service are you interested in?"
 
-## 📅 BOOKING CONFIRMATION — MANDATORY SYSTEM MARKER(YOU MUST DO THIS)
+## 📅 BOOKING CONFIRMATION — MANDATORY SYSTEM MARKER (YOU MUST DO THIS)
 ⚠️ THIS IS REQUIRED - THE SYSTEM CANNOT CREATE CALENDAR EVENTS WITHOUT THIS MARKER ⚠️
 
-When a customer confirms / agrees to a specific date and time for a booking or meeting:
+When a customer confirms/agrees to a specific date and time for a booking or meeting:
 
-STEP 1: Confirm the booking in your message to them(in Taglish)
-STEP 2: ALWAYS add this marker at the VERY END(this is for the SYSTEM, customer won't see it):
+STEP 1: Confirm the booking in your message to them (in Taglish)
+STEP 2: ALWAYS add this marker at the VERY END (this is for the SYSTEM, customer won't see it):
 
-        BOOKING_CONFIRMED: YYYY - MM - DD HH: MM | CustomerName | PhoneNumber
+BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber
 
 EXAMPLE CONVERSATION:
-        Customer: "okay"
+Customer: "okay"
 Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 17, 2026 at 6:00 PM. ||| See you there!
-        BOOKING_CONFIRMED: 2026-01 - 17 18:00 | Prince | 09944465847"
+BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
 
 ⚠️ CRITICAL RULES:
-        - You MUST add BOOKING_CONFIRMED even if you just say "Noted po!" - if they confirmed a booking, ADD THE MARKER
-            - Use 24 - hour format: 18:00(not 6pm), 14:00(not 2pm)
-                - Use PIPE | as separator, NOT dash -
-                    - If phone was mentioned in conversation, include it
-                        - If customer name is known(from conversation), include it
-                            - This marker MUST be on its own line at the very end
-                                - The marker is invisible to the customer - it's processed by the system
-                                    `;
+- You MUST add BOOKING_CONFIRMED even if you just say "Noted po!" - if they confirmed a booking, ADD THE MARKER
+- Use 24-hour format: 18:00 (not 6pm), 14:00 (not 2pm)
+- Use PIPE | as separator, NOT dash -
+- If phone was mentioned in conversation, include it
+- If customer name is known (from conversation), include it
+- This marker MUST be on its own line at the very end
+- The marker is invisible to the customer - it's processed by the system
+`;
 
         // Build messages array, handling images for vision models
         const aiMessages = [{ role: 'system', content: aiPrompt }];
@@ -1436,12 +1436,12 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
 
         for (const model of MODELS) {
             try {
-                console.log(`[WEBHOOK] Trying model: ${ model } `);
+                console.log(`[WEBHOOK] Trying model: ${model}`);
                 const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${ NVIDIA_API_KEY } `
+                        'Authorization': `Bearer ${NVIDIA_API_KEY}`
                     },
                     body: JSON.stringify({
                         model: model,
@@ -1453,7 +1453,7 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
 
                 if (!aiResponse.ok) {
                     const errorText = await aiResponse.text();
-                    console.log(`[WEBHOOK] Model ${ model } failed: ${ errorText.substring(0, 100) } `);
+                    console.log(`[WEBHOOK] Model ${model} failed: ${errorText.substring(0, 100)}`);
                     lastError = errorText;
                     continue; // Try next model
                 }
@@ -1462,11 +1462,11 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
                 aiReply = aiData.choices?.[0]?.message?.content;
 
                 if (aiReply) {
-                    console.log(`[WEBHOOK] Success with model: ${ model } `);
+                    console.log(`[WEBHOOK] Success with model: ${model}`);
                     break; // Got a response, exit loop
                 }
             } catch (err) {
-                console.log(`[WEBHOOK] Model ${ model } error: ${ err.message } `);
+                console.log(`[WEBHOOK] Model ${model} error: ${err.message}`);
                 lastError = err.message;
                 continue;
             }
@@ -1512,8 +1512,8 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
                             const { error: calError } = await db
                                 .from('calendar_events')
                                 .insert({
-                                    title: `📅 Booking: ${ customerName } `,
-                                    description: `Booked via AI chatbot\nPhone: ${ phone } \nConversation: ${ conversationId } \nCustomer: ${ customerName } `,
+                                    title: `📅 Booking: ${customerName}`,
+                                    description: `Booked via AI chatbot\nPhone: ${phone}\nConversation: ${conversationId}\nCustomer: ${customerName}`,
                                     start_time: bookingDate.toISOString(),
                                     end_time: new Date(bookingDate.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour
                                     event_type: 'meeting',
@@ -1545,7 +1545,7 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
                                 .select('id');
 
                             if (cancelledFollowups?.length > 0) {
-                                console.log(`[WEBHOOK] ✅ Cancelled ${ cancelledFollowups.length } pending follow - ups - contact booked!`);
+                                console.log(`[WEBHOOK] ✅ Cancelled ${cancelledFollowups.length} pending follow-ups - contact booked!`);
                             }
                         } catch (cancelErr) {
                             console.log('[WEBHOOK] Could not cancel follow-ups:', cancelErr.message);
@@ -1586,7 +1586,7 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
                                 const { data: byPhone } = await db
                                     .from('clients')
                                     .select('id')
-                                    .ilike('contact_details', `% ${ phone }% `)
+                                    .ilike('contact_details', `%${phone}%`)
                                     .limit(1)
                                     .maybeSingle();
                                 existingClient = byPhone;
@@ -1607,7 +1607,7 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
                                 const clientData = {
                                     client_name: customerName,
                                     contact_details: phone || null,
-                                    notes: `Booked via AI on ${ bookingDate.toLocaleDateString() } `,
+                                    notes: `Booked via AI on ${bookingDate.toLocaleDateString()}`,
                                     phase: 'booked',
                                     payment_status: 'unpaid',
                                     source: 'ai_chatbot',
@@ -1651,283 +1651,263 @@ Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 1
                     // If reply is now empty, add a confirmation message
                     if (!aiReply) {
                         aiReply = `Noted po! ✅ I've scheduled your consultation for ${dateTimeStr}. Thank you for booking with us! See you there! 🎉`;
-        console.log('[WEBHOOK] Added fallback confirmation message');
-    }
+                        console.log('[WEBHOOK] Added fallback confirmation message');
+                    }
                 }
             } catch (bookingErr) {
-    console.log('[WEBHOOK] Booking parsing error (non-fatal):', bookingErr.message);
-}
+                console.log('[WEBHOOK] Booking parsing error (non-fatal):', bookingErr.message);
+            }
         }
 
-// FALLBACK: Detect booking confirmations from natural language (if AI forgot the marker)
-// Look for patterns like "scheduled for 2026-01-17 18:00" or "booked for January 17"
-console.log('[WEBHOOK] FALLBACK CHECK: aiReply contains BOOKING_CONFIRMED?', aiReply.includes('BOOKING_CONFIRMED:'));
-console.log('[WEBHOOK] FALLBACK CHECK: aiReply preview:', aiReply.substring(0, 150));
-console.log('[WEBHOOK] FALLBACK CHECK: bookingHandled=', bookingHandled);
-if (!bookingHandled && !aiReply.includes('BOOKING_CONFIRMED:')) {
-    console.log('[WEBHOOK] FALLBACK: Entering fallback detection...');
-    try {
-        // Pattern 1: Look for ISO date format (2026-01-17 18:00)
-        const isoDateMatch = aiReply.match(/(?:scheduled|booked|confirmed).*?for\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})/i);
+        // FALLBACK: Detect booking confirmations from natural language (if AI forgot the marker)
+        // Look for patterns like "scheduled for 2026-01-17 18:00" or "booked for January 17"
+        console.log('[WEBHOOK] FALLBACK CHECK: aiReply contains BOOKING_CONFIRMED?', aiReply.includes('BOOKING_CONFIRMED:'));
+        console.log('[WEBHOOK] FALLBACK CHECK: aiReply preview:', aiReply.substring(0, 150));
+        console.log('[WEBHOOK] FALLBACK CHECK: bookingHandled=', bookingHandled);
+        if (!bookingHandled && !aiReply.includes('BOOKING_CONFIRMED:')) {
+            console.log('[WEBHOOK] FALLBACK: Entering fallback detection...');
+            try {
+                // Pattern 1: Look for ISO date format (2026-01-17 18:00)
+                const isoDateMatch = aiReply.match(/(?:scheduled|booked|confirmed).*?for\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})/i);
 
-        // Pattern 2: Look for natural date (January 19, 2026 at 2:00 PM) - flexible pattern
-        const naturalDateMatch = aiReply.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s*(\d{4})?\s*(?:at\s*)?(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+                // Pattern 2: Look for natural date (January 19, 2026 at 2:00 PM) - flexible pattern
+                const naturalDateMatch = aiReply.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s*(\d{4})?\s*(?:at\s*)?(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
 
-        // Pattern 3: Look for RELATIVE dates like "tomorrow at 9am", "tomorrow at 9:00 AM"
-        const relativeMatch = aiReply.match(/(?:scheduled|booked|confirmed|meeting).*?(tomorrow|today|day after tomorrow)(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+                // Pattern 3: Look for RELATIVE dates like "tomorrow at 9am", "tomorrow at 9:00 AM"
+                const relativeMatch = aiReply.match(/(?:scheduled|booked|confirmed|meeting).*?(tomorrow|today|day after tomorrow)(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
 
-        let detectedDate = null;
-        let detectedTime = null;
+                let detectedDate = null;
+                let detectedTime = null;
 
-        if (isoDateMatch) {
-            detectedDate = isoDateMatch[1]; // 2026-01-17
-            detectedTime = isoDateMatch[2]; // 18:00
-            console.log(`[WEBHOOK] FALLBACK: Detected ISO date booking: ${detectedDate} ${detectedTime}`);
-        } else if (naturalDateMatch) {
-            console.log('[WEBHOOK] FALLBACK: Match found:', JSON.stringify(naturalDateMatch.slice(0, 7)));
-            const monthNames = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
-            const month = monthNames[naturalDateMatch[1].toLowerCase()];
-            const day = naturalDateMatch[2].padStart(2, '0');
-            const year = naturalDateMatch[3] || new Date().getFullYear();
-            let hour = parseInt(naturalDateMatch[4]);
-            const minute = naturalDateMatch[5];
-            const ampm = naturalDateMatch[6];
+                if (isoDateMatch) {
+                    detectedDate = isoDateMatch[1]; // 2026-01-17
+                    detectedTime = isoDateMatch[2]; // 18:00
+                    console.log(`[WEBHOOK] FALLBACK: Detected ISO date booking: ${detectedDate} ${detectedTime}`);
+                } else if (naturalDateMatch) {
+                    console.log('[WEBHOOK] FALLBACK: Match found:', JSON.stringify(naturalDateMatch.slice(0, 7)));
+                    const monthNames = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
+                    const month = monthNames[naturalDateMatch[1].toLowerCase()];
+                    const day = naturalDateMatch[2].padStart(2, '0');
+                    const year = naturalDateMatch[3] || new Date().getFullYear();
+                    let hour = parseInt(naturalDateMatch[4]);
+                    const minute = naturalDateMatch[5];
+                    const ampm = naturalDateMatch[6];
 
-            // Convert to 24-hour format
-            if (ampm && ampm.toLowerCase() === 'pm' && hour < 12) {
-                hour += 12;
-            } else if (ampm && ampm.toLowerCase() === 'am' && hour === 12) {
-                hour = 0;
-            }
+                    // Convert to 24-hour format
+                    if (ampm && ampm.toLowerCase() === 'pm' && hour < 12) {
+                        hour += 12;
+                    } else if (ampm && ampm.toLowerCase() === 'am' && hour === 12) {
+                        hour = 0;
+                    }
 
-            detectedDate = `${year}-${month}-${day}`;
-            detectedTime = `${String(hour).padStart(2, '0')}:${minute}`;
-            console.log(`[WEBHOOK] FALLBACK: Detected natural date booking: ${detectedDate} ${detectedTime}`);
-        } else if (relativeMatch) {
-            // Handle relative dates: tomorrow, today, day after tomorrow
-            console.log('[WEBHOOK] FALLBACK: Relative date match found:', JSON.stringify(relativeMatch.slice(0, 5)));
-            const relativeDay = relativeMatch[1].toLowerCase();
-            let hour = parseInt(relativeMatch[2]);
-            const minute = relativeMatch[3] || '00';
-            const ampm = relativeMatch[4]?.toLowerCase();
+                    detectedDate = `${year}-${month}-${day}`;
+                    detectedTime = `${String(hour).padStart(2, '0')}:${minute}`;
+                    console.log(`[WEBHOOK] FALLBACK: Detected natural date booking: ${detectedDate} ${detectedTime}`);
+                } else if (relativeMatch) {
+                    // Handle relative dates: tomorrow, today, day after tomorrow
+                    console.log('[WEBHOOK] FALLBACK: Relative date match found:', JSON.stringify(relativeMatch.slice(0, 5)));
+                    const relativeDay = relativeMatch[1].toLowerCase();
+                    let hour = parseInt(relativeMatch[2]);
+                    const minute = relativeMatch[3] || '00';
+                    const ampm = relativeMatch[4]?.toLowerCase();
 
-            // Convert to 24-hour format
-            if (ampm === 'pm' && hour < 12) {
-                hour += 12;
-            } else if (ampm === 'am' && hour === 12) {
-                hour = 0;
-            } else if (!ampm && hour <= 6) {
-                // If no AM/PM specified and hour is 1-6, assume PM (business hours)
-                hour += 12;
-            }
+                    // Convert to 24-hour format
+                    if (ampm === 'pm' && hour < 12) {
+                        hour += 12;
+                    } else if (ampm === 'am' && hour === 12) {
+                        hour = 0;
+                    } else if (!ampm && hour <= 6) {
+                        // If no AM/PM specified and hour is 1-6, assume PM (business hours)
+                        hour += 12;
+                    }
 
-            // Calculate the date
-            const now = new Date();
-            let targetDate = new Date(now);
+                    // Calculate the date
+                    const now = new Date();
+                    let targetDate = new Date(now);
 
-            if (relativeDay === 'tomorrow') {
-                targetDate.setDate(now.getDate() + 1);
-            } else if (relativeDay === 'day after tomorrow') {
-                targetDate.setDate(now.getDate() + 2);
-            }
-            // 'today' stays as current date
+                    if (relativeDay === 'tomorrow') {
+                        targetDate.setDate(now.getDate() + 1);
+                    } else if (relativeDay === 'day after tomorrow') {
+                        targetDate.setDate(now.getDate() + 2);
+                    }
+                    // 'today' stays as current date
 
-            const year = targetDate.getFullYear();
-            const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-            const day = String(targetDate.getDate()).padStart(2, '0');
+                    const year = targetDate.getFullYear();
+                    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(targetDate.getDate()).padStart(2, '0');
 
-            detectedDate = `${year}-${month}-${day}`;
-            detectedTime = `${String(hour).padStart(2, '0')}:${minute}`;
-            console.log(`[WEBHOOK] FALLBACK: Detected RELATIVE date booking: "${relativeDay}" -> ${detectedDate} ${detectedTime}`);
-        }
+                    detectedDate = `${year}-${month}-${day}`;
+                    detectedTime = `${String(hour).padStart(2, '0')}:${minute}`;
+                    console.log(`[WEBHOOK] FALLBACK: Detected RELATIVE date booking: "${relativeDay}" -> ${detectedDate} ${detectedTime}`);
+                }
 
-        if (detectedDate && detectedTime) {
-            const bookingDate = new Date(`${detectedDate}T${detectedTime}`);
+                if (detectedDate && detectedTime) {
+                    const bookingDate = new Date(`${detectedDate}T${detectedTime}`);
 
-            if (!isNaN(bookingDate.getTime())) {
-                console.log('[WEBHOOK] FALLBACK: Creating calendar event from natural language');
+                    if (!isNaN(bookingDate.getTime())) {
+                        console.log('[WEBHOOK] FALLBACK: Creating calendar event from natural language');
 
-                // Get customer name from conversation
-                const customerName = conversation?.participant_name || 'Customer';
+                        // Get customer name from conversation
+                        const customerName = conversation?.participant_name || 'Customer';
 
-                // Try to extract phone from recent messages
-                let phone = '';
-                if (recentMessages && recentMessages.length > 0) {
-                    for (const msg of recentMessages) {
-                        const msgText = msg.message_text || '';
-                        const phoneMatch = msgText.match(/09\d{9}/) || msgText.match(/0\d{10}/) || msgText.match(/\+63\d{10}/);
-                        if (phoneMatch) {
-                            phone = phoneMatch[0];
-                            console.log('[WEBHOOK] FALLBACK: Found phone in messages:', phone);
-                            break;
+                        // Try to extract phone from recent messages
+                        let phone = '';
+                        if (recentMessages && recentMessages.length > 0) {
+                            for (const msg of recentMessages) {
+                                const msgText = msg.message_text || '';
+                                const phoneMatch = msgText.match(/09\d{9}/) || msgText.match(/0\d{10}/) || msgText.match(/\+63\d{10}/);
+                                if (phoneMatch) {
+                                    phone = phoneMatch[0];
+                                    console.log('[WEBHOOK] FALLBACK: Found phone in messages:', phone);
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Create calendar event
+                        try {
+                            const calendarData = {
+                                title: `📅 Booking: ${customerName}`,
+                                description: `Booked via AI chatbot (auto-detected)\nPhone: ${phone || 'Not provided'}\nConversation: ${conversationId}`,
+                                start_time: bookingDate.toISOString(),
+                                end_time: new Date(bookingDate.getTime() + 60 * 60 * 1000).toISOString(),
+                                event_type: 'meeting',
+                                status: 'scheduled',
+                                // For automated reminders
+                                conversation_id: conversationId,
+                                contact_psid: conversation?.participant_id || null
+                            };
+                            console.log('[WEBHOOK] FALLBACK: Inserting calendar event:', JSON.stringify(calendarData));
+
+                            const { data: calData, error: calError } = await db
+                                .from('calendar_events')
+                                .insert(calendarData)
+                                .select();
+
+                            if (calError) {
+                                console.error('[WEBHOOK] FALLBACK: Calendar error code:', calError.code);
+                                console.error('[WEBHOOK] FALLBACK: Calendar error msg:', calError.message);
+                                console.error('[WEBHOOK] FALLBACK: Calendar error details:', calError.details);
+                                console.error('[WEBHOOK] FALLBACK: Calendar error hint:', calError.hint);
+                            } else {
+                                console.log('[WEBHOOK] FALLBACK: ✅ Calendar event created!', calData?.[0]?.id);
+                            }
+                        } catch (e) {
+                            console.error('[WEBHOOK] FALLBACK: Calendar insert exception:', e.message, e.stack);
+                        }
+
+                        // Cancel pending follow-ups
+                        try {
+                            await db
+                                .from('ai_followup_schedule')
+                                .update({ status: 'cancelled', error_message: 'Contact booked (auto-detected)' })
+                                .eq('conversation_id', conversationId)
+                                .eq('status', 'pending');
+                            console.log('[WEBHOOK] FALLBACK: Cancelled pending follow-ups');
+                        } catch (e) { }
+
+                        // Update conversation
+                        try {
+                            await db
+                                .from('facebook_conversations')
+                                .update({ pipeline_stage: 'booked', booking_date: bookingDate.toISOString(), phone_number: phone || null })
+                                .eq('conversation_id', conversationId);
+                            console.log('[WEBHOOK] FALLBACK: ✅ Updated conversation to booked');
+                        } catch (e) { }
+
+                        // ADD TO CLIENTS TABLE (pipeline)
+                        try {
+                            let existingClient = null;
+                            if (phone) {
+                                const { data: byPhone } = await db.from('clients').select('id').ilike('contact_details', `%${phone}%`).limit(1).maybeSingle();
+                                existingClient = byPhone;
+                            }
+                            if (!existingClient && customerName && customerName !== 'Customer' && customerName !== 'Unknown') {
+                                const { data: byName } = await db.from('clients').select('id').ilike('client_name', customerName).limit(1).maybeSingle();
+                                existingClient = byName;
+                            }
+
+                            if (!existingClient) {
+                                const clientData = {
+                                    client_name: customerName,
+                                    contact_details: phone || null,
+                                    notes: `Booked via AI on ${bookingDate.toLocaleDateString()}`,
+                                    phase: 'booked',
+                                    payment_status: 'unpaid',
+                                    created_at: new Date().toISOString()
+                                };
+                                await db.from('clients').insert(clientData);
+                                console.log('[WEBHOOK] FALLBACK: ✅ Added to clients pipeline');
+                            } else {
+                                await db.from('clients').update({ phase: 'booked' }).eq('id', existingClient.id);
+                                console.log('[WEBHOOK] FALLBACK: ✅ Updated existing client to booked');
+                            }
+                        } catch (clientErr) {
+                            console.log('[WEBHOOK] FALLBACK: Clients error (non-fatal):', clientErr.message);
                         }
                     }
                 }
-
-                // Create calendar event
-                try {
-                    const calendarData = {
-                        title: `📅 Booking: ${customerName}`,
-                        description: `Booked via AI chatbot (auto-detected)\nPhone: ${phone || 'Not provided'}\nConversation: ${conversationId}`,
-                        start_time: bookingDate.toISOString(),
-                        end_time: new Date(bookingDate.getTime() + 60 * 60 * 1000).toISOString(),
-                        event_type: 'meeting',
-                        status: 'scheduled',
-                        // For automated reminders
-                        conversation_id: conversationId,
-                        contact_psid: conversation?.participant_id || null
-                    };
-                    console.log('[WEBHOOK] FALLBACK: Inserting calendar event:', JSON.stringify(calendarData));
-
-                    const { data: calData, error: calError } = await db
-                        .from('calendar_events')
-                        .insert(calendarData)
-                        .select();
-
-                    if (calError) {
-                        console.error('[WEBHOOK] FALLBACK: Calendar error code:', calError.code);
-                        console.error('[WEBHOOK] FALLBACK: Calendar error msg:', calError.message);
-                        console.error('[WEBHOOK] FALLBACK: Calendar error details:', calError.details);
-                        console.error('[WEBHOOK] FALLBACK: Calendar error hint:', calError.hint);
-                    } else {
-                        console.log('[WEBHOOK] FALLBACK: ✅ Calendar event created!', calData?.[0]?.id);
-                    }
-                } catch (e) {
-                    console.error('[WEBHOOK] FALLBACK: Calendar insert exception:', e.message, e.stack);
-                }
-
-                // Cancel pending follow-ups
-                try {
-                    await db
-                        .from('ai_followup_schedule')
-                        .update({ status: 'cancelled', error_message: 'Contact booked (auto-detected)' })
-                        .eq('conversation_id', conversationId)
-                        .eq('status', 'pending');
-                    console.log('[WEBHOOK] FALLBACK: Cancelled pending follow-ups');
-                } catch (e) { }
-
-                // Update conversation
-                try {
-                    await db
-                        .from('facebook_conversations')
-                        .update({ pipeline_stage: 'booked', booking_date: bookingDate.toISOString(), phone_number: phone || null })
-                        .eq('conversation_id', conversationId);
-                    console.log('[WEBHOOK] FALLBACK: ✅ Updated conversation to booked');
-                } catch (e) { }
-
-                // ADD TO CLIENTS TABLE (pipeline)
-                try {
-                    let existingClient = null;
-                    if (phone) {
-                        const { data: byPhone } = await db.from('clients').select('id').ilike('contact_details', `%${phone}%`).limit(1).maybeSingle();
-                        existingClient = byPhone;
-                    }
-                    if (!existingClient && customerName && customerName !== 'Customer' && customerName !== 'Unknown') {
-                        const { data: byName } = await db.from('clients').select('id').ilike('client_name', customerName).limit(1).maybeSingle();
-                        existingClient = byName;
-                    }
-
-                    if (!existingClient) {
-                        const clientData = {
-                            client_name: customerName,
-                            contact_details: phone || null,
-                            notes: `Booked via AI on ${bookingDate.toLocaleDateString()}`,
-                            phase: 'booked',
-                            payment_status: 'unpaid',
-                            created_at: new Date().toISOString()
-                        };
-                        await db.from('clients').insert(clientData);
-                        console.log('[WEBHOOK] FALLBACK: ✅ Added to clients pipeline');
-                    } else {
-                        await db.from('clients').update({ phase: 'booked' }).eq('id', existingClient.id);
-                        console.log('[WEBHOOK] FALLBACK: ✅ Updated existing client to booked');
-                    }
-                } catch (clientErr) {
-                    console.log('[WEBHOOK] FALLBACK: Clients error (non-fatal):', clientErr.message);
-                }
-            }
-        }
-    } catch (fallbackErr) {
-        console.log('[WEBHOOK] FALLBACK: Detection error (non-fatal):', fallbackErr.message);
-    }
-}
-
-// Split messages - AI uses |||, but if not, force split by sentences
-let messageParts = [];
-
-if (aiReply.includes('|||')) {
-    // AI decided to split the message
-    messageParts = aiReply.split('|||').map(p => p.trim()).filter(p => p.length > 0);
-    console.log(`[WEBHOOK] AI split into ${messageParts.length} parts using |||`);
-} else {
-    // FALLBACK: Force split by sentences if response is long
-    // Split on sentence endings (. ! ?) followed by space
-    const sentences = aiReply.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
-
-    if (sentences.length <= 2) {
-        // Short enough, send as one
-        messageParts.push(aiReply);
-    } else {
-        // Group sentences into parts (2-3 sentences each)
-        let currentPart = '';
-        let sentenceCount = 0;
-
-        for (const sentence of sentences) {
-            currentPart += (currentPart ? ' ' : '') + sentence;
-            sentenceCount++;
-
-            if (sentenceCount >= 2) {
-                messageParts.push(currentPart.trim());
-                currentPart = '';
-                sentenceCount = 0;
+            } catch (fallbackErr) {
+                console.log('[WEBHOOK] FALLBACK: Detection error (non-fatal):', fallbackErr.message);
             }
         }
 
-        // Add remaining sentences
-        if (currentPart.trim()) {
-            messageParts.push(currentPart.trim());
+        // Split messages - AI uses |||, but if not, force split by sentences
+        let messageParts = [];
+
+        if (aiReply.includes('|||')) {
+            // AI decided to split the message
+            messageParts = aiReply.split('|||').map(p => p.trim()).filter(p => p.length > 0);
+            console.log(`[WEBHOOK] AI split into ${messageParts.length} parts using |||`);
+        } else {
+            // FALLBACK: Force split by sentences if response is long
+            // Split on sentence endings (. ! ?) followed by space
+            const sentences = aiReply.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+
+            if (sentences.length <= 2) {
+                // Short enough, send as one
+                messageParts.push(aiReply);
+            } else {
+                // Group sentences into parts (2-3 sentences each)
+                let currentPart = '';
+                let sentenceCount = 0;
+
+                for (const sentence of sentences) {
+                    currentPart += (currentPart ? ' ' : '') + sentence;
+                    sentenceCount++;
+
+                    if (sentenceCount >= 2) {
+                        messageParts.push(currentPart.trim());
+                        currentPart = '';
+                        sentenceCount = 0;
+                    }
+                }
+
+                // Add remaining sentences
+                if (currentPart.trim()) {
+                    messageParts.push(currentPart.trim());
+                }
+
+                console.log(`[WEBHOOK] Force split into ${messageParts.length} parts by sentences`);
+            }
         }
 
-        console.log(`[WEBHOOK] Force split into ${messageParts.length} parts by sentences`);
-    }
-}
+        console.log(`[WEBHOOK] Sending ${messageParts.length} message part(s)`);
 
-console.log(`[WEBHOOK] Sending ${messageParts.length} message part(s)`);
+        // Send each part via Facebook
+        const participantId = conversation?.participant_id || conversationId.replace('t_', '');
 
-// Send each part via Facebook
-const participantId = conversation?.participant_id || conversationId.replace('t_', '');
+        for (let i = 0; i < messageParts.length; i++) {
+            const part = messageParts[i];
 
-for (let i = 0; i < messageParts.length; i++) {
-    const part = messageParts[i];
+            // Add delay between messages for natural chat feel
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
 
-    // Add delay between messages for natural chat feel
-    if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
+            console.log(`[WEBHOOK] Sending part ${i + 1}/${messageParts.length}: "${part.substring(0, 50)}..."`);
 
-    console.log(`[WEBHOOK] Sending part ${i + 1}/${messageParts.length}: "${part.substring(0, 50)}..."`);
-
-    const sendResponse = await fetch(
-        `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                recipient: { id: participantId },
-                message: { text: part },
-                messaging_type: 'RESPONSE'
-            })
-        }
-    );
-
-    if (!sendResponse.ok) {
-        const err = await sendResponse.text();
-        console.error(`[WEBHOOK] Send part ${i + 1} failed:`, err);
-
-        // Try with ACCOUNT_UPDATE tag if 24h window issue
-        if (err.includes('allowed window') || err.includes('outside')) {
-            console.log('[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...');
-            const retryResponse = await fetch(
+            const sendResponse = await fetch(
                 `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
                 {
                     method: 'POST',
@@ -1935,38 +1915,58 @@ for (let i = 0; i < messageParts.length; i++) {
                     body: JSON.stringify({
                         recipient: { id: participantId },
                         message: { text: part },
-                        messaging_type: 'MESSAGE_TAG',
-                        tag: 'ACCOUNT_UPDATE'
+                        messaging_type: 'RESPONSE'
                     })
                 }
             );
-            if (!retryResponse.ok) {
-                console.error('[WEBHOOK] Retry also failed');
-                return;
+
+            if (!sendResponse.ok) {
+                const err = await sendResponse.text();
+                console.error(`[WEBHOOK] Send part ${i + 1} failed:`, err);
+
+                // Try with ACCOUNT_UPDATE tag if 24h window issue
+                if (err.includes('allowed window') || err.includes('outside')) {
+                    console.log('[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...');
+                    const retryResponse = await fetch(
+                        `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                recipient: { id: participantId },
+                                message: { text: part },
+                                messaging_type: 'MESSAGE_TAG',
+                                tag: 'ACCOUNT_UPDATE'
+                            })
+                        }
+                    );
+                    if (!retryResponse.ok) {
+                        console.error('[WEBHOOK] Retry also failed');
+                        return;
+                    }
+                } else {
+                    return;
+                }
             }
-        } else {
-            return;
+
+            // Small delay between messages to maintain order
+            if (i < messageParts.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
         }
-    }
 
-    // Small delay between messages to maintain order
-    if (i < messageParts.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
-}
+        console.log('[WEBHOOK] AI reply sent successfully!');
 
-console.log('[WEBHOOK] AI reply sent successfully!');
-
-// INTELLIGENT FOLLOW-UP: Analyze conversation to schedule smart follow-up
-try {
-    await analyzeAndScheduleFollowUp(db, conversationId, pageId, conversation, recentMessages);
-} catch (followUpErr) {
-    console.log('[WEBHOOK] Follow-up analysis error (non-fatal):', followUpErr.message);
-}
+        // INTELLIGENT FOLLOW-UP: Analyze conversation to schedule smart follow-up
+        try {
+            await analyzeAndScheduleFollowUp(db, conversationId, pageId, conversation, recentMessages);
+        } catch (followUpErr) {
+            console.log('[WEBHOOK] Follow-up analysis error (non-fatal):', followUpErr.message);
+        }
 
     } catch (error) {
-    console.error('[WEBHOOK] AI Error:', error);
-}
+        console.error('[WEBHOOK] AI Error:', error);
+    }
 }
 
 /**
