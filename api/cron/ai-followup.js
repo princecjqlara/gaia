@@ -158,6 +158,16 @@ export default async function handler(req, res) {
             });
         }
 
+        // Respect admin follow-up toggles
+        if (config.enable_silence_followups === false || config.enable_intuition_followups === false) {
+            console.log('[CRON] Follow-ups disabled in settings - skipping scheduling');
+            return res.status(200).json({
+                message: 'Follow-ups disabled in settings',
+                disabled: true,
+                ...results
+            });
+        }
+
         // Use configured silence hours OR default to 0.5 hours (30 mins) for aggressive first follow-up
         const silenceHours = config.intuition_silence_hours || 0.5;
         const maxPerRun = 50; // Increased batch size to process more users per run

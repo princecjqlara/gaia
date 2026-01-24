@@ -26,20 +26,37 @@ export default function ContactsWithPhonePanel({ onViewContact }) {
         }
 
         try {
-            // Get contacts that have a phone number
-            const { data, error } = await supabase
+            // Load a larger recent set and filter client-side to handle schemas without phone_number
+            const baseSelect = 'conversation_id, participant_name, participant_id, pipeline_stage, last_message_time, page_id, extracted_details, phone_number';
+            let { data, error } = await supabase
                 .from('facebook_conversations')
-                .select('conversation_id, participant_name, participant_id, phone_number, pipeline_stage, last_message_time, page_id')
-                .not('phone_number', 'is', null)
-                .neq('phone_number', '')
+                .select(baseSelect)
                 .order('last_message_time', { ascending: false })
-                .limit(50);
+                .limit(200);
+
+            if (error && /phone_number/i.test(error.message || '')) {
+                const fallbackSelect = 'conversation_id, participant_name, participant_id, pipeline_stage, last_message_time, page_id, extracted_details';
+                const fallback = await supabase
+                    .from('facebook_conversations')
+                    .select(fallbackSelect)
+                    .order('last_message_time', { ascending: false })
+                    .limit(200);
+                data = fallback.data;
+                error = fallback.error;
+            }
 
             if (error) {
                 console.error('[ContactsWithPhone] Error loading:', error);
                 setContacts([]);
             } else {
-                setContacts(data || []);
+                const normalized = (data || [])
+                    .map(contact => {
+                        const phone = (contact.phone_number || contact.extracted_details?.phone || '').toString().trim();
+                        return { ...contact, phone_number: phone };
+                    })
+                    .filter(contact => contact.phone_number);
+
+                setContacts(normalized.slice(0, 50));
             }
         } catch (err) {
             console.error('[ContactsWithPhone] Error:', err);

@@ -211,6 +211,8 @@ export default async function handler(req, res) {
                 .single();
 
             const botConfig = botSettings?.value || {};
+            const silenceFollowupsEnabled = botConfig.enable_silence_followups !== false;
+            const intuitionFollowupsEnabled = botConfig.enable_intuition_followups !== false;
             if (botConfig.global_bot_enabled === false) {
                 console.log('[AI FOLLOWUP] ⛔ Global bot is DISABLED - cancelling all pending follow-ups');
 
@@ -261,6 +263,89 @@ export default async function handler(req, res) {
                 console.log(`[AI FOLLOWUP]   follow_up_type: ${first.follow_up_type}`);
                 console.log(`[AI FOLLOWUP]   current time: ${now}`);
                 console.log(`[AI FOLLOWUP]   minutes until due: ${minutesUntilDue} (negative = overdue)`);
+            }
+
+            // Fallback: if no pending follow-ups exist, schedule silence-based ones
+            if (silenceFollowupsEnabled && intuitionFollowupsEnabled && (!allPendingFollowups || allPendingFollowups.length === 0)) {
+                const silenceHours = botConfig.intuition_silence_hours || 0.5;
+                const cutoffTime = new Date(Date.now() - (silenceHours * 60 * 60 * 1000));
+
+                const { data: silentConversations, error: silentError } = await supabase
+                    .from('facebook_conversations')
+                    .select(`
+                        conversation_id,
+                        page_id,
+                        participant_name,
+                        last_message_time,
+                        ai_enabled,
+                        human_takeover,
+                        lead_status,
+                        pipeline_stage,
+                        intuition_followup_disabled,
+                        meeting_scheduled
+                    `)
+                    .neq('ai_enabled', false)
+                    .neq('human_takeover', true)
+                    .neq('intuition_followup_disabled', true)
+                    .neq('meeting_scheduled', true)
+                    .not('lead_status', 'in', '(appointment_booked,converted)')
+                    .neq('pipeline_stage', 'booked')
+                    .lt('last_message_time', cutoffTime.toISOString())
+                    .order('last_message_time', { ascending: true })
+                    .limit(25);
+
+                if (silentError) {
+                    console.error('[AI FOLLOWUP] Fallback schedule error:', silentError.message);
+                } else if (silentConversations && silentConversations.length > 0) {
+                    console.log(`[AI FOLLOWUP] Fallback scheduling for ${silentConversations.length} silent conversations`);
+                    const nowTime = new Date();
+
+                    for (const conv of silentConversations) {
+                        const lastTime = conv.last_message_time ? new Date(conv.last_message_time) : null;
+                        if (!lastTime) {
+                            continue;
+                        }
+
+                        const minutesSince = Math.floor((nowTime - lastTime) / (1000 * 60));
+                        const hoursSince = Math.floor(minutesSince / 60);
+                        const daysSince = Math.floor(hoursSince / 24);
+
+                        let waitMinutes;
+                        let reason;
+                        let followUpType = 'intuition';
+
+                        if (hoursSince < 1) {
+                            waitMinutes = 30;
+                            reason = `Hot lead! ${minutesSince} mins silent - quick follow-up`;
+                        } else if (hoursSince < 4) {
+                            waitMinutes = 60;
+                            reason = `Warm lead, ${hoursSince}h silent - hourly follow-up`;
+                        } else if (hoursSince < 24) {
+                            waitMinutes = 360;
+                            reason = `${hoursSince}h silent - gentle check-in every 6h`;
+                        } else {
+                            waitMinutes = 24 * 60;
+                            reason = `${daysSince} day(s) silent - daily follow-up`;
+                            followUpType = 'best_time';
+                        }
+
+                        const scheduledAt = new Date(nowTime.getTime() + waitMinutes * 60 * 1000);
+                        const { error: scheduleError } = await supabase
+                            .from('ai_followup_schedule')
+                            .insert({
+                                conversation_id: conv.conversation_id,
+                                page_id: conv.page_id,
+                                scheduled_at: scheduledAt.toISOString(),
+                                follow_up_type: followUpType,
+                                reason: reason,
+                                status: 'pending'
+                            });
+
+                        if (scheduleError) {
+                            console.error('[AI FOLLOWUP] Fallback schedule failed:', scheduleError.message);
+                        }
+                    }
+                }
             }
 
             // Get pending AI follow-ups that are due

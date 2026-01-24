@@ -59,6 +59,23 @@ function extractNameFromText(text) {
 }
 
 /**
+ * Extract a phone number from message text
+ * Keeps common PH formats (09xxxxxxxxx, 0xxxxxxxxxx, +63xxxxxxxxxx)
+ */
+function extractPhoneFromText(text) {
+    if (!text) return null;
+
+    const cleaned = text.replace(/[^\d+]/g, '');
+    const match = cleaned.match(/\+63\d{10}|09\d{9}|0\d{10}/);
+    if (match) {
+        return match[0];
+    }
+
+    const generic = cleaned.match(/\d{10,15}/);
+    return generic ? generic[0] : null;
+}
+
+/**
  * Fetch Facebook user profile name using Graph API
  * Note: Facebook restricts profile access - the user must have messaged the page
  * and your app needs appropriate permissions (pages_messaging)
@@ -796,6 +813,10 @@ async function handleIncomingMessage(pageId, event) {
             }
         }
 
+        const extractedPhone = !isFromPage ? extractPhoneFromText(message.text || '') : null;
+        const existingPhone = existingConv?.phone_number || existingConv?.extracted_details?.phone || null;
+        const shouldUpdatePhone = extractedPhone && extractedPhone !== existingPhone;
+
 
         // Save/update conversation - use select + insert/update pattern for robustness
         // This works regardless of whether unique constraint exists
@@ -844,6 +865,24 @@ async function handleIncomingMessage(pageId, event) {
         }
 
         console.log(`[WEBHOOK] Conversation ${conversationId} saved, unread: ${newUnreadCount}`);
+
+        if (shouldUpdatePhone) {
+            const baseDetails = existingConv?.extracted_details || {};
+            const updatedDetails = { ...baseDetails, phone: extractedPhone };
+            const { error: phoneUpdateError } = await db
+                .from('facebook_conversations')
+                .update({
+                    extracted_details: updatedDetails,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('conversation_id', conversationId);
+
+            if (phoneUpdateError) {
+                console.error('[WEBHOOK] Error updating extracted phone:', phoneUpdateError.message);
+            } else {
+                console.log(`[WEBHOOK] Saved extracted phone: ${extractedPhone}`);
+            }
+        }
 
         // Save message
         // For echoes (messages from page), check if already saved by app
@@ -1129,6 +1168,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
         const knowledgeBase = config.knowledge_base || '';
         const faqContent = config.faq || ''; // FAQ for RAG pipeline
         const language = config.language || 'Taglish'; // Default to Taglish (Tagalog + English mix)
+        const knownPhone = conversation?.phone_number || conversation?.extracted_details?.phone;
 
         // DEBUG: Log what RAG content we have
         console.log('[WEBHOOK] RAG Content Check:', {
@@ -1152,7 +1192,7 @@ You MUST respond in ${language}. This is MANDATORY.
 
 ## Platform: Facebook Messenger
 Contact Name: ${conversation?.participant_name || 'Customer'}
-${conversation?.phone_number ? `Phone Number: ${conversation.phone_number}` : ''}
+${knownPhone ? `Phone Number: ${knownPhone}` : ''}
 ${conversation?.pipeline_stage ? `Pipeline Stage: ${conversation.pipeline_stage}` : ''}
 ${conversation?.lead_status ? `Lead Status: ${conversation.lead_status}` : ''}
 
@@ -1178,6 +1218,14 @@ Goal: ${activeGoal.toUpperCase()}
 Instructions: ${goalDescriptions[activeGoal] || 'Help the customer and guide them towards taking action.'}
 Every response should move the conversation closer to achieving this goal.
 `;
+
+        const customGoals = config.custom_goals?.trim();
+        if (customGoals) {
+            aiPrompt += `
+## Additional Goals to Achieve
+${customGoals}
+`;
+        }
 
         // Add calendar availability for booking goals
         if (activeGoal === 'booking' || config.booking_url) {
@@ -1755,9 +1803,9 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
                         if (recentMessages && recentMessages.length > 0) {
                             for (const msg of recentMessages) {
                                 const msgText = msg.message_text || '';
-                                const phoneMatch = msgText.match(/09\d{9}/) || msgText.match(/0\d{10}/) || msgText.match(/\+63\d{10}/);
+                                const phoneMatch = extractPhoneFromText(msgText);
                                 if (phoneMatch) {
-                                    phone = phoneMatch[0];
+                                    phone = phoneMatch;
                                     console.log('[WEBHOOK] FALLBACK: Found phone in messages:', phone);
                                     break;
                                 }
