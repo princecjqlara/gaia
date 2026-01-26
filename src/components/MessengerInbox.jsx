@@ -13,7 +13,8 @@ const LEAD_STATUS_CONFIG = {
     qualified: { icon: '✅', label: 'Qualified', color: '#22c55e', bgColor: 'rgba(34, 197, 94, 0.15)' },
     unqualified: { icon: '❌', label: 'Unqualified', color: '#ef4444', bgColor: 'rgba(239, 68, 68, 0.15)' },
     appointment_booked: { icon: '📅', label: 'Appointment Booked', color: '#a855f7', bgColor: 'rgba(168, 85, 247, 0.15)' },
-    converted: { icon: '🎉', label: 'Converted', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.15)' }
+    converted: { icon: '🎉', label: 'Converted', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.15)' },
+    lost: { icon: '🚫', label: 'Lost', color: '#6b7280', bgColor: 'rgba(107, 114, 128, 0.15)' }
 };
 
 const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
@@ -84,16 +85,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [editableNotes, setEditableNotes] = useState('');
     const [showMediaUpload, setShowMediaUpload] = useState(false);
     const [extractingDetails, setExtractingDetails] = useState(false);
-    // AI priority sorting - persisted to localStorage
-    const [smartSort, setSmartSort] = useState(() => {
-        const saved = localStorage.getItem('messenger_ai_priority');
-        return saved !== null ? saved === 'true' : true; // Default true
-    });
 
-    // Persist AI Priority setting
-    useEffect(() => {
-        localStorage.setItem('messenger_ai_priority', String(smartSort));
-    }, [smartSort]);
 
     // New UI state
     const [showBulkModal, setShowBulkModal] = useState(false);
@@ -310,38 +302,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
             }
         })
         .sort((a, b) => {
-            // If smart sort enabled, prioritize conversations needing urgent response
-            if (smartSort) {
-                // Get urgency from AI analysis (stored when conversation is analyzed)
-                const aUrgency = a.ai_analysis?.urgency;
-                const bUrgency = b.ai_analysis?.urgency;
-
-                // Check if customer sent last message AND needs urgent response
-                const aAwaiting = !a.last_message_from_page && a.unread_count > 0;
-                const bAwaiting = !b.last_message_from_page && b.unread_count > 0;
-
-                // Priority scoring: high=3, medium=2, low=1, none=0
-                const getPriorityScore = (conv, awaiting) => {
-                    if (!awaiting) return 0;
-                    const urgency = conv.ai_analysis?.urgency;
-                    if (urgency?.needsUrgentResponse) {
-                        if (urgency.priority === 'high' || urgency.isUnsatisfied) return 3;
-                        if (urgency.priority === 'medium' || urgency.hasQuestion) return 2;
-                        return 1;
-                    }
-                    // Fallback: check if last message has question mark
-                    if (conv.last_message_text?.includes('?')) return 2;
-                    return awaiting ? 1 : 0;
-                };
-
-                const aPriority = getPriorityScore(a, aAwaiting);
-                const bPriority = getPriorityScore(b, bAwaiting);
-
-                if (aPriority !== bPriority) {
-                    return bPriority - aPriority; // Higher priority first
-                }
-            }
-            // Then sort by time
+            // Sort by time
             return new Date(b.last_message_time) - new Date(a.last_message_time);
         });
 
@@ -1160,14 +1121,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             </div>
                         )}
 
-                        <button
-                            className={`btn btn-sm ${smartSort ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setSmartSort(!smartSort)}
-                            style={{ width: '100%', fontSize: '0.7rem' }}
-                            title="Prioritize conversations awaiting your reply"
-                        >
-                            {smartSort ? '🤖 AI Priority: ON' : '🤖 AI Priority: OFF'}
-                        </button>
+
                     </div>
 
                     {/* Conversations List */}
@@ -1282,7 +1236,23 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                     : searchTerm.length >= 2
                                         ? 'No contacts found matching your search.'
                                         : conversations.length === 0
-                                            ? 'No conversations yet. Connect a Facebook page to get started.'
+                                            ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                                    <p>No conversations yet. Connect a Facebook page to get started.</p>
+                                                    <button
+                                                        className="btn btn-sm btn-secondary"
+                                                        onClick={() => {
+                                                            if (confirm('Load demo data? This will enable demo mode.')) {
+                                                                localStorage.setItem('gaia_demo_mode', 'true');
+                                                                window.location.reload();
+                                                            }
+                                                        }}
+                                                        style={{ background: '#e5e7eb', color: '#374151' }}
+                                                    >
+                                                        📂 Load Demo Data
+                                                    </button>
+                                                </div>
+                                            )
                                             : 'No conversations match your filter.'
                                 }
                             </div>
@@ -2011,6 +1981,123 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 )}
                             </div>
 
+                            {/* Contact Details (Phone/Location/Email) */}
+                            {(selectedConversation.contact_info || selectedConversation.email) && (
+                                <div style={{ marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+                                    <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Contact Details</h5>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                                        {(selectedConversation.contact_info?.email || selectedConversation.participant_email) && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>📧</span> <span style={{ wordBreak: 'break-all' }}>{selectedConversation.contact_info?.email || selectedConversation.participant_email}</span>
+                                            </div>
+                                        )}
+                                        {selectedConversation.contact_info?.phone && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>📞</span> <span>{selectedConversation.contact_info.phone}</span>
+                                            </div>
+                                        )}
+                                        {selectedConversation.contact_info?.location && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>📍</span> <span>{selectedConversation.contact_info.location}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Viewed Property Card - Enhanced */}
+                            {selectedConversation.viewed_property && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                                        🏠 Viewed Property
+                                    </label>
+                                    <div style={{
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)',
+                                        overflow: 'hidden',
+                                        border: '1px solid var(--border-color)',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}>
+                                        <div style={{ height: '140px', position: 'relative' }}>
+                                            <img
+                                                src={selectedConversation.viewed_property.image}
+                                                alt={selectedConversation.viewed_property.title}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                            {/* Price Tag */}
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: '10px',
+                                                left: '10px',
+                                                background: 'rgba(0,0,0,0.7)',
+                                                color: 'white',
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: '600'
+                                            }}>
+                                                ₱ {parseInt(selectedConversation.viewed_property.price).toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div style={{ padding: '1rem' }}>
+                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem', fontWeight: '600' }}>
+                                                {selectedConversation.viewed_property.title}
+                                            </h4>
+                                            <div style={{
+                                                fontSize: '0.75rem',
+                                                color: 'var(--text-muted)',
+                                                marginBottom: '0.5rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem'
+                                            }}>
+                                                <span>{selectedConversation.viewed_property.id}</span>
+                                                <span>•</span>
+                                                <span>2 Beds</span>
+                                                <span>•</span>
+                                                <span>2 Baths</span>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600' }}
+                                                    onClick={() => alert(`Opening details for ${selectedConversation.viewed_property.title}`)}
+                                                >
+                                                    View Details
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                                                    onClick={() => alert(`Inquiry for ${selectedConversation.viewed_property.title}`)}
+                                                >
+                                                    💬 Inquire
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Conversations Summary (AI) */}
+                            {selectedConversation.ai_summary && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                                        🤖 AI Summary
+                                    </label>
+                                    <div style={{
+                                        background: 'rgba(124, 58, 237, 0.1)',
+                                        border: '1px solid rgba(124, 58, 237, 0.2)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: '1rem'
+                                    }}>
+                                        <p style={{ fontSize: '0.85rem', lineHeight: '1.5', margin: 0, color: 'var(--text-primary)' }}>
+                                            {selectedConversation.ai_summary}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Tags Section */}
                             <div style={{ marginBottom: '1rem' }}>
                                 <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
@@ -2078,10 +2165,12 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 </select>
                             </div>
 
-                            {/* Actions */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+
+
+                            {/* Link to Client & Assign Group */}
+                            <div className="action-buttons-grid">
                                 {/* Link to Client */}
-                                <div>
+                                <div style={{ flex: 1 }}>
                                     <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
                                         Link to Client
                                     </label>
@@ -2101,7 +2190,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 </div>
 
                                 {/* Assign to User */}
-                                <div>
+                                <div style={{ flex: 1 }}>
                                     <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
                                         Assigned To
                                     </label>
@@ -2119,30 +2208,45 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                         ))}
                                     </select>
                                 </div>
+                            </div>
 
-                                {/* Lead Status */}
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-                                        Lead Status
-                                    </label>
-                                    <select
-                                        className="form-select"
-                                        value={selectedConversation.lead_status || 'intake'}
-                                        onChange={(e) => updateLeadStatus(selectedConversation.conversation_id, e.target.value)}
-                                        style={{
-                                            width: '100%',
-                                            background: LEAD_STATUS_CONFIG[selectedConversation.lead_status || 'intake']?.bgColor || 'var(--bg-secondary)',
-                                            borderColor: LEAD_STATUS_CONFIG[selectedConversation.lead_status || 'intake']?.color || 'var(--border-color)'
-                                        }}
-                                    >
-                                        {Object.entries(LEAD_STATUS_CONFIG).map(([value, config]) => (
-                                            <option key={value} value={value}>
-                                                {config.icon} {config.label}
-                                            </option>
-                                        ))}
-                                    </select>
+                            {/* Lead Status */}
+                            <div>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
+                                    Lead Status (Pipeline)
+                                </label>
+                                <div className="pipeline-stage-grid">
+                                    {Object.entries(LEAD_STATUS_CONFIG).map(([value, config]) => (
+                                        <button
+                                            key={value}
+                                            onClick={() => updateLeadStatus(selectedConversation.conversation_id, value)}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.5rem',
+                                                borderRadius: '8px',
+                                                border: selectedConversation.lead_status === value
+                                                    ? `2px solid ${config.color}`
+                                                    : '1px solid var(--border-color)',
+                                                background: selectedConversation.lead_status === value
+                                                    ? config.bgColor
+                                                    : 'var(--bg-primary)',
+                                                color: 'var(--text-primary)',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                fontWeight: '500',
+                                                transition: 'all 0.2s',
+                                                textAlign: 'left'
+                                            }}
+                                        >
+                                            <span style={{ fontSize: '1rem' }}>{config.icon}</span>
+                                            <span>{config.label}</span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
+
 
                             {/* AI Analysis Button */}
                             <div style={{ marginTop: '1rem' }}>
@@ -2175,338 +2279,286 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 </button>
                             </div>
 
-                            {/* Conversation Insights (Auto-detected - always visible) */}
-                            {conversationInsights && (
-                                <div style={{
-                                    marginTop: '1rem',
-                                    padding: '1rem',
-                                    background: 'var(--bg-secondary)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--border-color)'
-                                }}>
-                                    <h5 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        📊 Conversation Insights
-                                    </h5>
+                            {/* Conversation Insights Removed */}
 
-                                    {/* Booking Status - Always show */}
+                            {/* AI Insights (from analysis) */}
+                            {
+                                aiAnalysis && (
                                     <div style={{
-                                        padding: '0.75rem',
-                                        background: conversationInsights.hasBooking
-                                            ? 'var(--success-alpha, rgba(74, 222, 128, 0.1))'
-                                            : 'var(--bg-tertiary)',
-                                        borderRadius: 'var(--radius-sm)',
-                                        marginBottom: '0.75rem'
+                                        marginTop: '1rem',
+                                        padding: '1rem',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--primary-alpha)'
                                     }}>
-                                        {conversationInsights.hasBooking ? (
-                                            <>
+                                        <h5 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            🤖 AI Insights
+                                        </h5>
+
+                                        {/* Lead Score */}
+                                        {aiAnalysis.leadScore && (
+                                            <div style={{ marginBottom: '0.75rem' }}>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lead Score: </span>
+                                                <span style={{
+                                                    padding: '0.125rem 0.5rem',
+                                                    borderRadius: '999px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '600',
+                                                    background: aiAnalysis.leadScore.score === 'hot' ? 'var(--error)' :
+                                                        aiAnalysis.leadScore.score === 'warm' ? 'var(--warning)' : 'var(--text-muted)',
+                                                    color: 'white'
+                                                }}>
+                                                    {aiAnalysis.leadScore.score?.toUpperCase()}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {/* Properties Viewed (Mock) */}
+                                        <div style={{ marginBottom: '1.5rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>🏠 Recently Viewed Properties</span>
+                                                <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', background: 'var(--primary-alpha)', borderRadius: '4px', color: 'var(--primary)' }}>New</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                {/* Simulated Mock Data based on conversation ID to vary content */}
+                                                {(selectedConversation.conversation_id.charCodeAt(0) % 2 === 0) ? (
+                                                    <>
+                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Modern 3-Bedroom Villa</div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                                <span>Viewed Gallery</span>
+                                                                <span>2h ago</span>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Downtown Condo Unit</div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                                <span>Checked Price</span>
+                                                                <span>1d ago</span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                        <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Luxury Penthouse</div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                            <span>Scheduled Visit</span>
+                                                            <span>5h ago</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Meeting Detected */}
+                                        {aiAnalysis.meeting?.hasMeeting && (
+                                            <div style={{
+                                                padding: '0.75rem',
+                                                background: 'var(--success-alpha, rgba(74, 222, 128, 0.1))',
+                                                borderRadius: 'var(--radius-sm)',
+                                                marginBottom: '0.75rem'
+                                            }}>
                                                 <div style={{ fontWeight: '500', color: 'var(--success)', marginBottom: '0.25rem' }}>
-                                                    ✅ Appointment Booked
+                                                    📅 Meeting Detected!
                                                 </div>
-                                                <div style={{ fontSize: '0.875rem' }}>
-                                                    📅 {new Date(conversationInsights.booking.datetime).toLocaleDateString()} at {conversationInsights.booking.time}
+                                                {aiAnalysis.meeting.datetime && (
+                                                    <div style={{ fontSize: '0.875rem' }}>
+                                                        {new Date(aiAnalysis.meeting.datetime).toLocaleString()}
+                                                    </div>
+                                                )}
+                                                {aiAnalysis.meeting.rawTimeText && (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                                        "{aiAnalysis.meeting.rawTimeText}"
+                                                    </div>
+                                                )}
+                                                {!aiAnalysis.meetingBooked && (
+                                                    <button
+                                                        className="btn btn-sm btn-primary"
+                                                        onClick={() => bookMeetingFromAI({}, currentUserId)}
+                                                        disabled={loading}
+                                                        style={{ marginTop: '0.5rem', width: '100%' }}
+                                                    >
+                                                        📆 Book This Meeting
+                                                    </button>
+                                                )}
+                                                {aiAnalysis.meetingBooked && (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.5rem' }}>
+                                                        ✅ Meeting booked!
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Extracted Details */}
+                                        {aiAnalysis.details && Object.values(aiAnalysis.details).some(v => v) && (
+                                            <div style={{ marginBottom: '0.75rem' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                                    Extracted Details:
                                                 </div>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                                    Status: <span style={{
-                                                        textTransform: 'capitalize',
-                                                        color: conversationInsights.booking.status === 'confirmed' ? 'var(--success)' :
-                                                            conversationInsights.booking.status === 'cancelled' ? 'var(--error)' : 'var(--warning)'
-                                                    }}>{conversationInsights.booking.status}</span>
-                                                    {conversationInsights.booking.daysInfo && (
-                                                        <span> • {conversationInsights.booking.daysInfo.type === 'upcoming'
-                                                            ? `In ${conversationInsights.booking.daysInfo.days} days`
-                                                            : `${conversationInsights.booking.daysInfo.days} days ago`
-                                                        }</span>
-                                                    )}
+                                                {aiAnalysis.details.businessName && (
+                                                    <div style={{ fontSize: '0.875rem' }}>🏢 {aiAnalysis.details.businessName}</div>
+                                                )}
+                                                {aiAnalysis.details.facebookPage && (
+                                                    <div style={{ fontSize: '0.875rem' }}>📘 {aiAnalysis.details.facebookPage}</div>
+                                                )}
+                                                {aiAnalysis.details.niche && (
+                                                    <div style={{ fontSize: '0.875rem' }}>🎯 {aiAnalysis.details.niche}</div>
+                                                )}
+                                                {aiAnalysis.details.phone && (
+                                                    <div style={{ fontSize: '0.875rem' }}>📞 {aiAnalysis.details.phone}</div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* AI Notes */}
+                                        {aiAnalysis.notes && (
+                                            <div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                                    AI Notes:
                                                 </div>
-                                            </>
-                                        ) : (
-                                            <div style={{ fontWeight: '500', color: 'var(--text-muted)' }}>
-                                                📅 No Appointment Booked
+                                                <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
+                                                    {aiAnalysis.notes}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Message Summary */}
-                                    <div style={{ marginBottom: '0.75rem' }}>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                                            💬 Conversation Summary
-                                        </div>
-                                        <div style={{ fontSize: '0.875rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                            <span>{conversationInsights.messageCount} messages</span>
-                                            <span>•</span>
-                                            <span>{conversationInsights.customerMessages} from customer</span>
-                                            {conversationInsights.daysSinceFirstContact !== null && (
-                                                <>
-                                                    <span>•</span>
-                                                    <span>{conversationInsights.daysSinceFirstContact} days ago</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Timeline */}
-                                    {conversationInsights.timeline && conversationInsights.timeline.length > 0 && (
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                                                📅 Timeline
-                                            </div>
-                                            <div style={{
-                                                fontSize: '0.8rem',
-                                                paddingLeft: '0.5rem',
-                                                borderLeft: '2px solid var(--border-color)'
-                                            }}>
-                                                {conversationInsights.timeline.map((event, idx) => (
-                                                    <div key={idx} style={{
-                                                        marginBottom: '0.25rem',
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center'
-                                                    }}>
-                                                        <span>{event.label}</span>
-                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                                            {new Date(event.date).toLocaleDateString()}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* AI Insights (from analysis) */}
-                            {aiAnalysis && (
-                                <div style={{
-                                    marginTop: '1rem',
-                                    padding: '1rem',
-                                    background: 'var(--bg-secondary)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--primary-alpha)'
-                                }}>
-                                    <h5 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        🤖 AI Insights
-                                    </h5>
-
-                                    {/* Lead Score */}
-                                    {aiAnalysis.leadScore && (
-                                        <div style={{ marginBottom: '0.75rem' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lead Score: </span>
-                                            <span style={{
-                                                padding: '0.125rem 0.5rem',
-                                                borderRadius: '999px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: '600',
-                                                background: aiAnalysis.leadScore.score === 'hot' ? 'var(--error)' :
-                                                    aiAnalysis.leadScore.score === 'warm' ? 'var(--warning)' : 'var(--text-muted)',
-                                                color: 'white'
-                                            }}>
-                                                {aiAnalysis.leadScore.score?.toUpperCase()}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    {/* Meeting Detected */}
-                                    {aiAnalysis.meeting?.hasMeeting && (
-                                        <div style={{
-                                            padding: '0.75rem',
-                                            background: 'var(--success-alpha, rgba(74, 222, 128, 0.1))',
-                                            borderRadius: 'var(--radius-sm)',
-                                            marginBottom: '0.75rem'
-                                        }}>
-                                            <div style={{ fontWeight: '500', color: 'var(--success)', marginBottom: '0.25rem' }}>
-                                                📅 Meeting Detected!
-                                            </div>
-                                            {aiAnalysis.meeting.datetime && (
-                                                <div style={{ fontSize: '0.875rem' }}>
-                                                    {new Date(aiAnalysis.meeting.datetime).toLocaleString()}
-                                                </div>
-                                            )}
-                                            {aiAnalysis.meeting.rawTimeText && (
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                                    "{aiAnalysis.meeting.rawTimeText}"
-                                                </div>
-                                            )}
-                                            {!aiAnalysis.meetingBooked && (
-                                                <button
-                                                    className="btn btn-sm btn-primary"
-                                                    onClick={() => bookMeetingFromAI({}, currentUserId)}
-                                                    disabled={loading}
-                                                    style={{ marginTop: '0.5rem', width: '100%' }}
-                                                >
-                                                    📆 Book This Meeting
-                                                </button>
-                                            )}
-                                            {aiAnalysis.meetingBooked && (
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.5rem' }}>
-                                                    ✅ Meeting booked!
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Extracted Details */}
-                                    {aiAnalysis.details && Object.values(aiAnalysis.details).some(v => v) && (
-                                        <div style={{ marginBottom: '0.75rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                                                Extracted Details:
-                                            </div>
-                                            {aiAnalysis.details.businessName && (
-                                                <div style={{ fontSize: '0.875rem' }}>🏢 {aiAnalysis.details.businessName}</div>
-                                            )}
-                                            {aiAnalysis.details.facebookPage && (
-                                                <div style={{ fontSize: '0.875rem' }}>📘 {aiAnalysis.details.facebookPage}</div>
-                                            )}
-                                            {aiAnalysis.details.niche && (
-                                                <div style={{ fontSize: '0.875rem' }}>🎯 {aiAnalysis.details.niche}</div>
-                                            )}
-                                            {aiAnalysis.details.phone && (
-                                                <div style={{ fontSize: '0.875rem' }}>📞 {aiAnalysis.details.phone}</div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* AI Notes */}
-                                    {aiAnalysis.notes && (
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                                                AI Notes:
-                                            </div>
-                                            <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
-                                                {aiAnalysis.notes}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                )
+                            }
 
                             {/* Existing Client Warning */}
-                            {existingClient && !selectedConversation.linked_client_id && (
-                                <div style={{
-                                    marginTop: '1rem',
-                                    padding: '1rem',
-                                    background: 'var(--warning-alpha, rgba(251, 191, 36, 0.1))',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--warning)'
-                                }}>
-                                    <div style={{ fontWeight: '500', color: 'var(--warning)', marginBottom: '0.5rem' }}>
-                                        ⚠️ Existing Lead Found
-                                    </div>
-                                    <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                                        {existingClient.client_name}
-                                        {existingClient.business_name && ` (${existingClient.business_name})`}
-                                    </div>
-                                    <button
-                                        className="btn btn-sm btn-warning"
-                                        onClick={() => updateExistingLead(existingClient.id)}
-                                        disabled={loading}
-                                        style={{ width: '100%' }}
-                                    >
-                                        🔄 Update This Lead
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Add to Pipeline Button */}
-                            {!selectedConversation.linked_client_id && !existingClient && (
-                                <div style={{ marginTop: '1rem' }}>
-                                    <button
-                                        className="btn btn-primary"
-                                        onClick={async () => {
-                                            // Start with basic info
-                                            setTransferForm({
-                                                clientName: selectedConversation.participant_name || '',
-                                                businessName: '',
-                                                contactDetails: '',
-                                                pageLink: '',
-                                                niche: '',
-                                                notes: ''
-                                            });
-                                            setShowTransferModal(true);
-
-                                            // Then run AI extraction in background
-                                            if (messages && messages.length > 0) {
-                                                setExtractingDetails(true);
-                                                try {
-                                                    const [details, notes] = await Promise.all([
-                                                        extractContactDetails(messages, selectedConversation.participant_name),
-                                                        generateNotes(messages, selectedConversation.participant_name)
-                                                    ]);
-
-                                                    // Update form with extracted data
-                                                    setTransferForm(prev => ({
-                                                        ...prev,
-                                                        businessName: details?.businessName || prev.businessName,
-                                                        contactDetails: details?.phone || details?.email || prev.contactDetails,
-                                                        pageLink: details?.facebookPage || details?.website || prev.pageLink,
-                                                        niche: details?.niche || prev.niche,
-                                                        notes: notes || prev.notes
-                                                    }));
-                                                } catch (err) {
-                                                    console.error('AI extraction error:', err);
-                                                } finally {
-                                                    setExtractingDetails(false);
-                                                }
-                                            }
-                                        }}
-                                        disabled={loading || extractingDetails}
-                                        style={{ width: '100%' }}
-                                    >
-                                        {extractingDetails ? '🤖 Analyzing...' : '➕ Add to Pipeline'}
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Linked Client Info */}
-                            {selectedConversation.linked_client && (
-                                <div style={{
-                                    marginTop: '1rem',
-                                    padding: '1rem',
-                                    background: 'var(--bg-secondary)',
-                                    borderRadius: 'var(--radius-md)'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                                        <h5 style={{ margin: 0, fontSize: '0.875rem' }}>
-                                            🔗 Linked Client
-                                        </h5>
+                            {
+                                existingClient && !selectedConversation.linked_client_id && (
+                                    <div style={{
+                                        marginTop: '1rem',
+                                        padding: '1rem',
+                                        background: 'var(--warning-alpha, rgba(251, 191, 36, 0.1))',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--warning)'
+                                    }}>
+                                        <div style={{ fontWeight: '500', color: 'var(--warning)', marginBottom: '0.5rem' }}>
+                                            ⚠️ Existing Lead Found
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                                            {existingClient.client_name}
+                                            {existingClient.business_name && ` (${existingClient.business_name})`}
+                                        </div>
                                         <button
-                                            onClick={() => {
-                                                if (window.confirm('Unlink this conversation from the client?')) {
-                                                    linkToClient(selectedConversation.conversation_id, null);
-                                                }
-                                            }}
-                                            style={{
-                                                padding: '0.25rem 0.5rem',
-                                                fontSize: '0.7rem',
-                                                background: 'transparent',
-                                                border: '1px solid var(--error)',
-                                                color: 'var(--error)',
-                                                borderRadius: 'var(--radius-sm)',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.target.style.background = 'var(--error)';
-                                                e.target.style.color = 'white';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.target.style.background = 'transparent';
-                                                e.target.style.color = 'var(--error)';
-                                            }}
-                                            title="Unlink from client"
+                                            className="btn btn-sm btn-warning"
+                                            onClick={() => updateExistingLead(existingClient.id)}
+                                            disabled={loading}
+                                            style={{ width: '100%' }}
                                         >
-                                            ✕ Unlink
+                                            🔄 Update This Lead
                                         </button>
                                     </div>
-                                    <div style={{ fontWeight: '500' }}>
-                                        {selectedConversation.linked_client.client_name}
+                                )
+                            }
+
+                            {/* Add to Pipeline Button */}
+                            {
+                                !selectedConversation.linked_client_id && !existingClient && (
+                                    <div style={{ marginTop: '1rem' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={async () => {
+                                                // Start with basic info
+                                                setTransferForm({
+                                                    clientName: selectedConversation.participant_name || '',
+                                                    businessName: '',
+                                                    contactDetails: '',
+                                                    pageLink: '',
+                                                    niche: '',
+                                                    notes: ''
+                                                });
+                                                setShowTransferModal(true);
+
+                                                // Then run AI extraction in background
+                                                if (messages && messages.length > 0) {
+                                                    setExtractingDetails(true);
+                                                    try {
+                                                        const [details, notes] = await Promise.all([
+                                                            extractContactDetails(messages, selectedConversation.participant_name),
+                                                            generateNotes(messages, selectedConversation.participant_name)
+                                                        ]);
+
+                                                        // Update form with extracted data
+                                                        setTransferForm(prev => ({
+                                                            ...prev,
+                                                            businessName: details?.businessName || prev.businessName,
+                                                            contactDetails: details?.phone || details?.email || prev.contactDetails,
+                                                            pageLink: details?.facebookPage || details?.website || prev.pageLink,
+                                                            niche: details?.niche || prev.niche,
+                                                            notes: notes || prev.notes
+                                                        }));
+                                                    } catch (err) {
+                                                        console.error('AI extraction error:', err);
+                                                    } finally {
+                                                        setExtractingDetails(false);
+                                                    }
+                                                }
+                                            }}
+                                            disabled={loading || extractingDetails}
+                                            style={{ width: '100%' }}
+                                        >
+                                            {extractingDetails ? '🤖 Analyzing...' : '➕ Add to Pipeline'}
+                                        </button>
                                     </div>
-                                    {selectedConversation.linked_client.business_name && (
-                                        <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                                            {selectedConversation.linked_client.business_name}
+                                )
+                            }
+
+                            {/* Linked Client Info */}
+                            {
+                                selectedConversation.linked_client && (
+                                    <div style={{
+                                        marginTop: '1rem',
+                                        padding: '1rem',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                            <h5 style={{ margin: 0, fontSize: '0.875rem' }}>
+                                                🔗 Linked Client
+                                            </h5>
+                                            <button
+                                                onClick={() => {
+                                                    if (window.confirm('Unlink this conversation from the client?')) {
+                                                        linkToClient(selectedConversation.conversation_id, null);
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '0.25rem 0.5rem',
+                                                    fontSize: '0.7rem',
+                                                    background: 'transparent',
+                                                    border: '1px solid var(--error)',
+                                                    color: 'var(--error)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.target.style.background = 'var(--error)';
+                                                    e.target.style.color = 'white';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.target.style.background = 'transparent';
+                                                    e.target.style.color = 'var(--error)';
+                                                }}
+                                                title="Unlink from client"
+                                            >
+                                                ✕ Unlink
+                                            </button>
                                         </div>
-                                    )}
-                                </div>
-                            )}
+                                        <div style={{ fontWeight: '500' }}>
+                                            {selectedConversation.linked_client.client_name}
+                                        </div>
+                                        {selectedConversation.linked_client.business_name && (
+                                            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                                {selectedConversation.linked_client.business_name}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }
                         </>
                     ) : (
                         <div style={{
@@ -2516,553 +2568,570 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                         }}>
                             Select a conversation to view details
                         </div>
-                    )}
-                </div>
+                    )
+                    }
+                </div >
 
                 {/* Error Toast */}
-                {error && (
-                    <div style={{
-                        position: 'fixed',
-                        bottom: '1rem',
-                        right: '1rem',
-                        background: 'var(--error)',
-                        color: 'white',
-                        padding: '0.75rem 1rem',
-                        borderRadius: 'var(--radius-md)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        zIndex: 1000
-                    }}>
-                        <span>⚠️ {error}</span>
-                        <button
-                            onClick={clearError}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'white',
-                                cursor: 'pointer',
-                                fontSize: '1rem'
-                            }}
-                        >
-                            ✕
-                        </button>
-                    </div>
-                )}
+                {
+                    error && (
+                        <div style={{
+                            position: 'fixed',
+                            bottom: '1rem',
+                            right: '1rem',
+                            background: 'var(--error)',
+                            color: 'white',
+                            padding: '0.75rem 1rem',
+                            borderRadius: 'var(--radius-md)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            zIndex: 1000
+                        }}>
+                            <span>⚠️ {error}</span>
+                            <button
+                                onClick={clearError}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '1rem'
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    )
+                }
 
                 {/* Bulk Message Modal */}
-                {showBulkModal && (
-                    <div style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 1001
-                    }}>
+                {
+                    showBulkModal && (
                         <div style={{
-                            background: 'var(--bg-primary)',
-                            borderRadius: 'var(--radius-lg)',
-                            padding: '1.5rem',
-                            width: '90%',
-                            maxWidth: '500px'
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1001
                         }}>
-                            <h3 style={{ marginTop: 0 }}>📢 Send Bulk Message</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                                Uses ACCOUNT_UPDATE tag for Facebook compliance
-                            </p>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                borderRadius: 'var(--radius-lg)',
+                                padding: '1.5rem',
+                                width: '90%',
+                                maxWidth: '500px'
+                            }}>
+                                <h3 style={{ marginTop: 0 }}>📢 Send Bulk Message</h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                    Uses ACCOUNT_UPDATE tag for Facebook compliance
+                                </p>
 
-                            <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                                    Send to:
-                                </label>
-                                <select
-                                    className="form-input"
-                                    value={bulkFilter}
-                                    onChange={(e) => {
-                                        setBulkFilter(e.target.value);
-                                        if (e.target.value !== 'tag') {
-                                            setBulkTagFilter('');
-                                        }
-                                    }}
-                                    style={{ width: '100%' }}
-                                >
-                                    <optgroup label="📋 Contact Status">
-                                        <option value="all">All Conversations</option>
-                                        <option value="selected">Selected Contacts ({selectedConversations.size})</option>
-                                    </optgroup>
-                                    <optgroup label="📅 Booking Status">
-                                        <option value="booked">Booked (In Pipeline)</option>
-                                        <option value="unbooked">Not Booked</option>
-                                    </optgroup>
-                                    <optgroup label="📊 Pipeline Status">
-                                        <option value="pipeline">In Pipeline</option>
-                                        <option value="not_pipeline">Not in Pipeline</option>
-                                    </optgroup>
-                                    <optgroup label="💬 Reply Status">
-                                        <option value="no_reply">Awaiting Reply (No Response)</option>
-                                        <option value="replied">Already Replied</option>
-                                    </optgroup>
-                                    <optgroup label="📝 Proposal Status">
-                                        <option value="proposal_sent">Proposal Sent</option>
-                                        <option value="proposal_waiting">Proposal Waiting</option>
-                                    </optgroup>
-                                    <optgroup label="🏷️ By Tag">
-                                        <option value="tag">Filter by Tag...</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-
-                            {/* Tag Selection - shown when filter is 'tag' */}
-                            {bulkFilter === 'tag' && (
                                 <div style={{ marginBottom: '1rem' }}>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                                        Select Tag:
+                                        Send to:
                                     </label>
                                     <select
                                         className="form-input"
-                                        value={bulkTagFilter}
-                                        onChange={(e) => setBulkTagFilter(e.target.value)}
+                                        value={bulkFilter}
+                                        onChange={(e) => {
+                                            setBulkFilter(e.target.value);
+                                            if (e.target.value !== 'tag') {
+                                                setBulkTagFilter('');
+                                            }
+                                        }}
                                         style={{ width: '100%' }}
                                     >
-                                        <option value="">-- Select a tag --</option>
-                                        {tags.map(tag => (
-                                            <option key={tag.id} value={tag.id}>
-                                                {tag.name}
-                                            </option>
-                                        ))}
+                                        <optgroup label="📋 Contact Status">
+                                            <option value="all">All Conversations</option>
+                                            <option value="selected">Selected Contacts ({selectedConversations.size})</option>
+                                        </optgroup>
+                                        <optgroup label="📅 Booking Status">
+                                            <option value="booked">Booked (In Pipeline)</option>
+                                            <option value="unbooked">Not Booked</option>
+                                        </optgroup>
+                                        <optgroup label="📊 Pipeline Status">
+                                            <option value="pipeline">In Pipeline</option>
+                                            <option value="not_pipeline">Not in Pipeline</option>
+                                        </optgroup>
+                                        <optgroup label="💬 Reply Status">
+                                            <option value="no_reply">Awaiting Reply (No Response)</option>
+                                            <option value="replied">Already Replied</option>
+                                        </optgroup>
+                                        <optgroup label="📝 Proposal Status">
+                                            <option value="proposal_sent">Proposal Sent</option>
+                                            <option value="proposal_waiting">Proposal Waiting</option>
+                                        </optgroup>
+                                        <optgroup label="🏷️ By Tag">
+                                            <option value="tag">Filter by Tag...</option>
+                                        </optgroup>
                                     </select>
-                                    {tags.length === 0 && (
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                            No tags created yet. Create tags in the Tags section.
-                                        </p>
-                                    )}
                                 </div>
-                            )}
 
-                            {/* Show count of recipients */}
-                            {bulkFilter === 'selected' && (
-                                <div style={{
-                                    padding: '0.5rem',
-                                    background: 'var(--primary-alpha)',
-                                    borderRadius: 'var(--radius-md)',
-                                    marginBottom: '1rem',
-                                    fontSize: '0.875rem'
-                                }}>
-                                    {selectedConversations.size > 0
-                                        ? `Will send to ${selectedConversations.size} selected contact${selectedConversations.size !== 1 ? 's' : ''}`
-                                        : '⚠️ No contacts selected. Use checkbox mode to select contacts first.'
-                                    }
-                                </div>
-                            )}
-
-                            <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                                    Message:
-                                </label>
-                                <textarea
-                                    className="form-input"
-                                    value={bulkMessage}
-                                    onChange={(e) => setBulkMessage(e.target.value)}
-                                    placeholder="Hi {first_name}! Type your message here..."
-                                    rows={4}
-                                    style={{ width: '100%', resize: 'vertical' }}
-                                />
-                                <div style={{
-                                    marginTop: '0.5rem',
-                                    padding: '0.75rem',
-                                    background: 'var(--bg-secondary)',
-                                    borderRadius: 'var(--radius-md)',
-                                    fontSize: '0.75rem',
-                                    color: 'var(--text-muted)'
-                                }}>
-                                    <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
-                                        📝 Template Variables (click to insert):
-                                    </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                        {[
-                                            { var: '{name}', desc: 'Full name' },
-                                            { var: '{first_name}', desc: 'First name' },
-                                            { var: '{date}', desc: 'Today\'s date' },
-                                            { var: '{time}', desc: 'Current time' },
-                                            { var: '{day}', desc: 'Day of week' }
-                                        ].map(item => (
-                                            <button
-                                                key={item.var}
-                                                type="button"
-                                                onClick={() => setBulkMessage(prev => prev + item.var)}
-                                                style={{
-                                                    padding: '0.25rem 0.5rem',
-                                                    background: 'var(--primary-alpha)',
-                                                    border: '1px solid var(--primary)',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    color: 'var(--primary)',
-                                                    cursor: 'pointer',
-                                                    fontSize: '0.7rem',
-                                                    fontFamily: 'monospace'
-                                                }}
-                                                title={item.desc}
-                                            >
-                                                {item.var}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => setShowBulkModal(false)}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleSendBulkMessage}
-                                    disabled={bulkSending || !bulkMessage.trim()}
-                                >
-                                    {bulkSending ? 'Sending...' : '📢 Send to All'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Tags Modal */}
-                {showTagsModal && (
-                    <div style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 1001
-                    }}>
-                        <div style={{
-                            background: 'var(--bg-primary)',
-                            borderRadius: 'var(--radius-lg)',
-                            padding: '1.5rem',
-                            width: '90%',
-                            maxWidth: '400px'
-                        }}>
-                            <h3 style={{ marginTop: 0 }}>🏷️ Manage Tags</h3>
-
-                            {/* Create new tag */}
-                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                                <input
-                                    type="color"
-                                    value={newTagColor}
-                                    onChange={(e) => setNewTagColor(e.target.value)}
-                                    style={{ width: '40px', height: '36px', padding: 0, border: 'none', cursor: 'pointer' }}
-                                />
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={newTagName}
-                                    onChange={(e) => setNewTagName(e.target.value)}
-                                    placeholder="New tag name..."
-                                    style={{ flex: 1 }}
-                                />
-                                <button
-                                    className="btn btn-primary btn-sm"
-                                    onClick={handleCreateTag}
-                                    disabled={!newTagName.trim()}
-                                >
-                                    +
-                                </button>
-                            </div>
-
-                            {/* Tag list */}
-                            <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                {tags.length === 0 ? (
-                                    <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
-                                        No tags yet. Create one above!
-                                    </p>
-                                ) : (
-                                    tags.map(tag => (
-                                        <div
-                                            key={tag.id}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'space-between',
-                                                padding: '0.5rem',
-                                                borderRadius: 'var(--radius-sm)',
-                                                marginBottom: '0.25rem',
-                                                background: 'var(--bg-secondary)'
-                                            }}
+                                {/* Tag Selection - shown when filter is 'tag' */}
+                                {bulkFilter === 'tag' && (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                            Select Tag:
+                                        </label>
+                                        <select
+                                            className="form-input"
+                                            value={bulkTagFilter}
+                                            onChange={(e) => setBulkTagFilter(e.target.value)}
+                                            style={{ width: '100%' }}
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <div style={{
-                                                    width: '12px',
-                                                    height: '12px',
-                                                    borderRadius: '50%',
-                                                    background: tag.color
-                                                }} />
-                                                <span>{tag.name}</span>
-                                            </div>
-                                            <button
-                                                onClick={() => handleDeleteTag(tag.id)}
-                                                style={{
-                                                    background: 'transparent',
-                                                    border: 'none',
-                                                    cursor: 'pointer',
-                                                    color: 'var(--text-muted)'
-                                                }}
-                                            >
-                                                🗑️
-                                            </button>
-                                        </div>
-                                    ))
+                                            <option value="">-- Select a tag --</option>
+                                            {tags.map(tag => (
+                                                <option key={tag.id} value={tag.id}>
+                                                    {tag.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {tags.length === 0 && (
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                No tags created yet. Create tags in the Tags section.
+                                            </p>
+                                        )}
+                                    </div>
                                 )}
-                            </div>
 
-                            <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => setShowTagsModal(false)}
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                                {/* Show count of recipients */}
+                                {bulkFilter === 'selected' && (
+                                    <div style={{
+                                        padding: '0.5rem',
+                                        background: 'var(--primary-alpha)',
+                                        borderRadius: 'var(--radius-md)',
+                                        marginBottom: '1rem',
+                                        fontSize: '0.875rem'
+                                    }}>
+                                        {selectedConversations.size > 0
+                                            ? `Will send to ${selectedConversations.size} selected contact${selectedConversations.size !== 1 ? 's' : ''}`
+                                            : '⚠️ No contacts selected. Use checkbox mode to select contacts first.'
+                                        }
+                                    </div>
+                                )}
 
-                {/* Transfer to Pipeline Confirmation Modal */}
-                {showTransferModal && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0,0,0,0.7)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 1000
-                    }}>
-                        <div style={{
-                            background: 'var(--bg-primary)',
-                            padding: '1.5rem',
-                            borderRadius: 'var(--radius-lg)',
-                            width: '100%',
-                            maxWidth: '500px',
-                            maxHeight: '90vh',
-                            overflow: 'auto'
-                        }}>
-                            <h3 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                ➕ Add to Pipeline
-                            </h3>
-                            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                                Review and edit the details before adding to pipeline:
-                            </p>
-
-                            {/* AI Extraction Banner */}
-                            {extractingDetails && (
-                                <div style={{
-                                    padding: '0.75rem',
-                                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
-                                    borderRadius: 'var(--radius-md)',
-                                    marginBottom: '1rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    border: '1px solid rgba(99, 102, 241, 0.3)'
-                                }}>
-                                    <span className="spinner" style={{ width: '16px', height: '16px' }}>🤖</span>
-                                    <span style={{ fontSize: '0.875rem', color: 'var(--primary)' }}>
-                                        AI is extracting contact details from conversation...
-                                    </span>
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                        Client Name *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={transferForm.clientName}
-                                        onChange={(e) => setTransferForm(prev => ({ ...prev, clientName: e.target.value }))}
-                                        placeholder="Enter client name"
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)'
-                                        }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                        Business Name
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={transferForm.businessName}
-                                        onChange={(e) => setTransferForm(prev => ({ ...prev, businessName: e.target.value }))}
-                                        placeholder="Enter business name"
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)'
-                                        }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                        Contact Details (Phone/Email)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={transferForm.contactDetails}
-                                        onChange={(e) => setTransferForm(prev => ({ ...prev, contactDetails: e.target.value }))}
-                                        placeholder="Enter phone or email"
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)'
-                                        }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                        Facebook Page Link
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={transferForm.pageLink}
-                                        onChange={(e) => setTransferForm(prev => ({ ...prev, pageLink: e.target.value }))}
-                                        placeholder="Enter Facebook page URL"
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)'
-                                        }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                        Niche/Industry
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={transferForm.niche}
-                                        onChange={(e) => setTransferForm(prev => ({ ...prev, niche: e.target.value }))}
-                                        placeholder="Enter business niche"
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)'
-                                        }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                        Notes
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                        Message:
                                     </label>
                                     <textarea
-                                        value={transferForm.notes}
-                                        onChange={(e) => setTransferForm(prev => ({ ...prev, notes: e.target.value }))}
-                                        placeholder="Additional notes..."
-                                        rows={3}
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)',
-                                            resize: 'vertical'
-                                        }}
+                                        className="form-input"
+                                        value={bulkMessage}
+                                        onChange={(e) => setBulkMessage(e.target.value)}
+                                        placeholder="Hi {first_name}! Type your message here..."
+                                        rows={4}
+                                        style={{ width: '100%', resize: 'vertical' }}
                                     />
+                                    <div style={{
+                                        marginTop: '0.5rem',
+                                        padding: '0.75rem',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)',
+                                        fontSize: '0.75rem',
+                                        color: 'var(--text-muted)'
+                                    }}>
+                                        <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                                            📝 Template Variables (click to insert):
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            {[
+                                                { var: '{name}', desc: 'Full name' },
+                                                { var: '{first_name}', desc: 'First name' },
+                                                { var: '{date}', desc: 'Today\'s date' },
+                                                { var: '{time}', desc: 'Current time' },
+                                                { var: '{day}', desc: 'Day of week' }
+                                            ].map(item => (
+                                                <button
+                                                    key={item.var}
+                                                    type="button"
+                                                    onClick={() => setBulkMessage(prev => prev + item.var)}
+                                                    style={{
+                                                        padding: '0.25rem 0.5rem',
+                                                        background: 'var(--primary-alpha)',
+                                                        border: '1px solid var(--primary)',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        color: 'var(--primary)',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.7rem',
+                                                        fontFamily: 'monospace'
+                                                    }}
+                                                    title={item.desc}
+                                                >
+                                                    {item.var}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowBulkModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleSendBulkMessage}
+                                        disabled={bulkSending || !bulkMessage.trim()}
+                                    >
+                                        {bulkSending ? 'Sending...' : '📢 Send to All'}
+                                    </button>
                                 </div>
                             </div>
+                        </div>
+                    )
+                }
 
-                            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => setShowTransferModal(false)}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={async () => {
-                                        await transferToClient({
-                                            clientName: transferForm.clientName,
-                                            businessName: transferForm.businessName,
-                                            contactDetails: transferForm.contactDetails,
-                                            facebookPage: transferForm.pageLink,
-                                            niche: transferForm.niche,
-                                            notes: transferForm.notes
-                                        }, currentUserId);
-                                        setShowTransferModal(false);
-                                    }}
-                                    disabled={!transferForm.clientName || loading}
-                                >
-                                    {loading ? 'Adding...' : '✅ Add to Pipeline'}
-                                </button>
+                {/* Tags Modal */}
+                {
+                    showTagsModal && (
+                        <div style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1001
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                borderRadius: 'var(--radius-lg)',
+                                padding: '1.5rem',
+                                width: '90%',
+                                maxWidth: '400px'
+                            }}>
+                                <h3 style={{ marginTop: 0 }}>🏷️ Manage Tags</h3>
+
+                                {/* Create new tag */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                                    <input
+                                        type="color"
+                                        value={newTagColor}
+                                        onChange={(e) => setNewTagColor(e.target.value)}
+                                        style={{ width: '40px', height: '36px', padding: 0, border: 'none', cursor: 'pointer' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        value={newTagName}
+                                        onChange={(e) => setNewTagName(e.target.value)}
+                                        placeholder="New tag name..."
+                                        style={{ flex: 1 }}
+                                    />
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={handleCreateTag}
+                                        disabled={!newTagName.trim()}
+                                    >
+                                        +
+                                    </button>
+                                </div>
+
+                                {/* Tag list */}
+                                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                    {tags.length === 0 ? (
+                                        <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
+                                            No tags yet. Create one above!
+                                        </p>
+                                    ) : (
+                                        tags.map(tag => (
+                                            <div
+                                                key={tag.id}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '0.5rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    marginBottom: '0.25rem',
+                                                    background: 'var(--bg-secondary)'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <div style={{
+                                                        width: '12px',
+                                                        height: '12px',
+                                                        borderRadius: '50%',
+                                                        background: tag.color
+                                                    }} />
+                                                    <span>{tag.name}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDeleteTag(tag.id)}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        color: 'var(--text-muted)'
+                                                    }}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowTagsModal(false)}
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )
+                }
+
+                {/* Transfer to Pipeline Confirmation Modal */}
+                {
+                    showTransferModal && (
+                        <div style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'rgba(0,0,0,0.7)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                padding: '1.5rem',
+                                borderRadius: 'var(--radius-lg)',
+                                width: '100%',
+                                maxWidth: '500px',
+                                maxHeight: '90vh',
+                                overflow: 'auto'
+                            }}>
+                                <h3 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    ➕ Add to Pipeline
+                                </h3>
+                                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                                    Review and edit the details before adding to pipeline:
+                                </p>
+
+                                {/* AI Extraction Banner */}
+                                {extractingDetails && (
+                                    <div style={{
+                                        padding: '0.75rem',
+                                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                                        borderRadius: 'var(--radius-md)',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        border: '1px solid rgba(99, 102, 241, 0.3)'
+                                    }}>
+                                        <span className="spinner" style={{ width: '16px', height: '16px' }}>🤖</span>
+                                        <span style={{ fontSize: '0.875rem', color: 'var(--primary)' }}>
+                                            AI is extracting contact details from conversation...
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Client Name *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.clientName}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, clientName: e.target.value }))}
+                                            placeholder="Enter client name"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Business Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.businessName}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, businessName: e.target.value }))}
+                                            placeholder="Enter business name"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Contact Details (Phone/Email)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.contactDetails}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, contactDetails: e.target.value }))}
+                                            placeholder="Enter phone or email"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Facebook Page Link
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.pageLink}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, pageLink: e.target.value }))}
+                                            placeholder="Enter Facebook page URL"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Niche/Industry
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.niche}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, niche: e.target.value }))}
+                                            placeholder="Enter business niche"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Notes
+                                        </label>
+                                        <textarea
+                                            value={transferForm.notes}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, notes: e.target.value }))}
+                                            placeholder="Additional notes..."
+                                            rows={3}
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)',
+                                                resize: 'vertical'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowTransferModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={async () => {
+                                            await transferToClient({
+                                                clientName: transferForm.clientName,
+                                                businessName: transferForm.businessName,
+                                                contactDetails: transferForm.contactDetails,
+                                                facebookPage: transferForm.pageLink,
+                                                niche: transferForm.niche,
+                                                notes: transferForm.notes
+                                            }, currentUserId);
+                                            setShowTransferModal(false);
+                                        }}
+                                        disabled={!transferForm.clientName || loading}
+                                    >
+                                        {loading ? 'Adding...' : '✅ Add to Pipeline'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+            </div >
 
             {/* Warning Dashboard Modal */}
-            {showWarningDashboard && (
-                <WarningDashboard
-                    conversations={conversations}
-                    onSelectConversation={(conv) => {
-                        selectConversation(conv);
-                        setMobileView('chat');
-                    }}
-                    onClose={() => setShowWarningDashboard(false)}
-                    warningSettings={warningSettings}
-                />
-            )}
+            {
+                showWarningDashboard && (
+                    <WarningDashboard
+                        conversations={conversations}
+                        onSelectConversation={(conv) => {
+                            selectConversation(conv);
+                            setMobileView('chat');
+                        }}
+                        onClose={() => setShowWarningDashboard(false)}
+                        warningSettings={warningSettings}
+                    />
+                )
+            }
 
             {/* AI Control Panel Modal */}
-            {showAIControlPanel && selectedConversation && (
-                <AIControlPanel
-                    conversationId={selectedConversation.conversation_id}
-                    participantName={selectedConversation.participant_name}
-                    onClose={() => setShowAIControlPanel(false)}
-                />
-            )}
+            {
+                showAIControlPanel && selectedConversation && (
+                    <AIControlPanel
+                        conversationId={selectedConversation.conversation_id}
+                        participantName={selectedConversation.participant_name}
+                        onClose={() => setShowAIControlPanel(false)}
+                    />
+                )
+            }
 
             {/* AI Chatbot Settings Modal */}
-            {showAIChatbotSettings && (
-                <AIChatbotSettings
-                    onClose={() => setShowAIChatbotSettings(false)}
-                />
-            )}
+            {
+                showAIChatbotSettings && (
+                    <AIChatbotSettings
+                        onClose={() => setShowAIChatbotSettings(false)}
+                    />
+                )
+            }
 
             {/* Best Times Overview Modal */}
-            {showBestTimes && (
-                <BestTimesOverview
-                    onClose={() => setShowBestTimes(false)}
-                />
-            )}
+            {
+                showBestTimes && (
+                    <BestTimesOverview
+                        onClose={() => setShowBestTimes(false)}
+                    />
+                )
+            }
         </>
     );
 };

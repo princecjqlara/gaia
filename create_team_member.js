@@ -70,7 +70,7 @@ async function createTeamMember(email, password, name, role = 'user') {
         console.log(`   Name: ${name}`);
         console.log(`   Role: ${role}`);
         console.log(`   User ID: ${userId}`);
-        console.log(`\n📌 The user can now log in to Campy and will appear in the "Assigned To" dropdown.`);
+        console.log(`\n📌 The user can now log in to Gaia and will appear in the "Assigned To" dropdown.`);
 
     } catch (error) {
         console.error(`\n❌ Error creating account:`, error.message);
@@ -111,3 +111,4 @@ if (role && !['user', 'admin'].includes(role)) {
 }
 
 createTeamMember(email, password, name, role || 'user');
+

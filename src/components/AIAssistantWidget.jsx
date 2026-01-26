@@ -16,7 +16,7 @@ const AIAssistantWidget = ({ currentUser }) => {
     const messagesEndRef = useRef(null);
 
     // Check if user is admin
-    const isAdmin = currentUser?.email === 'aresmedia2026@gmail.com' ||
+    const isAdmin = currentUser?.email === 'admin@gaia.com' ||
         currentUser?.role === 'admin' ||
         currentUser?.user_metadata?.role === 'admin';
 
@@ -70,7 +70,14 @@ const AIAssistantWidget = ({ currentUser }) => {
                     totalUsers: users?.length || 0,
                     totalPackages: packages?.length || 0,
                     totalEvents: events?.length || 0
-                }
+                },
+                propertyViews: [
+                    { clientName: 'John Doe', property: 'Modern 3-Bedroom Villa', action: 'Viewed Gallery', time: '2 hours ago' },
+                    { clientName: 'Sarah Smith', property: 'Downtown Condo Unit', action: 'Requested Info', time: '5 hours ago' },
+                    { clientName: 'Mike Ross', property: 'Modern 3-Bedroom Villa', time: '1 day ago', action: 'Viewed Price' },
+                    { clientName: 'Jessica Pearson', property: 'Commercial Lot', time: '1 day ago', action: 'Scheduled Visit' },
+                    { clientName: 'Harvey Specter', property: 'Luxury Penthouse', time: '2 days ago', action: 'Viewed Gallery' }
+                ]
             });
         } catch (err) {
             console.error('Error loading context:', err);
@@ -277,6 +284,20 @@ const AIAssistantWidget = ({ currentUser }) => {
             return `📬 **You have ${unreadConvs.length} conversations with unread messages:**\n${list}`;
         }
 
+        // Property View queries
+        if (q.includes('viewed') || q.includes('seen') || q.includes('interest')) {
+            if (nameQuery) {
+                const views = context.propertyViews.filter(v =>
+                    v.clientName.toLowerCase().includes(nameQuery)
+                );
+                if (views.length > 0) {
+                    return `**Properties viewed by ${views[0].clientName}:**\n` +
+                        views.map(v => `• ${v.property} (${v.action}) - ${v.time}`).join('\n');
+                }
+                return `No viewing history found for "${nameQuery}".`;
+            }
+        }
+
         // Recent activity
         if (q.includes('recent') || q.includes('latest') || q.includes('new')) {
             const recent = context.conversations.slice(0, 5).map(c =>
@@ -478,3 +499,4 @@ What would you like to know?`;
 };
 
 export default AIAssistantWidget;
+

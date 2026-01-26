@@ -4,12 +4,12 @@
 
 const Storage = {
   KEYS: {
-    CLIENTS: 'campy_clients',
-    SETTINGS: 'campy_settings',
-    ACTIVITY: 'campy_activity',
-    EXPENSES: 'campy_expenses',
-    HISTORY: 'campy_history',
-    AI_PROMPTS: 'campy_ai_prompts'
+    CLIENTS: 'gaia_clients',
+    SETTINGS: 'gaia_settings',
+    ACTIVITY: 'gaia_activity',
+    EXPENSES: 'gaia_expenses',
+    HISTORY: 'gaia_history',
+    AI_PROMPTS: 'gaia_ai_prompts'
   },
 
   // Initialize storage with default data if empty
@@ -341,3 +341,4 @@ const Storage = {
 
 // Initialize storage on load
 Storage.init();
+

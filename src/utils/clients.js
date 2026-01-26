@@ -78,7 +78,7 @@ const defaultPrices = {
 // Get package details from settings or use defaults
 const getPackageDetails = () => {
   try {
-    const stored = localStorage.getItem('campy_package_details');
+    const stored = localStorage.getItem('gaia_package_details');
     if (stored) {
       const details = JSON.parse(stored);
       // Merge with defaults to ensure all fields exist
@@ -99,7 +99,7 @@ const getPackageDetails = () => {
 // Get package prices from settings or use defaults
 const getPackagePrices = () => {
   try {
-    const stored = localStorage.getItem('campy_package_prices');
+    const stored = localStorage.getItem('gaia_package_prices');
     if (stored) {
       return JSON.parse(stored);
     }
@@ -153,4 +153,5 @@ export const formatPrice = (price) => {
     minimumFractionDigits: 0
   }).format(price);
 };
+
 

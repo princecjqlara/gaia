@@ -45,7 +45,7 @@ const ReportsDashboard = ({ clients = [], users = [], isOpen, onClose }) => {
       (!c.startDate || (new Date(c.startDate) >= start && new Date(c.startDate) <= end))
     );
 
-    const expenses = JSON.parse(localStorage.getItem('campy_expenses') || '{}');
+    const expenses = JSON.parse(localStorage.getItem('gaia_expenses') || '{}');
     
     const revenue = runningPaidClients.reduce((total, client) => {
       return total + getPackagePrice(client);
@@ -164,7 +164,7 @@ const ReportsDashboard = ({ clients = [], users = [], isOpen, onClose }) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `campy-report-${reportType}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `gaia-report-${reportType}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -400,4 +400,5 @@ const ReportsDashboard = ({ clients = [], users = [], isOpen, onClose }) => {
 };
 
 export default ReportsDashboard;
+
 

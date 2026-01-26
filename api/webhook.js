@@ -888,7 +888,7 @@ async function handleIncomingMessage(pageId, event) {
         // For echoes (messages from page), check if already saved by app
         let sentSource = null;
         if (isFromPage) {
-            // Check if this message was already saved by the app (sent via Campy)
+            // Check if this message was already saved by the app (sent via Gaia)
             const { data: existingMsg } = await db
                 .from('facebook_messages')
                 .select('sent_source')
@@ -2467,3 +2467,4 @@ export const config = {
         bodyParser: true
     }
 };
+

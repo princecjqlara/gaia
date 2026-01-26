@@ -24,16 +24,7 @@ const StatsGrid = ({ metrics, role }) => {
         <div className="stat-value">{metrics.preparing}</div>
         <div className="stat-label">Preparing</div>
       </div>
-      <div className="stat-card">
-        <div className="stat-icon">🧪</div>
-        <div className="stat-value">{metrics.testing}</div>
-        <div className="stat-label">Testing</div>
-      </div>
-      <div className="stat-card">
-        <div className="stat-icon">🚀</div>
-        <div className="stat-value">{metrics.running}</div>
-        <div className="stat-label">Running</div>
-      </div>
+
       {role === 'admin' && (
         <>
           <div className="stat-card admin-only">
@@ -73,18 +64,7 @@ const StatsGrid = ({ metrics, role }) => {
               All active clients combined
             </div>
           </div>
-          <div className="stat-card admin-only" style={{ border: '2px solid #f97316' }}>
-            <div className="stat-icon">⏳</div>
-            <div className="stat-value" style={{ color: '#f97316' }}>
-              {metrics.totalClients > 0
-                ? Math.round(((metrics.booked + metrics.followUp + metrics.preparing) / metrics.totalClients) * 100)
-                : 0}%
-            </div>
-            <div className="stat-label">Pre-Testing</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Not in Testing/Running yet
-            </div>
-          </div>
+
         </>
       )}
     </section>

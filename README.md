@@ -1,4 +1,4 @@
-# Campy - Team Management System
+# Gaia - Team Management System
 
 A React-based team management system for tracking clients, subscriptions, and project phases.
 

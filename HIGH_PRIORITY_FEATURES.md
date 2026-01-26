@@ -1,6 +1,6 @@
 # High Priority Features Implementation
 
-This document describes the high priority features that have been implemented in Campy.
+This document describes the high priority features that have been implemented in Gaia.
 
 ## 🎯 Features Implemented
 
@@ -209,4 +209,5 @@ To fully utilize these features:
 - Verify clients have startDate set
 - Check payment schedule is configured
 - Ensure phase transition dates are set
+
 

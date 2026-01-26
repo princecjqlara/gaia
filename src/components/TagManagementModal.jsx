@@ -21,7 +21,7 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
     const client = getSupabaseClient();
     if (!client) {
       // Offline mode - load from localStorage
-      const stored = localStorage.getItem('campy_tags');
+      const stored = localStorage.getItem('gaia_tags');
       if (stored) {
         try {
           setTags(JSON.parse(stored));
@@ -46,11 +46,11 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
       setTags(data || []);
 
       // Also save to localStorage for offline access
-      localStorage.setItem('campy_tags', JSON.stringify(data || []));
+      localStorage.setItem('gaia_tags', JSON.stringify(data || []));
     } catch (error) {
       console.error('Error loading tags:', error);
       // Fallback to localStorage
-      const stored = localStorage.getItem('campy_tags');
+      const stored = localStorage.getItem('gaia_tags');
       if (stored) {
         try {
           setTags(JSON.parse(stored));
@@ -159,7 +159,7 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
           .eq('id', tagId);
 
         if (error) throw error;
-        localStorage.setItem('campy_tags', JSON.stringify(updatedTags));
+        localStorage.setItem('gaia_tags', JSON.stringify(updatedTags));
       } catch (error) {
         console.error('Error deleting tag:', error);
         // Revert on error
@@ -167,7 +167,7 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
         alert('Error deleting tag: ' + error.message);
       }
     } else {
-      localStorage.setItem('campy_tags', JSON.stringify(updatedTags));
+      localStorage.setItem('gaia_tags', JSON.stringify(updatedTags));
     }
 
     setSaving(false);
@@ -207,7 +207,7 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
 
         const updatedTags = [...tags, data];
         setTags(updatedTags);
-        localStorage.setItem('campy_tags', JSON.stringify(updatedTags));
+        localStorage.setItem('gaia_tags', JSON.stringify(updatedTags));
       } catch (error) {
         console.error('Error adding tag:', error);
         alert('Error adding tag: ' + error.message);
@@ -217,7 +217,7 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
     } else {
       const updatedTags = [...tags, newTag];
       setTags(updatedTags);
-      localStorage.setItem('campy_tags', JSON.stringify(updatedTags));
+      localStorage.setItem('gaia_tags', JSON.stringify(updatedTags));
     }
 
     setNewTagName('');
@@ -440,4 +440,5 @@ const TagManagementModal = ({ isOpen, onClose, onTagsUpdated }) => {
 };
 
 export default TagManagementModal;
+
 

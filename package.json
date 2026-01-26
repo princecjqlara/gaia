@@ -1,7 +1,7 @@
 {
-  "name": "campy",
+  "name": "gaia",
   "version": "1.0.0",
-  "description": "Campy - Team Management System",
+  "description": "Gaia - Team Management System",
   "type": "module",
   "scripts": {
     "dev": "vite",

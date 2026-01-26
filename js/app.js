@@ -47,7 +47,7 @@ const App = {
                 // Subscribe to Realtime Notifications
                 this.subscribeToNotifications();
 
-                console.log('Campy initialized (online mode)');
+                console.log('Gaia initialized (online mode)');
             } else {
                 // Show login modal
                 this.showLoginModal();
@@ -61,7 +61,7 @@ const App = {
             // #endregion
             this.refreshUI();
             Phases.processAutoSwitches();
-            console.log('Campy initialized (offline mode)');
+            console.log('Gaia initialized (offline mode)');
         }
     },
 
@@ -127,7 +127,7 @@ const App = {
         this.refreshUI();
         Phases.processAutoSwitches();
         this.showToast('Using offline mode (data stored locally)', 'info');
-        console.log('Campy initialized (offline mode)');
+        console.log('Gaia initialized (offline mode)');
     },
 
     // Initialize theme
@@ -821,3 +821,4 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Application failed to initialize. Check console for details.');
     }
 });
+

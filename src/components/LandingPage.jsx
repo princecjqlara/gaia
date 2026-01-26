@@ -1,4 +1,4 @@
-// LandingPage.jsx - Ares Media landing page
+// LandingPage.jsx - Gaia landing page
 import React from 'react';
 
 const LandingPage = ({ onLogin, onSignUp }) => {
@@ -50,7 +50,7 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                     marginBottom: '0.5rem',
                     letterSpacing: '-0.02em'
                 }}>
-                    ARES MEDIA
+                    GAIA
                 </div>
                 <div style={{
                     fontSize: '1.25rem',
@@ -158,7 +158,7 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                 color: 'rgba(255,255,255,0.4)',
                 fontSize: '0.875rem'
             }}>
-                © 2026 Ares Media. All rights reserved.
+                © 2026 Gaia. All rights reserved.
             </div>
         </div>
     );

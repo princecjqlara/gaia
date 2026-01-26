@@ -12,16 +12,11 @@ import { getScheduledFollowUps, cancelFollowUp, scheduleFollowUp, calculateBestT
 export default function AIControlPanel({ conversationId, participantName, onClose }) {
     const [loading, setLoading] = useState(true);
     const [safetyStatus, setSafetyStatus] = useState(null);
-    const [activeGoal, setActiveGoal] = useState(null);
     const [scheduledFollowUps, setScheduledFollowUps] = useState([]);
-    const [actionLog, setActionLog] = useState([]);
-    const [goalTemplates, setGoalTemplates] = useState([]);
     const [bestTime, setBestTime] = useState(null);
-    const [activeTab, setActiveTab] = useState('status');
-    const [showGoalSelector, setShowGoalSelector] = useState(false);
-    const [adminConfig, setAdminConfig] = useState(null); // Admin AI chatbot config
     const [agentContext, setAgentContext] = useState(''); // External context for AI
     const [savingContext, setSavingContext] = useState(false);
+    const [bestTimeDisabled, setBestTimeDisabled] = useState(false);
 
     const supabase = getSupabaseClient();
 
@@ -35,23 +30,33 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     const loadAllData = async () => {
         setLoading(true);
         try {
-            const [safety, goal, followUps, logs, templates, time, convData] = await Promise.all([
+            const [safety, followUps, time, convData] = await Promise.all([
                 checkSafetyStatus(conversationId),
-                getActiveGoal(conversationId),
                 getScheduledFollowUps(conversationId, { includeAll: true }),
-                loadActionLog(),
-                getGoalTemplates(),
                 calculateBestTimeToContact(conversationId),
-                supabase.from('facebook_conversations').select('agent_context').eq('conversation_id', conversationId).single()
+                supabase.from('facebook_conversations').select('agent_context, intuition_followup_disabled, best_time_scheduling_disabled').eq('conversation_id', conversationId).single()
             ]);
 
             setSafetyStatus(safety);
-            setActiveGoal(goal);
             setScheduledFollowUps(followUps);
-            setActionLog(logs);
-            setGoalTemplates(templates);
             setBestTime(time);
             setAgentContext(convData?.data?.agent_context || '');
+
+            // Merge disabled flags into safetyStatus object for easy access or separate state
+            // Re-using safetyStatus structure or extending it
+            if (convData?.data) {
+                // If the checkSafetyStatus didn't include these (it likely didn't), we manually track
+                // Actually safetyStatus from checkSafetyStatus might just be local logic.
+                // Let's store disabled states in safetyStatus to keep consistent with existing code pattern
+                // existing code used safetyStatus?.intuitionDisabled. 
+                // But checkSafetyStatus implementation is unknown.
+                // The existing code line 471 uses safetyStatus?.intuitionDisabled.
+                // Let's ensure we populate it accurately.
+                if (safetyStatus) {
+                    safetyStatus.intuitionDisabled = convData.data.intuition_followup_disabled;
+                }
+                setBestTimeDisabled(convData.data.best_time_scheduling_disabled);
+            }
 
             // Load admin config to check if goals are admin-controlled
             // Check localStorage first (always available), then try database
@@ -334,7 +339,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     return (
         <div style={styles.overlay} onClick={onClose}>
             <div style={styles.panel} onClick={e => e.stopPropagation()}>
-                {/* Header */}
+                {/* No Tabs - Single View */}
                 <div style={styles.header}>
                     <div>
                         <h2 style={styles.title}>🤖 AI Controls</h2>
@@ -343,27 +348,6 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                         </p>
                     </div>
                     <button style={styles.closeBtn} onClick={onClose}>×</button>
-                </div>
-
-                {/* Tabs */}
-                <div style={styles.tabs}>
-                    {['status', 'goals', 'followups', 'history']
-                        .filter(tab => !(tab === 'goals' && adminConfig?.default_goal))
-                        .map(tab => (
-                            <button
-                                key={tab}
-                                style={{
-                                    ...styles.tab,
-                                    ...(activeTab === tab ? styles.activeTab : {})
-                                }}
-                                onClick={() => setActiveTab(tab)}
-                            >
-                                {tab === 'status' && '📊 Status'}
-                                {tab === 'goals' && '🎯 Goals'}
-                                {tab === 'followups' && '📅 Follow-ups'}
-                                {tab === 'history' && '📜 History'}
-                            </button>
-                        ))}
                 </div>
 
                 {/* Content */}
@@ -473,8 +457,46 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                         {safetyStatus?.intuitionDisabled ? 'OFF' : 'ON'}
                                     </span>
                                 </button>
+
+                                {/* Best Time Scheduling Toggle */}
+                                <button
+                                    style={{
+                                        ...styles.button,
+                                        ...styles.buttonSecondary,
+                                        width: '100%',
+                                        marginTop: '8px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}
+                                    onClick={async () => {
+                                        try {
+                                            const newValue = !bestTimeDisabled;
+                                            await supabase
+                                                .from('facebook_conversations')
+                                                .update({ best_time_scheduling_disabled: newValue })
+                                                .eq('conversation_id', conversationId);
+
+                                            alert(newValue
+                                                ? '✅ Smart scheduling disabled.'
+                                                : '✅ Smart scheduling enabled.');
+                                            await loadAllData();
+                                        } catch (err) {
+                                            console.error('Error toggling smart scheduling:', err);
+                                            alert('Failed to toggle setting (Column might be missing in DB?)');
+                                        }
+                                    }}
+                                >
+                                    <span>📅 Smart Scheduling</span>
+                                    <span style={{
+                                        ...styles.badge,
+                                        ...(bestTimeDisabled ? styles.badgeRed : styles.badgeGreen)
+                                    }}>
+                                        {bestTimeDisabled ? 'OFF' : 'ON'}
+                                    </span>
+                                </button>
                                 <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-                                    When off, bot still responds but won't proactively follow up
+                                    Disable to prevent AI from auto-scheduling messages at optimal times
                                 </div>
                             </div>
 

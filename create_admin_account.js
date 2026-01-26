@@ -6,16 +6,25 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-const SUPABASE_URL = 'https://bbthbdnfskatvvwxprze.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJidGhiZG5mc2thdHZ2d3hwcnplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0MTkzNjksImV4cCI6MjA4Mjk5NTM2OX0.NXU7NV9qwzGTL_7g9WE3oeaJZ1ooPM9nTXoKfhiqfFM';
+// Load environment variables
+dotenv.config();
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Missing Supabase credentials. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env');
+  process.exit(1);
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function createAdminAccount() {
-  const email = 'aresmedia2026@gmail.com';
-  const password = 'AresMedia_26';
-  const name = 'Admin Ares';
+  const email = 'admin@gaia.com';
+  const password = 'Gaia_Admin_26';
+  const name = 'Gaia Admin';
   const role = 'admin';
 
   try {
@@ -36,7 +45,7 @@ async function createAdminAccount() {
     if (authError) {
       if (authError.message.includes('already registered') || authError.message.includes('User already registered')) {
         console.log(`⚠️  User ${email} already exists in auth. Attempting to sign in to get user ID...`);
-        
+
         // Try to sign in to get the user
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -130,4 +139,5 @@ async function createAdminAccount() {
 }
 
 createAdminAccount();
+
 

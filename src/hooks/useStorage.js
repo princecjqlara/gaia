@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 
 const KEYS = {
-  CLIENTS: 'campy_clients',
-  SETTINGS: 'campy_settings',
-  EXPENSES: 'campy_expenses',
-  HISTORY: 'campy_history',
-  AI_PROMPTS: 'campy_ai_prompts'
+  CLIENTS: 'gaia_clients',
+  SETTINGS: 'gaia_settings',
+  EXPENSES: 'gaia_expenses',
+  HISTORY: 'gaia_history',
+  AI_PROMPTS: 'gaia_ai_prompts'
 };
 
 export const useStorage = () => {
@@ -61,14 +61,14 @@ export const useStorage = () => {
     }
     client.createdAt = client.createdAt || new Date().toISOString();
     client.updatedAt = new Date().toISOString();
-    
+
     const updatedClients = [...clients, client];
     saveClients(updatedClients);
     return client;
   };
 
   const updateClient = (id, updates) => {
-    const updatedClients = clients.map(c => 
+    const updatedClients = clients.map(c =>
       c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
     );
     saveClients(updatedClients);

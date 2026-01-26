@@ -1,4 +1,4 @@
-# Creating Admin Account: aresmedia2026@gmail.com
+# Creating Admin Account: admin@gaia.com
 
 ## Quick Start (Recommended)
 
@@ -56,8 +56,8 @@ node create_admin_account.js
 2. Navigate to **Authentication** → **Users**
 3. Click **"Add User"** → **"Create new user"**
 4. Enter:
-   - Email: `aresmedia2026@gmail.com`
-   - Password: `AresMedia_26`
+   - Email: `admin@gaia.com`
+   - Password: `Gaia_Admin_26`
    - Auto Confirm User: **Yes** (to skip email verification)
 5. Click **"Create user"**
 6. Copy the User UUID from the created user
@@ -67,8 +67,8 @@ node create_admin_account.js
 -- First, run the function creation SQL above, then:
 SELECT create_admin_profile(
   'PASTE_UUID_HERE'::UUID,
-  'aresmedia2026@gmail.com',
-  'Admin Ares'
+  'admin@gaia.com',
+  'Gaia Admin'
 );
 ```
 
@@ -80,7 +80,7 @@ If you have direct database access or can temporarily disable RLS:
 
 ```sql
 INSERT INTO users (id, email, name, role) VALUES
-  ('USER_UUID_HERE', 'aresmedia2026@gmail.com', 'Admin Ares', 'admin')
+  ('USER_UUID_HERE', 'admin@gaia.com', 'Gaia Admin', 'admin')
 ON CONFLICT (email) DO UPDATE SET role = 'admin';
 ```
 
@@ -88,8 +88,8 @@ ON CONFLICT (email) DO UPDATE SET role = 'admin';
 
 After creating the account, you can verify by:
 1. Logging in to the application with:
-   - Email: `aresmedia2026@gmail.com`
-   - Password: `AresMedia_26`
+   - Email: `admin@gaia.com`
+   - Password: `Gaia_Admin_26`
 2. You should see admin features (Settings button, expense stats, etc.)
 
 ## Troubleshooting
@@ -100,4 +100,5 @@ If you get "infinite recursion detected in policy" error:
 
 If the user already exists:
 - The script will automatically update the existing user to admin role
-- Or manually run: `UPDATE users SET role = 'admin' WHERE email = 'aresmedia2026@gmail.com';`
+- Or manually run: `UPDATE users SET role = 'admin' WHERE email = 'admin@gaia.com';`
+

@@ -15,18 +15,21 @@ export const useMetrics = (clients) => {
   });
 
   const updateMetrics = () => {
-    const runningPaidClients = clients.filter(c => c.phase === 'running' && c.paymentStatus === 'paid');
+    // Changed to track ALL paid clients regardless of phase
+    const paidClients = clients.filter(c => c.paymentStatus === 'paid');
 
-    const expenses = JSON.parse(localStorage.getItem('campy_expenses') || '{}');
-    const revenue = runningPaidClients.reduce((total, client) => {
+    const expenses = JSON.parse(localStorage.getItem('gaia_expenses') || '{}');
+    const revenue = paidClients.reduce((total, client) => {
       return total + getPackagePrice(client);
     }, 0);
 
-    const totalExpenses = runningPaidClients.reduce((total, client) => {
+    const totalExpenses = paidClients.reduce((total, client) => {
       const pkgExpense = expenses[client.package] || 0;
       const adsExpense = client.adsExpense || 0;
       return total + pkgExpense + adsExpense;
     }, 0);
+
+    const netProfit = revenue - totalExpenses;
 
     // Expected Value: sum of ALL clients' package prices (regardless of phase or payment)
     const expectedValue = clients.reduce((total, client) => {
@@ -38,11 +41,11 @@ export const useMetrics = (clients) => {
       booked: clients.filter(c => c.phase === 'booked').length,
       followUp: clients.filter(c => c.phase === 'follow-up').length,
       preparing: clients.filter(c => c.phase === 'preparing').length,
-      testing: clients.filter(c => c.phase === 'testing').length,
-      running: clients.filter(c => c.phase === 'running').length,
+      testing: 0,
+      running: 0,
       monthlyRevenue: revenue,
       totalExpenses: totalExpenses,
-      netProfit: revenue - totalExpenses,
+      netProfit: netProfit,
       expectedValue: expectedValue
     });
   };
@@ -53,4 +56,5 @@ export const useMetrics = (clients) => {
 
   return { metrics, updateMetrics };
 };
+
 

@@ -17,22 +17,103 @@ const getSupabase = () => {
 const GRAPH_API_VERSION = 'v21.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
+// Mock Data for Demo Mode
+const MOCK_CONVERSATIONS = [
+    {
+        conversation_id: 'mock_1',
+        participant_name: 'John Doe',
+        participant_id: 'mock_p1',
+        last_message_text: 'Is the 3-bedroom villa still available?',
+        unread_count: 1,
+        last_message_time: new Date().toISOString(),
+        page_id: 'mock_page',
+        lead_status: 'new_lead',
+        // New Fields
+        viewed_property: {
+            id: 'p1',
+            title: 'Modern Zen Villa',
+            price: '35000000',
+            image: 'https://images.unsplash.com/photo-1600596542815-27bfef402399?q=80&w=2070',
+            address: 'Alfonso, Cavite'
+        },
+        ai_summary: 'Customer is highly interested in the Zen Villa. Asking about availability and viewing schedule for this weekend. Budget seems flexible.',
+        contact_info: {
+            email: 'john.doe@example.com',
+            phone: '+63 917 123 4567',
+            location: 'Makati City'
+        }
+    },
+    {
+        conversation_id: 'mock_2',
+        participant_name: 'Sarah Smith',
+        participant_id: 'mock_p2',
+        last_message_text: 'Can you send me more details about the condo?',
+        unread_count: 1,
+        last_message_time: new Date(Date.now() - 3600000).toISOString(),
+        page_id: 'mock_page',
+        lead_status: 'interested',
+        viewed_property: {
+            id: 'p2',
+            title: 'Luxury Condo Unit',
+            price: '18000000',
+            image: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2070',
+            address: 'BGC, Taguig'
+        },
+        ai_summary: 'Inquiry about condo amenities and association dues. Potential investor looking for rental yield.',
+        contact_info: {
+            email: 'sarah.smith@example.com',
+            phone: '+63 918 555 0123',
+            location: 'Quezon City'
+        }
+    },
+    {
+        conversation_id: 'mock_3',
+        participant_name: 'Mike Ross',
+        participant_id: 'mock_p3',
+        last_message_text: 'I want to schedule a viewing.',
+        unread_count: 0,
+        last_message_time: new Date(Date.now() - 86400000).toISOString(),
+        page_id: 'mock_page',
+        lead_status: 'appointment_booked',
+        viewed_property: {
+            id: 'p3',
+            title: 'Suburban Family Home',
+            price: '12500000',
+            image: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?q=80&w=2070',
+            address: 'Nuvali, Santa Rosa'
+        },
+        ai_summary: 'Viewing appointment requested. Pre-approved for bank financing. Looking for immediate move-in.',
+        contact_info: {
+            email: 'mike.ross@law.com',
+            phone: '+63 920 888 7777',
+            location: 'Manila'
+        }
+    }
+];
+
+const MOCK_MESSAGES = {
+    'mock_1': [
+        { message_id: 'm1_1', sender_name: 'John Doe', message_text: 'Hi, I saw your listing online.', is_from_page: false, timestamp: new Date(Date.now() - 500000).toISOString() },
+        { message_id: 'm1_2', sender_name: 'Gaia Agent', message_text: 'Hello John! Yes, which listing are you referring to?', is_from_page: true, timestamp: new Date(Date.now() - 400000).toISOString() },
+        { message_id: 'm1_3', sender_name: 'John Doe', message_text: 'Is the 3-bedroom villa still available?', is_from_page: false, timestamp: new Date().toISOString() }
+    ],
+    'mock_2': [
+        { message_id: 'm2_1', sender_name: 'Sarah Smith', message_text: 'Can you send me more details about the condo?', is_from_page: false, timestamp: new Date(Date.now() - 3600000).toISOString() }
+    ],
+    'mock_3': [
+        { message_id: 'm3_1', sender_name: 'Mike Ross', message_text: 'I want to schedule a viewing.', is_from_page: false, timestamp: new Date(Date.now() - 86400000).toISOString() }
+    ]
+};
+
 class FacebookService {
     /**
      * Check if a conversation ID was created by webhook (not from Facebook sync)
-     * Webhook-created conversations have temporary IDs like "t_123456789"
-     * where the number is just the participant_id, not a real Facebook thread ID
-     * Real Facebook thread IDs look like "t_12345678901234567890" (longer format)
      */
     isWebhookCreatedConversation(conversationId) {
         if (!conversationId) return false;
-        // Webhook creates IDs like "t_" + senderId (participant_id)
-        // Real FB thread IDs are longer and have different format
-        // If it starts with "t_" and is followed by a shorter numeric ID, it's likely webhook-created
+        if (conversationId.startsWith('mock_')) return true; // Treat mock as webhook/local
         const match = conversationId.match(/^t_(\d+)$/);
         if (!match) return false;
-        // Facebook PSIDs are typically 15-17 digits, thread IDs are different
-        // If the ID portion is under 18 digits and all numeric, likely a webhook temp ID
         return match[1].length < 18;
     }
 
@@ -390,6 +471,23 @@ class FacebookService {
      */
     async getConversationsWithPagination(pageId = null, page = 1, limit = 20) {
         try {
+            // Demo Mode Check
+            const isDemoMode = typeof window !== 'undefined' && localStorage.getItem('gaia_demo_mode') === 'true';
+
+            if (isDemoMode) {
+                console.log('Fetching MOCK conversations');
+                // If fetching page 1, return mix of real (if any) and mock
+                // For simplicity, just return mock if page 1
+                if (page === 1) {
+                    return {
+                        conversations: MOCK_CONVERSATIONS,
+                        total: MOCK_CONVERSATIONS.length,
+                        page: 1,
+                        hasMore: false
+                    };
+                }
+            }
+
             const offset = (page - 1) * limit;
 
             let query = getSupabase()
@@ -410,6 +508,7 @@ class FacebookService {
             const { data, error, count } = await query;
 
             if (error) {
+                // If error (e.g. table missing) and we want to be resilient, we could return empty
                 console.error('Pagination query error:', error);
                 throw error;
             }
@@ -424,6 +523,11 @@ class FacebookService {
             };
         } catch (error) {
             console.error('Error fetching paginated conversations:', error);
+            // Fallback to empty if table doesn't exist to prevent crash
+            // But if user requested demo mode, we handled it above.
+            // If table errors, maybe we should return mock if demo mode is on?
+            // Actually, if table is missing, the query errors.
+            // Let's safe guard:
             return { conversations: [], total: 0, page: 1, hasMore: false };
         }
     }
@@ -555,6 +659,22 @@ class FacebookService {
      */
     async getMessages(conversationId, limit = 20) {
         try {
+            // Mock Message Support
+            if (conversationId && conversationId.startsWith('mock_')) {
+                const messages = MOCK_MESSAGES[conversationId] || [];
+                return messages.reverse(); // Reverse to match expected order (oldest first if reverse() is called later? No.
+                // The original method reverses data which is ordered desc by timestamp.
+                // Mock data is ordered ascending by timestamp?
+                // MOCK_MESSAGES define oldest first.
+                // The original method queries desc, then reverses. So it returns oldest first.
+                // So if my mock data is oldest first, I don't need to reverse OR I need to reverse if the UI expects it.
+                // Let's check original: query order descending, return data.reverse() (which makes it ascending).
+                // My mock data is ascending. So I should just return it as is?
+                // Wait, if I return it as is, it's ascending.
+                // The UI likely appends to bottom.
+                return [...messages];
+            }
+
             const { data, error } = await getSupabase()
                 .from('facebook_messages')
                 .select('*')

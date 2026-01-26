@@ -6,9 +6,7 @@ const ITEMS_PER_PAGE = 10;
 const phaseConfig = {
   booked: { emoji: '📅', title: 'BOOKED' },
   'follow-up': { emoji: '📞', title: 'FOLLOW UP' },
-  preparing: { emoji: '⏳', title: 'PREPARING' },
-  testing: { emoji: '🧪', title: 'TESTING' },
-  running: { emoji: '🚀', title: 'RUNNING' }
+  preparing: { emoji: '⏳', title: 'PREPARING' }
 };
 
 const PhaseColumn = ({ phase, clients, onViewClient, onEditClient, onMoveClient }) => {

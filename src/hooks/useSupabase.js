@@ -200,16 +200,16 @@ export const useSupabase = () => {
     const expenses = await getSetting('package_expenses');
     if (expenses) {
       // Also save to localStorage for offline access
-      localStorage.setItem('campy_expenses', JSON.stringify(expenses));
+      localStorage.setItem('gaia_expenses', JSON.stringify(expenses));
       return expenses;
     }
     // Fallback to localStorage
-    return JSON.parse(localStorage.getItem('campy_expenses') || '{"basic": 500, "star": 800, "fire": 1000, "crown": 1500, "coaching": 0, "custom": 0}');
+    return JSON.parse(localStorage.getItem('gaia_expenses') || '{"basic": 500, "star": 800, "fire": 1000, "crown": 1500, "coaching": 0, "custom": 0}');
   };
 
   const saveExpenses = async (expenses) => {
     // Save to localStorage immediately
-    localStorage.setItem('campy_expenses', JSON.stringify(expenses));
+    localStorage.setItem('gaia_expenses', JSON.stringify(expenses));
     // Save to Supabase if online
     if (isOnlineMode) {
       await saveSetting('package_expenses', expenses);
@@ -220,16 +220,16 @@ export const useSupabase = () => {
     const prompts = await getSetting('ai_prompts');
     if (prompts) {
       // Also save to localStorage for offline access
-      localStorage.setItem('campy_ai_prompts', JSON.stringify(prompts));
+      localStorage.setItem('gaia_ai_prompts', JSON.stringify(prompts));
       return prompts;
     }
     // Fallback to localStorage
-    return JSON.parse(localStorage.getItem('campy_ai_prompts') || '{"adType": "Analyze the business niche \'{niche}\' and target audience \'{audience}\'. Suggest the top 3 most effective Facebook ad formats.", "campaignStructure": "For a local service business in niche \'{niche}\' with a budget of ₱150-300/day, outline a recommended campaign structure."}');
+    return JSON.parse(localStorage.getItem('gaia_ai_prompts') || '{"adType": "Analyze the business niche \'{niche}\' and target audience \'{audience}\'. Suggest the top 3 most effective Facebook ad formats.", "campaignStructure": "For a local service business in niche \'{niche}\' with a budget of ₱150-300/day, outline a recommended campaign structure."}');
   };
 
   const saveAIPrompts = async (prompts) => {
     // Save to localStorage immediately
-    localStorage.setItem('campy_ai_prompts', JSON.stringify(prompts));
+    localStorage.setItem('gaia_ai_prompts', JSON.stringify(prompts));
     // Save to Supabase if online
     if (isOnlineMode) {
       await saveSetting('ai_prompts', prompts);
@@ -240,11 +240,11 @@ export const useSupabase = () => {
     const prices = await getSetting('package_prices');
     if (prices) {
       // Also save to localStorage for offline access
-      localStorage.setItem('campy_package_prices', JSON.stringify(prices));
+      localStorage.setItem('gaia_package_prices', JSON.stringify(prices));
       return prices;
     }
     // Fallback to localStorage or default values
-    const stored = localStorage.getItem('campy_package_prices');
+    const stored = localStorage.getItem('gaia_package_prices');
     if (stored) {
       return JSON.parse(stored);
     }
@@ -254,7 +254,7 @@ export const useSupabase = () => {
 
   const savePackagePrices = async (prices) => {
     // Save to localStorage immediately
-    localStorage.setItem('campy_package_prices', JSON.stringify(prices));
+    localStorage.setItem('gaia_package_prices', JSON.stringify(prices));
     // Save to Supabase if online
     if (isOnlineMode) {
       await saveSetting('package_prices', prices);
@@ -265,11 +265,11 @@ export const useSupabase = () => {
     const details = await getSetting('package_details');
     if (details) {
       // Also save to localStorage for offline access
-      localStorage.setItem('campy_package_details', JSON.stringify(details));
+      localStorage.setItem('gaia_package_details', JSON.stringify(details));
       return details;
     }
     // Fallback to localStorage or default values
-    const stored = localStorage.getItem('campy_package_details');
+    const stored = localStorage.getItem('gaia_package_details');
     if (stored) {
       return JSON.parse(stored);
     }
@@ -344,7 +344,7 @@ export const useSupabase = () => {
 
   const savePackageDetails = async (details) => {
     // Save to localStorage immediately
-    localStorage.setItem('campy_package_details', JSON.stringify(details));
+    localStorage.setItem('gaia_package_details', JSON.stringify(details));
     // Save to Supabase if online
     if (isOnlineMode) {
       await saveSetting('package_details', details);
@@ -581,7 +581,7 @@ export const useSupabase = () => {
         // Convert to local format
         const localClients = clients.map(c => mapClientFromDb(c));
         // Save to localStorage
-        localStorage.setItem('campy_clients', JSON.stringify(localClients));
+        localStorage.setItem('gaia_clients', JSON.stringify(localClients));
         console.log(`Synced ${localClients.length} clients from Supabase`);
       }
 
@@ -604,7 +604,7 @@ export const useSupabase = () => {
           changedBy: h.changed_by_name || 'System',
           timestamp: h.timestamp
         }));
-        localStorage.setItem('campy_history', JSON.stringify(localHistory));
+        localStorage.setItem('gaia_history', JSON.stringify(localHistory));
       }
 
       console.log('Sync complete');
@@ -643,4 +643,5 @@ export const useSupabase = () => {
     deleteClientFromSupabase
   };
 };
+
 

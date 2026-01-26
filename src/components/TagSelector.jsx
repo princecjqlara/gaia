@@ -53,7 +53,7 @@ const TagSelector = ({ value, onChange }) => {
     const client = getSupabaseClient();
     if (!client) {
       // Offline mode - load from localStorage
-      const stored = localStorage.getItem('campy_tags');
+      const stored = localStorage.getItem('gaia_tags');
       if (stored) {
         try {
           const tags = JSON.parse(stored);
@@ -75,11 +75,11 @@ const TagSelector = ({ value, onChange }) => {
       setAvailableTags((data || []).map(t => t.name));
 
       // Also save to localStorage
-      localStorage.setItem('campy_tags', JSON.stringify(data || []));
+      localStorage.setItem('gaia_tags', JSON.stringify(data || []));
     } catch (error) {
       console.error('Error loading tags:', error);
       // Fallback to localStorage
-      const stored = localStorage.getItem('campy_tags');
+      const stored = localStorage.getItem('gaia_tags');
       if (stored) {
         try {
           const tags = JSON.parse(stored);
@@ -272,4 +272,5 @@ const TagSelector = ({ value, onChange }) => {
 };
 
 export default TagSelector;
+
 

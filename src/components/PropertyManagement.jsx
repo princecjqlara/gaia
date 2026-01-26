@@ -1,0 +1,953 @@
+import React, { useState, useEffect } from 'react';
+import { getSupabaseClient } from '../services/supabase';
+import PropertyPreview from './PropertyPreview';
+
+const PropertyManagement = () => {
+    const [view, setView] = useState('list'); // 'list' or 'form'
+    const [showPreview, setShowPreview] = useState(false);
+    const [properties, setProperties] = useState([]);
+    const [editingId, setEditingId] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [filter, setFilter] = useState('');
+    const [stats, setStats] = useState({ totalViews: 0, topProperties: [], recentViews: [] });
+
+    const loadStats = async () => {
+        try {
+            const supabase = getSupabaseClient();
+            if (!supabase) return;
+
+            const { data: views, error } = await supabase
+                .from('property_views')
+                .select('*')
+                .order('viewed_at', { ascending: false });
+
+            if (error) throw error;
+
+            const totalViews = views.length;
+            const recentViews = views.slice(0, 5); // Last 5 views
+
+            // Group by property
+            const viewMap = {};
+            views.forEach(v => {
+                if (!viewMap[v.property_id]) {
+                    viewMap[v.property_id] = {
+                        id: v.property_id,
+                        title: v.property_title || 'Unknown Property',
+                        count: 0
+                    };
+                }
+                viewMap[v.property_id].count++;
+            });
+
+            const topProperties = Object.values(viewMap)
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 5);
+
+            setStats({ totalViews, topProperties, recentViews });
+        } catch (err) {
+            console.error('Error loading stats:', err);
+        }
+    };
+
+    useEffect(() => {
+        if (view === 'analytics') {
+            loadStats();
+        }
+    }, [view]);
+
+    // Form State
+    const initialFormState = {
+        title: '',
+        type: 'House & Lot',
+        status: 'For Sale',
+        address: '',
+        description: '',
+
+        // Specifications
+        bedrooms: 0,
+        bathrooms: 0,
+        garage: 0,
+        floorArea: 0,
+        lotArea: 0,
+        yearBuilt: new Date().getFullYear(),
+
+        // Financials
+        price: 0,
+        downPayment: 0,
+        monthlyAmortization: 0,
+        paymentTerms: '',
+
+        // Images & Videos
+        images: [], // Array of strings (urls)
+        videos: [] // Array of strings (urls)
+    };
+
+    const [formData, setFormData] = useState(initialFormState);
+
+    // Load properties from LocalStorage/Supabase on mount
+    useEffect(() => {
+        const savedProps = localStorage.getItem('gaia_properties');
+        if (savedProps) {
+            setProperties(JSON.parse(savedProps));
+        }
+    }, []);
+
+    if (showPreview) {
+        return <PropertyPreview properties={properties} onClose={() => setShowPreview(false)} />;
+    }
+
+    const handleSave = async () => {
+        // Basic validation
+        if (!formData.title) return alert('Property Title is required');
+
+        const newProperty = {
+            ...formData,
+            id: editingId || Date.now().toString(),
+            createdAt: new Date().toISOString()
+        };
+
+        let updatedProperties;
+        if (editingId) {
+            updatedProperties = properties.map(p => p.id === editingId ? newProperty : p);
+        } else {
+            updatedProperties = [newProperty, ...properties];
+        }
+
+        setProperties(updatedProperties);
+        localStorage.setItem('gaia_properties', JSON.stringify(updatedProperties));
+
+        setView('list');
+        setFormData(initialFormState);
+        setEditingId(null);
+    };
+
+    const handleEdit = (property) => {
+        setFormData(property);
+        setEditingId(property.id);
+        setView('form');
+    };
+
+    const handleDelete = (id) => {
+        if (!confirm('Are you sure you want to delete this property?')) return;
+        const updated = properties.filter(p => p.id !== id);
+        setProperties(updated);
+        localStorage.setItem('gaia_properties', JSON.stringify(updated));
+    };
+
+    const handleMediaUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        // Use Cloudinary for upload
+        const cloudName = localStorage.getItem('cloudinary_cloud_name') || prompt('Enter Cloudinary Cloud Name:');
+        const uploadPreset = localStorage.getItem('cloudinary_upload_preset') || prompt('Enter Cloudinary Upload Preset (Unsigned):');
+
+        if (!cloudName || !uploadPreset) {
+            localStorage.setItem('cloudinary_cloud_name', cloudName || '');
+            localStorage.setItem('cloudinary_upload_preset', uploadPreset || '');
+            return alert('Cloudinary configuration missing. Please provide Cloud Name and Upload Preset.');
+        } else {
+            localStorage.setItem('cloudinary_cloud_name', cloudName);
+            localStorage.setItem('cloudinary_upload_preset', uploadPreset);
+        }
+
+        setLoading(true);
+        const newImages = [];
+        const newVideos = [];
+
+        try {
+            for (const file of files) {
+                const isVideo = file.type.startsWith('video/');
+                const data = new FormData();
+                data.append('file', file);
+                data.append('upload_preset', uploadPreset);
+                data.append('resource_type', 'auto'); // Let Cloudinary detect
+
+                const res = await fetch(
+                    `https://api.cloudinary.com/v1_1/${cloudName}/${isVideo ? 'video' : 'image'}/upload`,
+                    {
+                        method: 'POST',
+                        body: data,
+                    }
+                );
+                const fileData = await res.json();
+                if (fileData.secure_url) {
+                    if (isVideo) {
+                        newVideos.push(fileData.secure_url);
+                        // Also try to get a thumbnail if possible, but for now just URL
+                    } else {
+                        newImages.push(fileData.secure_url);
+                    }
+                } else {
+                    console.error('Upload error', fileData);
+                    alert(`Upload failed: ${fileData.error?.message || 'Unknown error'}`);
+                }
+            }
+
+            setFormData(prev => ({
+                ...prev,
+                images: [...prev.images, ...newImages],
+                videos: [...(prev.videos || []), ...newVideos]
+            }));
+        } catch (err) {
+            console.error('Error uploading media:', err);
+            alert('Failed to upload media');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const removeImage = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            images: prev.images.filter((_, i) => i !== index)
+        }));
+    };
+
+    const removeVideo = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            videos: prev.videos.filter((_, i) => i !== index)
+        }));
+    };
+
+    const generateMockData = () => {
+        const mockProperties = [
+            {
+                id: '1',
+                title: 'Modern Luxury Villa in Forbes Park',
+                type: 'House & Lot',
+                status: 'For Sale',
+                address: 'Forbes Park, Makati City',
+                description: 'Experience the epitome of luxury living in this stunning modern villa located in the exclusive Forbes Park. Featuring floor-to-ceiling windows, a private pool, and a lush garden sanctuary.',
+                bedrooms: 5,
+                bathrooms: 6,
+                garage: 4,
+                floorArea: 850,
+                lotArea: 1200,
+                yearBuilt: 2024,
+                price: 450000000,
+                downPayment: 90000000,
+                monthlyAmortization: 2500000,
+                paymentTerms: 'Cash or Bank Financing',
+                images: [
+                    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1000',
+                    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1000',
+                    'https://images.unsplash.com/photo-1600596542815-27bfef402399?q=80&w=1000'
+                ],
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: '2',
+                title: 'High-Rise Condo with BGC Skyline View',
+                type: 'Condominium',
+                status: 'For Rent',
+                address: 'Bonifacio Global City, Taguig',
+                description: 'Premium corner unit with breathtaking views of the city skyline. Fully furnished with high-end appliances and Italian furniture.',
+                bedrooms: 2,
+                bathrooms: 2,
+                garage: 1,
+                floorArea: 95,
+                lotArea: 0,
+                yearBuilt: 2022,
+                price: 180000,
+                downPayment: 36000,
+                monthlyAmortization: 180000,
+                paymentTerms: '2 months advance, 2 months deposit',
+                images: [
+                    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1000',
+                    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?q=80&w=1000'
+                ],
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: '3',
+                title: 'Spacious Townhouse in Quezon City',
+                type: 'Townhouse',
+                status: 'For Sale',
+                address: 'Scout Area, Quezon City',
+                description: 'Brand new 3-storey townhouse perfect for growing families. Gated community with 24/7 security.',
+                bedrooms: 4,
+                bathrooms: 4,
+                garage: 2,
+                floorArea: 280,
+                lotArea: 100,
+                yearBuilt: 2025,
+                price: 35000000,
+                downPayment: 7000000,
+                monthlyAmortization: 180000,
+                paymentTerms: '20% DP, 80% Bank Financing',
+                images: [
+                    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000',
+                    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=1000'
+                ],
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        setProperties(mockProperties);
+        localStorage.setItem('gaia_properties', JSON.stringify(mockProperties));
+    };
+
+    // Render List View
+    if (view === 'list') {
+        return (
+            <div style={{ padding: '0 1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Properties</h3>
+                        <p style={{ color: 'var(--text-muted)' }}>Manage your real estate listings</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            onClick={() => setView('analytics')}
+                            style={{
+                                background: view === 'analytics' ? '#111827' : 'white',
+                                color: view === 'analytics' ? 'white' : '#374151',
+                                border: '1px solid #e5e7eb',
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '9999px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            📊 Analytics
+                        </button>
+                        <button
+                            onClick={() => setShowPreview(true)}
+                            style={{
+                                background: '#111827',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '9999px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                            }}
+                        >
+                            👁️ Preview Site
+                        </button>
+                        <button
+                            onClick={() => {
+                                setFormData(initialFormState);
+                                setEditingId(null);
+                                setView('form');
+                            }}
+                            style={{
+                                background: '#10b981', // Emerald 500
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '9999px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            + List Property
+                        </button>
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                        <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Search properties by location or title..."
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '1rem 1rem 1rem 3rem',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border-color)',
+                                fontSize: '1rem',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                    {properties.length === 0 && (
+                        <button
+                            onClick={generateMockData}
+                            style={{
+                                padding: '0 1.5rem',
+                                background: 'var(--bg-secondary)',
+                                border: '1px dashed var(--border-color)',
+                                borderRadius: '8px',
+                                color: 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            🎲 Load Demo Data
+                        </button>
+                    )}
+                </div>
+
+                {properties.length === 0 ? (
+                    <div style={{
+                        background: 'var(--bg-secondary)',
+                        borderRadius: '16px',
+                        padding: '4rem 2rem',
+                        textAlign: 'center',
+                        border: '2px dashed var(--border-color)'
+                    }}>
+                        <div style={{
+                            width: '64px',
+                            height: '64px',
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 1.5rem',
+                            fontSize: '2rem'
+                        }}>
+                            🏢
+                        </div>
+                        <h4 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>No properties listed</h4>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Get started by adding your first property listing.</p>
+                        <button
+                            onClick={() => setView('form')}
+                            style={{
+                                background: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.75rem 2rem',
+                                borderRadius: '9999px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            List Property
+                        </button>
+                    </div>
+                ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                        {properties.filter(p => p.title.toLowerCase().includes(filter.toLowerCase())).map(property => (
+                            <div key={property.id} style={{
+                                background: 'var(--bg-secondary)',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                border: '1px solid var(--border-color)',
+                                transition: 'transform 0.2s',
+                                cursor: 'pointer'
+                            }}
+                                onClick={() => handleEdit(property)}
+                            >
+                                <div style={{
+                                    height: '200px',
+                                    background: '#f3f4f6',
+                                    backgroundImage: property.images[0] ? `url(${property.images[0]})` : 'none',
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    {!property.images[0] && <span style={{ fontSize: '2rem' }}>🏠</span>}
+                                </div>
+                                <div style={{ padding: '1rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <span style={{
+                                            fontSize: '0.75rem',
+                                            background: property.status === 'For Sale' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                            color: property.status === 'For Sale' ? '#059669' : '#2563eb',
+                                            padding: '2px 8px',
+                                            borderRadius: '4px',
+                                            fontWeight: '600'
+                                        }}>
+                                            {property.status}
+                                        </span>
+                                        <span style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--primary)' }}>₱ {parseFloat(property.price).toLocaleString()}</span>
+                                    </div>
+                                    <h4 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{property.title}</h4>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                        📍 {property.address}
+                                    </p>
+
+                                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                        <span>🛏️ {property.bedrooms} Beds</span>
+                                        <span>🚿 {property.bathrooms} Baths</span>
+                                        <span>📐 {property.floorArea} sqm</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    if (view === 'analytics') {
+        return (
+            <div style={{ padding: '0 1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Analytics Dashboard</h3>
+                        <p style={{ color: 'var(--text-muted)' }}>Overview of your property performance</p>
+                    </div>
+                    <button
+                        onClick={() => setView('list')}
+                        style={{
+                            background: 'white',
+                            color: '#374151',
+                            border: '1px solid #e5e7eb',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '9999px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        ← Back to List
+                    </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Total Property Views</div>
+                        <div style={{ fontSize: '2.5rem', fontWeight: '800', color: '#10b981' }}>{stats.totalViews}</div>
+                    </div>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Listed Properties</div>
+                        <div style={{ fontSize: '2.5rem', fontWeight: '800', color: '#3b82f6' }}>{properties.length}</div>
+                    </div>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Top Performer</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {stats.topProperties[0]?.title || 'N/A'}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: '#10b981' }}>{stats.topProperties[0]?.count || 0} views</div>
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '2rem' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <h4 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>Most Viewed Properties</h4>
+                        {stats.topProperties.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No data available yet</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {stats.topProperties.map((p, idx) => (
+                                    <div key={idx} style={{ paddingBottom: '1rem', borderBottom: idx < stats.topProperties.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                            <span style={{ fontWeight: '600' }}>{idx + 1}. {p.title}</span>
+                                            <span style={{ fontWeight: 'bold' }}>{p.count} views</span>
+                                        </div>
+                                        <div style={{ height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                                            <div style={{
+                                                height: '100%',
+                                                width: `${(p.count / stats.topProperties[0].count) * 100}%`,
+                                                background: '#10b981',
+                                                borderRadius: '4px'
+                                            }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <h4 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>Recent Activity</h4>
+                        {stats.recentViews.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No recent views</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {stats.recentViews.map((v, idx) => (
+                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></div>
+                                        <div>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: '500' }}>Property Viewed</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{v.property_title || 'Unknown Property'}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{new Date(v.viewed_at).toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Render Form View
+    return (
+        <div style={{ padding: '0 1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{editingId ? 'Edit Property' : 'List New Property'}</h3>
+                    <p style={{ color: 'var(--text-muted)' }}>Add a new property to your portfolio</p>
+                </div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button
+                        onClick={() => setView('list')}
+                        style={{
+                            background: 'transparent',
+                            color: 'var(--text-secondary)',
+                            border: '1px solid var(--border-color)',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '9999px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        style={{
+                            background: '#86efac', // Light green
+                            color: '#064e3b',
+                            border: 'none',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '9999px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                    >
+                        {editingId ? 'Save Changes' : 'List Property'}
+                    </button>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '2rem' }}>
+                {/* Left Column */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                    {/* Property Details */}
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>🏠</div>
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)' }}>Property Details</h4>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Property Title</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={formData.title}
+                                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                placeholder="e.g. Modern 3-Bedroom Villa in Makati"
+                            />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="form-group">
+                                <label className="form-label">Property Type</label>
+                                <select
+                                    className="form-input"
+                                    value={formData.type}
+                                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                >
+                                    <option>House & Lot</option>
+                                    <option>Condominium</option>
+                                    <option>Townhouse</option>
+                                    <option>Lot Only</option>
+                                    <option>Commercial</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Status</label>
+                                <select
+                                    className="form-input"
+                                    value={formData.status}
+                                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                >
+                                    <option>For Sale</option>
+                                    <option>For Rent</option>
+                                    <option>Pre-selling</option>
+                                    <option>Sold</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Address / Location</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={formData.address}
+                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                placeholder="e.g. 123 Leviste St, Salcedo Village, Makati"
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Description</label>
+                            <textarea
+                                className="form-input"
+                                rows="4"
+                                value={formData.description}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                placeholder="Describe the property features, amenities, etc..."
+                            />
+                        </div>
+                    </div>
+
+                    {/* Specifications */}
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>📏</div>
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)' }}>Specifications</h4>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                            <div className="form-group">
+                                <label className="form-label">Bedrooms</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={formData.bedrooms}
+                                    onChange={(e) => setFormData({ ...formData, bedrooms: parseInt(e.target.value) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Bathrooms</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={formData.bathrooms}
+                                    onChange={(e) => setFormData({ ...formData, bathrooms: parseInt(e.target.value) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Garage</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={formData.garage}
+                                    onChange={(e) => setFormData({ ...formData, garage: parseInt(e.target.value) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Floor Area (sqm)</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={formData.floorArea}
+                                    onChange={(e) => setFormData({ ...formData, floorArea: parseInt(e.target.value) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Lot Area (sqm)</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={formData.lotArea}
+                                    onChange={(e) => setFormData({ ...formData, lotArea: parseInt(e.target.value) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Year Built</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={formData.yearBuilt}
+                                    onChange={(e) => setFormData({ ...formData, yearBuilt: parseInt(e.target.value) || 0 })}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Column */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                    {/* Financials */}
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>💵</div>
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)' }}>Financials</h4>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Selling Price</label>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: 'bold' }}>₱</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ paddingLeft: '2.5rem' }}
+                                    value={formData.price}
+                                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Down Payment</label>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: 'bold' }}>₱</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ paddingLeft: '2.5rem' }}
+                                    value={formData.downPayment}
+                                    onChange={(e) => setFormData({ ...formData, downPayment: parseFloat(e.target.value) || 0 })}
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Monthly Amortization (Est.)</label>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: 'bold' }}>₱</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ paddingLeft: '2.5rem' }}
+                                    value={formData.monthlyAmortization}
+                                    onChange={(e) => setFormData({ ...formData, monthlyAmortization: parseFloat(e.target.value) || 0 })}
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Payment Terms</label>
+                            <textarea
+                                className="form-input"
+                                rows="3"
+                                value={formData.paymentTerms}
+                                onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                                placeholder="e.g. 20% DP payable in 12 months, 80% Bank Financing"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Media Section (Images & Videos) */}
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem', gridColumn: '1 / -1' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '1rem', color: 'var(--text-primary)' }}>Media Gallery</h4>
+
+                        {/* Images */}
+                        <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                <label style={{ fontSize: '0.875rem', fontWeight: '500', color: 'var(--text-secondary)' }}>Photos</label>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.5rem' }}>
+                                {formData.images.map((url, idx) => (
+                                    <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden' }}>
+                                        <img src={url} alt={`Upload ${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <button
+                                            onClick={() => removeImage(idx)}
+                                            style={{
+                                                position: 'absolute', top: '4px', right: '4px',
+                                                background: 'rgba(0,0,0,0.5)', color: 'white',
+                                                border: 'none', borderRadius: '50%',
+                                                width: '20px', height: '20px', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                fontSize: '12px'
+                                            }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                                <label style={{
+                                    aspectRatio: '1',
+                                    border: '2px dashed var(--border-color)',
+                                    borderRadius: '8px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    background: 'var(--bg-primary)'
+                                }}>
+                                    <input type="file" multiple accept="image/*" onChange={handleMediaUpload} style={{ display: 'none' }} />
+                                    <span style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📸</span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Add Photos</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Videos */}
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                <label style={{ fontSize: '0.875rem', fontWeight: '500', color: 'var(--text-secondary)' }}>Videos</label>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.5rem' }}>
+                                {formData.videos && formData.videos.map((url, idx) => (
+                                    <div key={idx} style={{ position: 'relative', background: '#000', borderRadius: '8px', overflow: 'hidden', aspectRatio: '16/9' }}>
+                                        <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <button
+                                            onClick={() => removeVideo(idx)}
+                                            style={{
+                                                position: 'absolute', top: '4px', right: '4px',
+                                                background: 'rgba(0,0,0,0.5)', color: 'white',
+                                                border: 'none', borderRadius: '50%',
+                                                width: '24px', height: '24px', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                zIndex: 10
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                        <div style={{
+                                            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none'
+                                        }}>
+                                            <span style={{ fontSize: '1.5rem', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>▶️</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                <label style={{
+                                    aspectRatio: '16/9',
+                                    border: '2px dashed var(--border-color)',
+                                    borderRadius: '8px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    background: 'var(--bg-primary)'
+                                }}>
+                                    <input type="file" multiple accept="video/*" onChange={handleMediaUpload} style={{ display: 'none' }} />
+                                    <span style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🎥</span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Add Video</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {editingId && (
+                        <button
+                            onClick={() => handleDelete(editingId)}
+                            style={{
+                                width: '100%',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                border: 'none',
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                marginTop: '1rem'
+                            }}
+                        >
+                            Delete Property
+                        </button>
+                    )}
+
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default PropertyManagement;

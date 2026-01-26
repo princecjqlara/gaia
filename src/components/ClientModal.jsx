@@ -55,7 +55,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       const client = getSupabaseClient();
 
       // Try localStorage first as fallback
-      const cachedUsers = localStorage.getItem('campy_users_cache');
+      const cachedUsers = localStorage.getItem('gaia_users_cache');
       if (cachedUsers) {
         try {
           const parsed = JSON.parse(cachedUsers);
@@ -91,7 +91,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         if (data && data.length > 0) {
           setAvailableUsers(data);
           // Cache to localStorage for offline access
-          localStorage.setItem('campy_users_cache', JSON.stringify(data));
+          localStorage.setItem('gaia_users_cache', JSON.stringify(data));
         }
       } catch (err) {
         console.error('Exception loading users:', err);
@@ -1123,4 +1123,5 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
 };
 
 export default ClientModal;
+
 

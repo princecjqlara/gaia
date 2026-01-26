@@ -23,6 +23,7 @@ import TeamOnlinePanel from './components/TeamOnlinePanel';
 import DeadlineAlerts from './components/DeadlineAlerts';
 import UnassignedClientsPanel from './components/UnassignedClientsPanel';
 import ContactsWithPhonePanel from './components/ContactsWithPhonePanel';
+import PropertyManagement from './components/PropertyManagement';
 import { useSupabase } from './hooks/useSupabase';
 import { useScheduledMessageProcessor } from './hooks/useScheduledMessageProcessor';
 import { useClockInOut } from './hooks/useClockInOut';
@@ -37,7 +38,7 @@ import './css/styles.css';
 function App() {
   const [theme, setTheme] = useState('dark');
   const [role, setRole] = useState('user');
-  const [activeMainTab, setActiveMainTab] = useState('clients'); // 'clients' or 'messenger'
+  const [activeMainTab, setActiveMainTab] = useState('clients'); // 'clients', 'messenger', 'properties'
   const [currentUserName, setCurrentUserName] = useState('User 1');
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -63,7 +64,7 @@ function App() {
   const [filterPayment, setFilterPayment] = useState('');
   const [filterAssignedTo, setFilterAssignedTo] = useState('');
   const [viewMode, setViewMode] = useState(() => {
-    const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
+    const settings = JSON.parse(localStorage.getItem('gaia_settings') || '{}');
     return settings.viewMode || 'kanban';
   }); // 'kanban' or 'table'
 
@@ -211,7 +212,7 @@ function App() {
 
   useEffect(() => {
     // Initialize theme
-    const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
+    const settings = JSON.parse(localStorage.getItem('gaia_settings') || '{}');
     const savedTheme = settings.theme || 'dark';
     setTheme(savedTheme);
     document.documentElement.dataset.theme = savedTheme;
@@ -317,7 +318,7 @@ function App() {
 
   const handleEnterOfflineMode = () => {
     setShowLoginModal(false);
-    const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
+    const settings = JSON.parse(localStorage.getItem('gaia_settings') || '{}');
     const savedRole = settings.role || 'user';
     setRole(savedRole);
     document.documentElement.dataset.role = savedRole;
@@ -327,15 +328,15 @@ function App() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     document.documentElement.dataset.theme = newTheme;
-    const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
-    localStorage.setItem('campy_settings', JSON.stringify({ ...settings, theme: newTheme }));
+    const settings = JSON.parse(localStorage.getItem('gaia_settings') || '{}');
+    localStorage.setItem('gaia_settings', JSON.stringify({ ...settings, theme: newTheme }));
   };
 
   const handleSwitchRole = (newRole) => {
     setRole(newRole);
     document.documentElement.dataset.role = newRole;
-    const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
-    localStorage.setItem('campy_settings', JSON.stringify({ ...settings, role: newRole }));
+    const settings = JSON.parse(localStorage.getItem('gaia_settings') || '{}');
+    localStorage.setItem('gaia_settings', JSON.stringify({ ...settings, role: newRole }));
   };
 
   const handleOpenAddModal = () => {
@@ -487,6 +488,25 @@ function App() {
             >
               💬 Messenger
             </button>
+            <button
+              onClick={() => setActiveMainTab('properties')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'properties' ? '2px solid var(--primary)' : '2px solid transparent',
+                marginBottom: '-2px',
+                color: activeMainTab === 'properties' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'properties' ? '600' : '400',
+                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              🏠 Properties
+            </button>
           </div>
 
           {/* Clients Tab Content */}
@@ -540,8 +560,8 @@ function App() {
                 viewMode={viewMode}
                 onViewModeChange={(mode) => {
                   setViewMode(mode);
-                  const settings = JSON.parse(localStorage.getItem('campy_settings') || '{}');
-                  localStorage.setItem('campy_settings', JSON.stringify({ ...settings, viewMode: mode }));
+                  const settings = JSON.parse(localStorage.getItem('gaia_settings') || '{}');
+                  localStorage.setItem('gaia_settings', JSON.stringify({ ...settings, viewMode: mode }));
                 }}
               />
 
@@ -579,6 +599,13 @@ function App() {
                 users={allUsers}
                 currentUserId={currentUser?.id}
               />
+            </div>
+          )}
+
+          {/* Properties Tab Content */}
+          {activeMainTab === 'properties' && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <PropertyManagement />
             </div>
           )}
 
@@ -872,5 +899,6 @@ function App() {
 }
 
 export default App;
+
 
 

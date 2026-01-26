@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     try {
         const appId = process.env.FACEBOOK_APP_ID;
         const appSecret = process.env.FACEBOOK_APP_SECRET;
-        const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://arescampy.vercel.app'}/api/facebook/callback`;
+        const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://gaia.vercel.app'}/api/facebook/callback`;
 
         // Exchange code for access token
         const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
@@ -69,3 +69,4 @@ export default async function handler(req, res) {
         return res.redirect(`/?fb_error=${encodeURIComponent(error.message)}`);
     }
 }
+

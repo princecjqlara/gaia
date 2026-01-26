@@ -38,7 +38,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
     const client = clients.find(c => c.id === clientId);
     if (!client) return null;
 
-    const order = ['booked', 'follow-up', 'preparing', 'testing', 'running'];
+    const order = ['booked', 'follow-up', 'preparing'];
     const currentIndex = order.indexOf(client.phase);
     if (currentIndex < order.length - 1) {
       const nextPhase = order[currentIndex + 1];
@@ -69,15 +69,6 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
       updates.resubscriptionCount = (client.resubscriptionCount || 0) + 1;
     }
 
-    // Handle testing phase
-    if (targetPhase === 'testing') {
-      updates.subscriptionStarted = true;
-      if (fromPhase === 'preparing') {
-        updates.subscriptionUsage = 0;
-        updates.testingRound = 1;
-      }
-    }
-
     // Update auto switch date if enabled
     if (client.autoSwitch) {
       const nextDate = new Date();
@@ -101,15 +92,6 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
         // Add other fields if they exist in updates
         if (updates.resubscriptionCount !== undefined) {
           supabaseUpdates.resubscription_count = updates.resubscriptionCount;
-        }
-        if (updates.subscriptionStarted !== undefined) {
-          supabaseUpdates.subscription_started = updates.subscriptionStarted;
-        }
-        if (updates.subscriptionUsage !== undefined) {
-          supabaseUpdates.subscription_usage = updates.subscriptionUsage;
-        }
-        if (updates.testingRound !== undefined) {
-          supabaseUpdates.testing_round = updates.testingRound;
         }
         if (updates.nextPhaseDate) {
           supabaseUpdates.next_phase_date = updates.nextPhaseDate;
@@ -184,9 +166,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
     return {
       booked: getClientsByPhase('booked'),
       'follow-up': getClientsByPhase('follow-up'),
-      preparing: getClientsByPhase('preparing'),
-      testing: getClientsByPhase('testing'),
-      running: getClientsByPhase('running')
+      preparing: getClientsByPhase('preparing')
     };
   };
 

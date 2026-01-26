@@ -57,13 +57,13 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
           assignedUserId = client.assignedTo;
         } else {
           // It's a name string, find matching user by name or email
-          const matchingUser = users.find(u => 
+          const matchingUser = users.find(u =>
             u.name === client.assignedTo || u.email === client.assignedTo
           );
           assignedUserId = matchingUser ? matchingUser.id : 'unassigned';
         }
       }
-      
+
       // Update individual user metrics
       if (metrics[assignedUserId]) {
         metrics[assignedUserId].totalClients++;
@@ -72,7 +72,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
         if (client.phase === 'testing') metrics[assignedUserId].testing++;
         if (client.phase === 'running') metrics[assignedUserId].running++;
         if (client.paymentStatus === 'paid') metrics[assignedUserId].paidClients++;
-        
+
         // Revenue from running paid clients
         if (client.phase === 'running' && client.paymentStatus === 'paid') {
           const revenue = getPackagePrice(client);
@@ -87,7 +87,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
       if (client.phase === 'testing') metrics.all.testing++;
       if (client.phase === 'running') metrics.all.running++;
       if (client.paymentStatus === 'paid') metrics.all.paidClients++;
-      
+
       if (client.phase === 'running' && client.paymentStatus === 'paid') {
         const revenue = getPackagePrice(client);
         metrics.all.monthlyRevenue += revenue;
@@ -95,35 +95,35 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
     });
 
     // Calculate expenses for each metric
-    const expenses = JSON.parse(localStorage.getItem('campy_expenses') || '{}');
+    const expenses = JSON.parse(localStorage.getItem('gaia_expenses') || '{}');
     Object.values(metrics).forEach(metric => {
       // Find clients assigned to this user/metric
       const runningClients = clients.filter(c => {
         if (c.phase !== 'running' || c.paymentStatus !== 'paid') return false;
-        
+
         if (metric.userId === 'all') return true;
-        
+
         // Handle assignedTo - could be UUID or name string
         if (!c.assignedTo) return metric.userId === 'unassigned';
-        
+
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (uuidRegex.test(c.assignedTo)) {
           return c.assignedTo === metric.userId;
         } else {
           // It's a name string
-          const matchingUser = users.find(u => 
+          const matchingUser = users.find(u =>
             (u.name === c.assignedTo || u.email === c.assignedTo) && u.id === metric.userId
           );
           return !!matchingUser;
         }
       });
-      
+
       metric.totalExpenses = runningClients.reduce((total, client) => {
         const pkgExpense = expenses[client.package] || 0;
         const adsExpense = client.adsExpense || 0;
         return total + pkgExpense + adsExpense;
       }, 0);
-      
+
       metric.netProfit = metric.monthlyRevenue - metric.totalExpenses;
     });
 
@@ -160,7 +160,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
   // Calculate user activity metrics
   const userActivity = useMemo(() => {
     const activity = {};
-    
+
     users.forEach(user => {
       activity[user.id] = {
         userId: user.id,
@@ -217,7 +217,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
   // Leaderboard rankings
   const leaderboard = useMemo(() => {
     const members = Object.values(teamMetrics)
-      .filter(m => m.userId !== 'all' && m.userId !== 'unassigned')
+      .filter(m => m.userId !== 'all' && m.userId !== 'unassigned' && m.userEmail !== 'aresmedia2026@gmail.com')
       .map(member => ({
         ...member,
         rank: 0, // Will be set below
@@ -234,7 +234,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
   }, [teamMetrics]);
 
   const currentMetrics = teamMetrics[selectedUser] || teamMetrics.all;
-  const teamMembers = Object.values(teamMetrics).filter(m => m.userId !== 'all' && m.userId !== 'unassigned');
+  const teamMembers = Object.values(teamMetrics).filter(m => m.userId !== 'all' && m.userId !== 'unassigned' && m.userEmail !== 'aresmedia2026@gmail.com');
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
@@ -245,9 +245,9 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
         </div>
         <div className="modal-body">
           {/* View Mode Tabs */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '0.5rem', 
+          <div style={{
+            display: 'flex',
+            gap: '0.5rem',
             marginBottom: '1.5rem',
             borderBottom: '2px solid var(--border-color)',
             paddingBottom: '0.5rem'
@@ -298,61 +298,52 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                 </select>
               </div>
 
-          {/* Performance Stats Grid */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-            gap: '1rem',
-            marginBottom: '2rem'
-          }}>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">👥</div>
-              <div className="stat-value">{currentMetrics.totalClients}</div>
-              <div className="stat-label">Total Clients</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">📅</div>
-              <div className="stat-value">{currentMetrics.booked}</div>
-              <div className="stat-label">Booked</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">⏳</div>
-              <div className="stat-value">{currentMetrics.preparing}</div>
-              <div className="stat-label">Preparing</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">🧪</div>
-              <div className="stat-value">{currentMetrics.testing}</div>
-              <div className="stat-label">Testing</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">🚀</div>
-              <div className="stat-value">{currentMetrics.running}</div>
-              <div className="stat-label">Running</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">✅</div>
-              <div className="stat-value">{currentMetrics.paidClients}</div>
-              <div className="stat-label">Paid Clients</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">💰</div>
-              <div className="stat-value">{formatPrice(currentMetrics.monthlyRevenue)}</div>
-              <div className="stat-label">Monthly Revenue</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem' }}>
-              <div className="stat-icon">📉</div>
-              <div className="stat-value">{formatPrice(currentMetrics.totalExpenses)}</div>
-              <div className="stat-label">Total Expenses</div>
-            </div>
-            <div className="stat-card" style={{ padding: '1rem', border: '2px solid var(--success)' }}>
-              <div className="stat-icon">📈</div>
-              <div className="stat-value" style={{ color: 'var(--success)' }}>
-                {formatPrice(currentMetrics.netProfit)}
+              {/* Performance Stats Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '1rem',
+                marginBottom: '2rem'
+              }}>
+                <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">👥</div>
+                  <div className="stat-value">{currentMetrics.totalClients}</div>
+                  <div className="stat-label">Total Clients</div>
+                </div>
+                <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">📅</div>
+                  <div className="stat-value">{currentMetrics.booked}</div>
+                  <div className="stat-label">Booked</div>
+                </div>
+                <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">⏳</div>
+                  <div className="stat-value">{currentMetrics.preparing}</div>
+                  <div className="stat-label">Preparing</div>
+                </div>
+
+                <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">✅</div>
+                  <div className="stat-value">{currentMetrics.paidClients}</div>
+                  <div className="stat-label">Paid Clients</div>
+                </div>
+                <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">💰</div>
+                  <div className="stat-value">{formatPrice(currentMetrics.monthlyRevenue)}</div>
+                  <div className="stat-label">Monthly Revenue</div>
+                </div>
+                <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">📉</div>
+                  <div className="stat-value">{formatPrice(currentMetrics.totalExpenses)}</div>
+                  <div className="stat-label">Total Expenses</div>
+                </div>
+                <div className="stat-card" style={{ padding: '1rem', border: '2px solid var(--success)' }}>
+                  <div className="stat-icon">📈</div>
+                  <div className="stat-value" style={{ color: 'var(--success)' }}>
+                    {formatPrice(currentMetrics.netProfit)}
+                  </div>
+                  <div className="stat-label">Net Profit</div>
+                </div>
               </div>
-              <div className="stat-label">Net Profit</div>
-            </div>
-          </div>
 
               {/* Team Members Breakdown */}
               {selectedUser === 'all' && (
@@ -364,7 +355,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                         <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
                           <th style={{ padding: '0.75rem', textAlign: 'left' }}>Team Member</th>
                           <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Clients</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>Running</th>
+
                           <th style={{ padding: '0.75rem', textAlign: 'center' }}>Paid</th>
                           <th style={{ padding: '0.75rem', textAlign: 'right' }}>Revenue</th>
                           <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit</th>
@@ -382,7 +373,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                                 </div>
                               </td>
                               <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.totalClients}</td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.running}</td>
+
                               <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.paidClients}</td>
                               <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '500' }}>
                                 {formatPrice(member.monthlyRevenue)}
@@ -416,7 +407,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                       <th style={{ padding: '0.75rem', textAlign: 'center', width: '60px' }}>Rank</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left' }}>Team Member</th>
                       <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Clients</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'center' }}>Running</th>
+
                       <th style={{ padding: '0.75rem', textAlign: 'right' }}>Revenue</th>
                       <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit</th>
                       <th style={{ padding: '0.75rem', textAlign: 'right' }}>Score</th>
@@ -426,9 +417,9 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                     {leaderboard.map(member => {
                       const medal = member.rank === 1 ? '🥇' : member.rank === 2 ? '🥈' : member.rank === 3 ? '🥉' : '';
                       return (
-                        <tr 
-                          key={member.userId} 
-                          style={{ 
+                        <tr
+                          key={member.userId}
+                          style={{
                             borderBottom: '1px solid var(--border-color)',
                             backgroundColor: member.rank <= 3 ? 'rgba(74, 222, 128, 0.05)' : 'transparent'
                           }}
@@ -443,7 +434,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                             </div>
                           </td>
                           <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.totalClients}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.running}</td>
+
                           <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '500' }}>
                             {formatPrice(member.monthlyRevenue)}
                           </td>
@@ -473,11 +464,11 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                   .filter(act => act.clientsCreated > 0 || act.phaseChanges > 0)
                   .sort((a, b) => (b.clientsCreated + b.phaseChanges) - (a.clientsCreated + a.phaseChanges))
                   .map(activity => (
-                    <div 
-                      key={activity.userId} 
-                      style={{ 
-                        padding: '1.5rem', 
-                        background: 'var(--bg-secondary)', 
+                    <div
+                      key={activity.userId}
+                      style={{
+                        padding: '1.5rem',
+                        background: 'var(--bg-secondary)',
                         borderRadius: '8px',
                         border: '1px solid var(--border-color)'
                       }}
@@ -559,4 +550,5 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
 };
 
 export default TeamPerformanceModal;
+
 

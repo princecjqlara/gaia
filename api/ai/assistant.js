@@ -38,7 +38,7 @@ export default async function handler(req, res) {
 }
 
 async function callOpenAI(message, context, history) {
-    const systemPrompt = `You are an AI assistant for a business management platform called Campy. You have access to the following data:
+    const systemPrompt = `You are an AI assistant for a business management platform called Gaia. You have access to the following data:
 
 SUMMARY:
 - Total Clients: ${context?.summary?.totalClients || 0}
@@ -245,3 +245,4 @@ Just ask naturally and I'll help!`;
 
 What would you like to know?`;
 }
+

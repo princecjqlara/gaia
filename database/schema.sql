@@ -1,4 +1,4 @@
--- Campy Database Schema for Supabase
+-- Gaia Database Schema for Supabase
 -- Run this in Supabase SQL Editor
 
 -- Enable UUID extension
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Update existing users to admin role
 UPDATE users SET role = 'admin' WHERE email = 'cjlara032107@gmail.com';
-UPDATE users SET role = 'admin' WHERE email = 'aresmedia2026@gmail.com';
+UPDATE users SET role = 'admin' WHERE email = 'admin@gaia.com';
 
 -- Note: To create new admin accounts, use one of these methods:
 -- 1. Run create_admin_account.js script
@@ -189,3 +189,4 @@ CREATE INDEX IF NOT EXISTS idx_clients_phase ON clients(phase);
 CREATE INDEX IF NOT EXISTS idx_clients_assigned_to ON clients(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_clients_payment_status ON clients(payment_status);
 CREATE INDEX IF NOT EXISTS idx_stage_history_client_id ON stage_history(client_id);
+

@@ -20,7 +20,8 @@ export default function AIChatbotSettings({ onClose }) {
         auto_respond_to_new_messages: true,
         auto_greet_new_contacts: true, // Send greeting when new contact clicks ad/button
         enable_silence_followups: true,
-        enable_intuition_followups: true
+        enable_intuition_followups: true,
+        enable_auto_lead_qualifier: true // Automatically update lead status based on AI analysis
     });
     const [stats, setStats] = useState({
         totalConversations: 0,
@@ -427,6 +428,19 @@ export default function AIChatbotSettings({ onClose }) {
                             <Toggle
                                 value={config.auto_takeover_on_low_confidence}
                                 onChange={v => setConfig(p => ({ ...p, auto_takeover_on_low_confidence: v }))}
+                            />
+                        </div>
+
+                        <div style={styles.formRow}>
+                            <div>
+                                <span style={styles.label}>Auto Lead Center Qualifier</span>
+                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                                    AI automatically updates lead status (Qualified/Unqualified)
+                                </div>
+                            </div>
+                            <Toggle
+                                value={config.enable_auto_lead_qualifier !== false}
+                                onChange={v => setConfig(p => ({ ...p, enable_auto_lead_qualifier: v }))}
                             />
                         </div>
                     </div>

@@ -3,7 +3,7 @@ import PhaseColumn from './PhaseColumn';
 import ClientsTable from './ClientsTable';
 
 const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveClient, viewMode = 'kanban' }) => {
-  const phases = ['booked', 'follow-up', 'preparing', 'testing', 'running'];
+  const phases = ['booked', 'follow-up', 'preparing'];
 
   const getClientsByPhase = (phase) => {
     let filtered = clients.filter(c => c.phase === phase);

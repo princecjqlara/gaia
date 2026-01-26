@@ -21,13 +21,18 @@ const Header = ({
   isClockedIn = false,
   shiftDuration = '',
   onClockToggle,
-  clockLoading = false
+  clockLoading = false,
+  // Multi-tenant props
+  organizationName,
+  isOrganizer = false,
+  onOrganizationSettings,
+  onTeamManagement
 }) => {
   return (
     <header className="app-header">
       <div className="app-logo">
         <span style={{ fontSize: '2rem' }}>🏢</span>
-        <h1>CAMPY</h1>
+        <h1>GAIA</h1>
       </div>
       <div className="header-actions">
         {/* Clock In/Out Button */}
@@ -152,6 +157,27 @@ const Header = ({
             onClick={onCalendar}
           >
             📅 Calendar
+          </button>
+        )}
+        {/* Organization Management (Organizers only) */}
+        {isOrganizer && onOrganizationSettings && (
+          <button
+            className="btn btn-secondary"
+            id="orgSettingsBtn"
+            title="Organization Settings"
+            onClick={onOrganizationSettings}
+          >
+            🏢 Organization
+          </button>
+        )}
+        {isOrganizer && onTeamManagement && (
+          <button
+            className="btn btn-secondary"
+            id="teamManagementBtn"
+            title="Manage Team Members"
+            onClick={onTeamManagement}
+          >
+            👥 Manage Team
           </button>
         )}
         {isOnlineMode && (

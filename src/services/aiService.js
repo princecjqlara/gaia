@@ -1,4 +1,4 @@
-// NVIDIA AI Service for Campy
+// NVIDIA AI Service for Gaia
 // Uses NVIDIA NIM API with gpt-oss-120b model
 
 const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
