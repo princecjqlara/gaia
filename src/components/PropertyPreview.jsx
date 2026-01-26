@@ -59,8 +59,6 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
         }
     }, [selectedProperty]);
 
-    const [searchQuery, setSearchQuery] = useState('');
-
     // Helper to get suggested properties
     const getSuggestedProperties = () => {
         if (!selectedProperty) return [];
