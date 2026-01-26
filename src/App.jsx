@@ -616,7 +616,10 @@ function App() {
           {/* Properties Tab Content */}
           {activeMainTab === 'properties' && (
             <div style={{ marginTop: '1.5rem' }}>
-              <PropertyManagement />
+              <PropertyManagement
+                teamId={currentUserProfile?.team_id}
+                organizationId={currentUserProfile?.organization_id}
+              />
             </div>
           )}
 

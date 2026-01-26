@@ -85,8 +85,13 @@ const PropertyManagement = ({ teamId }) => {
 
         // Images & Videos
         images: [], // Array of strings (urls)
-        videos: [] // Array of strings (urls)
+        videos: [], // Array of strings (urls)
+
+        // Personalization
+        is_featured: false,
+        label: '' // e.g. "Price Drop", "Just Listed"
     };
+
 
     const [formData, setFormData] = useState(initialFormState);
 
@@ -111,7 +116,15 @@ const PropertyManagement = ({ teamId }) => {
     }
 
     if (showPreview) {
-        return <PropertyPreview properties={properties} onClose={() => setShowPreview(false)} branding={branding} />;
+        return (
+            <PropertyPreview
+                properties={properties}
+                onClose={() => setShowPreview(false)}
+                branding={branding}
+                teamId={teamId}
+                organizationId={organizationId}
+            />
+        );
     }
 
     if (showBrandingSettings) {
@@ -684,8 +697,32 @@ const PropertyManagement = ({ teamId }) => {
                             <h4 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)' }}>Property Details</h4>
                         </div>
 
+                        <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem', background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input
+                                    type="checkbox"
+                                    id="is_featured"
+                                    checked={formData.is_featured}
+                                    onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
+                                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                                />
+                                <label htmlFor="is_featured" style={{ cursor: 'pointer', fontWeight: '600', color: 'var(--text-primary)' }}>⭐ Featured Listing</label>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={formData.label || ''}
+                                    onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+                                    placeholder="Custom Label (e.g. Just Listed, Price Drop)"
+                                    style={{ padding: '0.5rem 0.75rem' }}
+                                />
+                            </div>
+                        </div>
+
                         <div className="form-group">
                             <label className="form-label">Property Title</label>
+
                             <input
                                 type="text"
                                 className="form-input"
@@ -975,7 +1012,53 @@ const PropertyManagement = ({ teamId }) => {
                         </div>
                     </div>
 
+                    {/* Advanced Personalization */}
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(139, 92, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b5cf6' }}>✨</div>
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)' }}>Advanced Personalization</h4>
+                        </div>
+
+                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '8px', cursor: 'pointer' }} onClick={() => setFormData({ ...formData, is_featured: !formData.is_featured })}>
+                            <div style={{
+                                width: '40px',
+                                height: '24px',
+                                background: formData.is_featured ? '#10b981' : '#444',
+                                borderRadius: '12px',
+                                position: 'relative',
+                                transition: 'all 0.3s ease'
+                            }}>
+                                <div style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    background: 'white',
+                                    borderRadius: '50%',
+                                    position: 'absolute',
+                                    top: '3px',
+                                    left: formData.is_featured ? '19px' : '3px',
+                                    transition: 'all 0.3s ease'
+                                }} />
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>Featured Listing</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Show in the featured carousel on preview</div>
+                            </div>
+                        </div>
+
+                        <div className="form-group" style={{ marginTop: '1rem' }}>
+                            <label className="form-label">Custom Label</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={formData.label || ''}
+                                onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+                                placeholder="e.g. Just Listed, Price Drop, New"
+                            />
+                        </div>
+                    </div>
+
                     {editingId && (
+
                         <button
                             onClick={() => handleDelete(editingId)}
                             style={{

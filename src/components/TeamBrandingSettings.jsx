@@ -18,9 +18,13 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         contact_email: '',
         facebook_url: '',
         instagram_url: '',
+        whatsapp_url: '',
         website_url: '',
-        address: ''
+        address: '',
+        bio: '',
+        stats: []
     });
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -86,6 +90,29 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
     function handleChange(field, value) {
         setBranding(prev => ({ ...prev, [field]: value }));
     }
+
+    function handleStatChange(index, field, value) {
+        setBranding(prev => {
+            const newStats = [...(prev.stats || [])];
+            newStats[index] = { ...newStats[index], [field]: value };
+            return { ...prev, stats: newStats };
+        });
+    }
+
+    function addStat() {
+        setBranding(prev => ({
+            ...prev,
+            stats: [...(prev.stats || []), { label: '', value: '' }]
+        }));
+    }
+
+    function removeStat(index) {
+        setBranding(prev => ({
+            ...prev,
+            stats: prev.stats.filter((_, i) => i !== index)
+        }));
+    }
+
 
     if (loading) {
         return (
@@ -236,16 +263,96 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                         </div>
                     </div>
 
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>💬 WhatsApp Link</label>
+                            <input
+                                type="url"
+                                value={branding.whatsapp_url || ''}
+                                onChange={(e) => handleChange('whatsapp_url', e.target.value)}
+                                placeholder="https://wa.me/639123456789"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>🌐 Website URL</label>
+                            <input
+                                type="url"
+                                value={branding.website_url || ''}
+                                onChange={(e) => handleChange('website_url', e.target.value)}
+                                placeholder="https://yourwebsite.com"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* About & Bio Section */}
+                <div className="settings-section">
+                    <h3>📖 Team Bio & Story</h3>
                     <div className="form-group">
-                        <label>🌐 Website URL</label>
-                        <input
-                            type="url"
-                            value={branding.website_url || ''}
-                            onChange={(e) => handleChange('website_url', e.target.value)}
-                            placeholder="https://yourwebsite.com"
+                        <label>About the Team</label>
+                        <textarea
+                            value={branding.bio || ''}
+                            onChange={(e) => handleChange('bio', e.target.value)}
+                            placeholder="Tell your clients about your team, experience, and values..."
+                            rows="4"
+                            style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                border: '1px solid var(--border-color, #444)',
+                                borderRadius: '6px',
+                                background: 'var(--bg-primary, #121220)',
+                                color: 'var(--text-primary, #fff)',
+                                fontSize: '14px',
+                                resize: 'vertical'
+                            }}
                         />
                     </div>
                 </div>
+
+                {/* Team Stats Section */}
+                <div className="settings-section">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0 }}>📊 Performance Stats</h3>
+                        <button className="btn btn-secondary btn-sm" onClick={addStat} style={{ padding: '4px 12px', fontSize: '12px' }}>
+                            + Add Stat
+                        </button>
+                    </div>
+
+                    {(branding.stats || []).map((stat, idx) => (
+                        <div key={idx} className="form-row" style={{ marginBottom: '1rem', alignItems: 'flex-end' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Label</label>
+                                <input
+                                    type="text"
+                                    value={stat.label}
+                                    onChange={(e) => handleStatChange(idx, 'label', e.target.value)}
+                                    placeholder="e.g. Properties Sold"
+                                />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Value</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="text"
+                                        value={stat.value}
+                                        onChange={(e) => handleStatChange(idx, 'value', e.target.value)}
+                                        placeholder="e.g. 500+"
+                                    />
+                                    <button
+                                        onClick={() => removeStat(idx)}
+                                        style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0 12px', cursor: 'pointer' }}
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {(!branding.stats || branding.stats.length === 0) && (
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontStyle: 'italic' }}>No stats added yet.</p>
+                    )}
+                </div>
+
 
                 {/* Contact Info Section */}
                 <div className="settings-section">

@@ -16,9 +16,17 @@ const DEFAULT_BRANDING = {
     contact_email: null,
     facebook_url: null,
     instagram_url: null,
+    whatsapp_url: null,
     website_url: null,
-    address: null
+    address: null,
+    bio: '',
+    stats: [
+        { label: 'Years of Experience', value: '10+' },
+        { label: 'Properties Sold', value: '500+' },
+        { label: 'Happy Clients', value: '1000+' }
+    ]
 };
+
 
 /**
  * Get team branding settings
