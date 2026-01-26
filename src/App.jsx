@@ -24,6 +24,7 @@ import DeadlineAlerts from './components/DeadlineAlerts';
 import UnassignedClientsPanel from './components/UnassignedClientsPanel';
 import ContactsWithPhonePanel from './components/ContactsWithPhonePanel';
 import PropertyManagement from './components/PropertyManagement';
+import OrganizerDashboard from './components/OrganizerDashboard';
 import { useSupabase } from './hooks/useSupabase';
 import { useScheduledMessageProcessor } from './hooks/useScheduledMessageProcessor';
 import { useClockInOut } from './hooks/useClockInOut';
@@ -246,7 +247,8 @@ function App() {
   // Update role when user profile changes
   useEffect(() => {
     if (isOnlineMode && currentUserProfile) {
-      const userRole = currentUserProfile.role === 'admin' ? 'admin' : 'user';
+      // Recognize organizer, admin, or user roles
+      const userRole = currentUserProfile.role || 'user';
       console.log('User profile loaded:', {
         email: currentUserProfile.email,
         role: currentUserProfile.role,
@@ -413,11 +415,20 @@ function App() {
 
   // Only show main app UI when logged in
   const isLoggedIn = !!currentUser;
+  const isOrganizer = role === 'organizer';
 
   return (
     <div className="app-container">
-      {/* Show management UI only when logged in */}
-      {isLoggedIn && (
+      {/* Show Organizer Dashboard for organizers */}
+      {isLoggedIn && isOrganizer && (
+        <OrganizerDashboard
+          onLogout={handleLogout}
+          onThemeToggle={handleToggleTheme}
+        />
+      )}
+
+      {/* Show regular CRM for admins and users */}
+      {isLoggedIn && !isOrganizer && (
         <>
           <Header
             role={role}
