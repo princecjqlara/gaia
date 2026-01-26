@@ -347,7 +347,7 @@ class FacebookService {
                     .from('facebook_conversations')
                     .select('participant_name')
                     .eq('conversation_id', conv.id)
-                    .single();
+                    .maybeSingle();
 
                 // Use existing name if we couldn't fetch a new one
                 const finalName = participantName || existingConv?.participant_name || null;
