@@ -64,7 +64,10 @@ export default function OrganizationSettings({ onClose }) {
     return (
         <div className="organization-settings-modal">
             <div className="modal-header">
-                <h2>🏢 Organization Settings</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img src="/logo.jpg" alt="GAIA Logo" style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} />
+                    <h2 style={{ margin: 0 }}>Organization Settings</h2>
+                </div>
                 <button className="close-btn" onClick={onClose}>×</button>
             </div>
 

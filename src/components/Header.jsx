@@ -31,7 +31,7 @@ const Header = ({
   return (
     <header className="app-header">
       <div className="app-logo">
-        <span style={{ fontSize: '2rem' }}>🏢</span>
+        <img src="/logo.jpg" alt="GAIA Logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
         <h1>GAIA</h1>
       </div>
       <div className="header-actions">

@@ -40,6 +40,18 @@ const LandingPage = ({ onLogin, onSignUp }) => {
 
             {/* Logo and branding */}
             <div style={{ textAlign: 'center', marginBottom: '3rem', position: 'relative', zIndex: 1 }}>
+                <img
+                    src="/logo.jpg"
+                    alt="GAIA Logo"
+                    style={{
+                        width: '120px',
+                        height: '120px',
+                        borderRadius: '24px',
+                        marginBottom: '1.5rem',
+                        boxShadow: '0 10px 30px rgba(99, 102, 241, 0.3)',
+                        objectFit: 'cover'
+                    }}
+                />
                 <div style={{
                     fontSize: '4rem',
                     fontWeight: '800',

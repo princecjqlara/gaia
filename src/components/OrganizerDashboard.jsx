@@ -83,7 +83,7 @@ export default function OrganizerDashboard({ onLogout, onThemeToggle }) {
             {/* Header */}
             <header className="dashboard-header">
                 <div className="header-left">
-                    <span className="logo">🏢</span>
+                    <img src="/logo.jpg" alt="GAIA Logo" className="logo-img" />
                     <h1>GAIA Organizer</h1>
                 </div>
                 <div className="header-right">
@@ -242,8 +242,11 @@ export default function OrganizerDashboard({ onLogout, onThemeToggle }) {
                     gap: 12px;
                 }
 
-                .logo {
-                    font-size: 2rem;
+                .logo-img {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 8px;
+                    object-fit: cover;
                 }
 
                 .header-left h1 {
