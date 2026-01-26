@@ -4,17 +4,18 @@
 -- ============================================
 -- 1. CREATE TEAMS TABLE
 -- ============================================
+-- Drop table if exists to avoid conflicts (only for fresh install - comment out if you have data)
+-- DROP TABLE IF EXISTS teams CASCADE;
 CREATE TABLE IF NOT EXISTS teams (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
-    admin_id UUID REFERENCES auth.users(id) ON DELETE
-    SET NULL,
-        -- The admin who owns this team
-        organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-        settings JSONB DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
+    admin_id UUID,
+    -- Will reference users table, no FK to avoid issues
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    settings JSONB DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Indexes for teams
 CREATE INDEX IF NOT EXISTS idx_teams_admin ON teams(admin_id);
