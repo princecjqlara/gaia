@@ -1,9 +1,12 @@
-import { supabase } from './supabase';
+import { getSupabaseClient } from './supabase';
 
 /**
  * Organization Service
  * Handles all organization-related operations for multi-tenant architecture
  */
+
+// Helper to get supabase client
+const getSupabase = () => getSupabaseClient();
 
 // ============================================
 // ORGANIZATION CRUD
@@ -17,7 +20,7 @@ import { supabase } from './supabase';
  * @returns {Promise<{data: object, error: object}>}
  */
 export async function createOrganization(name, slug, settings = {}) {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getSupabase().auth.getUser();
     if (!user) {
         return { data: null, error: { message: 'Not authenticated' } };
     }
@@ -52,7 +55,7 @@ export async function createOrganization(name, slug, settings = {}) {
  * @returns {Promise<{data: object, error: object}>}
  */
 export async function getCurrentOrganization() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getSupabase().auth.getUser();
     if (!user) {
         return { data: null, error: { message: 'Not authenticated' } };
     }
@@ -136,7 +139,7 @@ export async function addOrganizationMember(email, name, password, role = 'admin
     const { data: currentUser } = await supabase
         .from('users')
         .select('role')
-        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('id', (await getSupabase().auth.getUser()).data.user?.id)
         .single();
 
     if (currentUser?.role !== 'organizer') {

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
+import { getSupabaseClient } from '../services/supabase';
 import { getCurrentOrganization, getOrganizationMembers } from '../services/organizationService';
 
 const OrganizationContext = createContext(null);
@@ -21,6 +21,9 @@ export function OrganizationProvider({ children }) {
         loadOrganization();
 
         // Subscribe to auth changes
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
             loadOrganization();
         });
@@ -32,6 +35,12 @@ export function OrganizationProvider({ children }) {
         try {
             setLoading(true);
             setError(null);
+
+            const supabase = getSupabaseClient();
+            if (!supabase) {
+                setLoading(false);
+                return;
+            }
 
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
