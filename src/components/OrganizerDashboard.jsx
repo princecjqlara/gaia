@@ -327,9 +327,11 @@ export default function OrganizerDashboard({ onLogout, onThemeToggle }) {
                 .team-card {
                     background: var(--bg-secondary, #1a1a2e);
                     border-radius: 12px;
-                    padding: 20px;
+                    padding: 24px;
                     border: 1px solid var(--border-color, #333);
-                    transition: transform 0.2s, box-shadow 0.2s;
+                    transition: all 0.3s ease;
+                    display: flex;
+                    flex-direction: column;
                 }
 
                 .team-card:hover {
@@ -382,9 +384,9 @@ export default function OrganizerDashboard({ onLogout, onThemeToggle }) {
 
                 .team-stats {
                     display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 8px;
-                    margin-bottom: 16px;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
+                    margin-bottom: 20px;
                 }
 
                 .stat {
@@ -411,6 +413,9 @@ export default function OrganizerDashboard({ onLogout, onThemeToggle }) {
                 .team-footer {
                     text-align: right;
                     color: var(--text-muted, #666);
+                    margin-top: 8px;
+                    border-top: 1px solid rgba(255, 255, 255, 0.05);
+                    padding-top: 12px;
                 }
 
                 .loading, .empty-state {
