@@ -362,7 +362,7 @@ class FacebookService {
                 let leadStatus = null;
                 if (participant?.id) {
                     try {
-                        const labelsUrl = `${GRAPH_API_BASE}/${participant.id}/custom_labels?fields=page_label_name&access_token=${accessToken}`;
+                        const labelsUrl = `${GRAPH_API_BASE}/${participant.id}/custom_labels?fields=page_label_name&access_token=${page.page_access_token}`;
                         const labelsResponse = await fetch(labelsUrl);
                         if (labelsResponse.ok) {
                             const labelsData = await labelsResponse.json();
