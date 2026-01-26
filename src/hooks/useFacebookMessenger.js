@@ -506,6 +506,68 @@ export function useFacebookMessenger() {
         }
     }, [selectedConversation, loadMessages]);
 
+    // Send property card or carousel to contact
+    const sendPropertyCard = useCallback(async (propertyOrProperties) => {
+        if (!selectedConversation || !propertyOrProperties) return null;
+
+        try {
+            setLoading(true);
+
+            await facebookService.sendPropertyCard(
+                selectedConversation.page_id,
+                selectedConversation.participant_id,
+                propertyOrProperties
+            );
+
+            // Sync and reload
+            await facebookService.syncMessages(
+                selectedConversation.conversation_id,
+                selectedConversation.page_id
+            );
+            await loadMessages(selectedConversation.conversation_id);
+
+            return true;
+        } catch (err) {
+            console.error('Error sending property card:', err);
+            setError(err.message);
+            return false;
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedConversation, loadMessages]);
+
+    // Send video card to contact
+    const sendVideoMessage = useCallback(async (videoUrl, buttonTitle, buttonUrl) => {
+        if (!selectedConversation || !videoUrl) return null;
+
+        try {
+            setLoading(true);
+
+            await facebookService.sendVideoCard(
+                selectedConversation.page_id,
+                selectedConversation.participant_id,
+                videoUrl,
+                buttonTitle,
+                buttonUrl
+            );
+
+            // Sync and reload
+            await facebookService.syncMessages(
+                selectedConversation.conversation_id,
+                selectedConversation.page_id
+            );
+            await loadMessages(selectedConversation.conversation_id);
+
+            return true;
+        } catch (err) {
+            console.error('Error sending video card:', err);
+            setError(err.message);
+            return false;
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedConversation, loadMessages]);
+
     // Search messages
     const searchMessagesAction = useCallback(async (searchTerm) => {
         if (!searchTerm.trim()) {
@@ -1024,9 +1086,11 @@ export function useFacebookMessenger() {
         loadMessages,
         selectConversation,
         refreshMessages,
-        sendMessage,
+        sendVideoMessage,
+        // Lead status
         sendMediaMessage,
         sendBookingButton,
+        sendPropertyCard,
         loadMoreMessages,
         searchMessages: searchMessagesAction,
         searchConversations: searchConversationsAction,

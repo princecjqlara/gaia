@@ -48,6 +48,8 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         // New features
         sendMediaMessage,
         sendBookingButton,
+        sendPropertyCard,
+        sendVideoMessage,
         loadMoreMessages,
         searchMessages,
         hasMoreMessages,
@@ -616,21 +618,185 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         }
     };
 
+    const handleSendPropertyCard = async (property) => {
+        const success = await sendPropertyCard(property);
+        if (!success) {
+            alert('Failed to send property card. Please try again.');
+        }
+    };
+
+    const handleSendVideo = async (property) => {
+        if (!property?.videos?.[0]) {
+            alert('This property has no video available.');
+            return;
+        }
+        const success = await sendVideoMessage(
+            property.videos[0],
+            'View Property Details',
+            `${window.location.origin}/property/${property.id}`
+        );
+        if (!success) {
+            alert('Failed to send video. Please try again.');
+        }
+    };
+
+    const handleSendTopSelling = async () => {
+        // Get top 3 properties from stats or just the first few
+        const topProps = stats?.topProperties?.map(tp =>
+            properties.find(p => p.id === tp.id)
+        ).filter(Boolean).slice(0, 5);
+
+        if (!topProps || topProps.length === 0) {
+            alert('No top selling properties found.');
+            return;
+        }
+
+        const success = await sendPropertyCard(topProps);
+        if (!success) {
+            alert('Failed to send top selling carousel.');
+        }
+    };
     const formatTime = (timestamp) => {
         if (!timestamp) return '';
         const date = new Date(timestamp);
         const now = new Date();
-        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        const diff = now - date;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-        if (diffDays === 0) {
+        if (days < 1) {
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else if (diffDays === 1) {
-            return 'Yesterday';
-        } else if (diffDays < 7) {
-            return date.toLocaleDateString([], { weekday: 'short' });
+        } else if (days < 7) {
+            return date.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
         } else {
-            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         }
+    };
+
+    const renderAttachment = (attachment) => {
+        if (!attachment) return null;
+
+        // Generic Template (Property Card / Carousel)
+        if (attachment.type === 'template' && attachment.payload?.template_type === 'generic') {
+            const elements = attachment.payload.elements || [];
+            return (
+                <div style={{
+                    marginTop: '0.5rem',
+                    display: 'flex',
+                    flexWrap: elements.length > 1 ? 'nowrap' : 'wrap',
+                    overflowX: elements.length > 1 ? 'auto' : 'visible',
+                    gap: '0.8rem',
+                    paddingBottom: elements.length > 1 ? '0.5rem' : '0',
+                    scrollbarWidth: 'thin'
+                }}>
+                    {elements.map((el, i) => (
+                        <div key={i} style={{
+                            width: '240px',
+                            flexShrink: 0,
+                            background: 'white',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            border: '1px solid #e5e7eb',
+                            color: '#111827',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}>
+                            {el.image_url && (
+                                <img src={el.image_url} alt={el.title} style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
+                            )}
+                            <div style={{ padding: '0.75rem' }}>
+                                <div style={{ fontWeight: '700', fontSize: '0.95rem', marginBottom: '0.25rem' }}>{el.title}</div>
+                                <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.75rem' }}>{el.subtitle}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    {el.buttons?.map((btn, bi) => (
+                                        <button
+                                            key={bi}
+                                            className="btn btn-xs"
+                                            style={{
+                                                width: '100%',
+                                                background: bi === 0 ? 'var(--primary)' : 'white',
+                                                border: '1px solid ' + (bi === 0 ? 'var(--primary)' : '#e5e7eb'),
+                                                color: bi === 0 ? 'white' : '#111827',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '600',
+                                                padding: '0.4rem'
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (btn.type === 'web_url') {
+                                                    window.open(btn.url, '_blank');
+                                                } else if (btn.type === 'postback') {
+                                                    if (btn.payload.startsWith('INQUIRY_PROPERTY_')) {
+                                                        const propId = btn.payload.replace('INQUIRY_PROPERTY_', '');
+                                                        setMessageText(`Hi, I'm interested in property ID: ${propId}. Can you provide more details?`);
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            {btn.title}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // Media Template (Video)
+        if (attachment.type === 'template' && attachment.payload?.template_type === 'media') {
+            return (
+                <div style={{ marginTop: '0.5rem', width: '280px', background: 'white', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                    {attachment.payload.elements?.map((el, i) => (
+                        <div key={i}>
+                            {el.media_type === 'video' && (
+                                <div style={{ position: 'relative', height: '160px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    {el.url ? (
+                                        <video src={el.url} controls style={{ width: '100%', height: '100%' }} />
+                                    ) : (
+                                        <div style={{ color: 'white', fontSize: '0.8rem' }}>Video not available</div>
+                                    )}
+                                </div>
+                            )}
+                            <div style={{ padding: '0.75rem' }}>
+                                {el.buttons?.map((btn, bi) => (
+                                    <button
+                                        key={bi}
+                                        className="btn btn-sm btn-primary"
+                                        style={{ width: '100%', fontWeight: '600', textTransform: 'none' }}
+                                        onClick={() => btn.type === 'web_url' && window.open(btn.url, '_blank')}
+                                    >
+                                        {btn.title}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // Button Template (Booking)
+        if (attachment.type === 'template' && attachment.payload?.template_type === 'button') {
+            return (
+                <div style={{ marginTop: '0.8rem', background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.9rem', marginBottom: '0.8rem', color: '#334155', fontWeight: '500' }}>{attachment.payload.text}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {attachment.payload.buttons?.map((btn, i) => (
+                            <button
+                                key={i}
+                                className="btn btn-sm btn-primary"
+                                style={{ width: '100%', fontSize: '0.8rem', fontWeight: '600' }}
+                                onClick={() => btn.type === 'web_url' && window.open(btn.url, '_blank')}
+                            >
+                                {btn.title}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        return null;
     };
 
     // Mobile view state
@@ -1623,6 +1789,15 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                             <div style={{ wordBreak: 'break-word' }}>
                                                 {msg.message_text}
                                             </div>
+                                            {msg.attachments && msg.attachments.length > 0 && (
+                                                <div className="message-attachments">
+                                                    {msg.attachments.map((att, idx) => (
+                                                        <React.Fragment key={idx}>
+                                                            {renderAttachment(att)}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </div>
+                                            )}
                                             <div style={{
                                                 fontSize: '0.7rem',
                                                 opacity: 0.7,
@@ -2067,9 +2242,33 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                                     View Details
                                                 </button>
                                                 <button
+                                                    className="btn btn-sm btn-primary"
+                                                    style={{ width: '100%', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                                                    onClick={() => handleSendPropertyCard(selectedConversation.viewed_property)}
+                                                >
+                                                    📤 Send to Chat
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: '#dc2626', color: 'white', border: '1px solid #dc2626', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                                                    onClick={() => handleSendVideo(selectedConversation.viewed_property)}
+                                                >
+                                                    🎥 Send Video
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: 'linear-gradient(45deg, #f59e0b, #ef4444)', color: 'white', border: 'none', fontWeight: '700', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                                    onClick={handleSendTopSelling}
+                                                >
+                                                    🔥 Send Top Selling
+                                                </button>
+                                                <button
                                                     className="btn btn-sm"
                                                     style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                                                    onClick={() => alert(`Inquiry for ${selectedConversation.viewed_property.title}`)}
+                                                    onClick={() => {
+                                                        const inquiryMessage = `Hi, I am interested in ${selectedConversation.viewed_property.title}. Can you provide more details?`;
+                                                        setMessageText(inquiryMessage);
+                                                    }}
                                                 >
                                                     💬 Inquire
                                                 </button>

@@ -1498,6 +1498,185 @@ class FacebookService {
     }
 
     /**
+     * Send Property Card (Generic Template)
+     */
+    async sendPropertyCard(pageId, recipientId, propertyOrProperties) {
+        try {
+            const pages = await this.getConnectedPages();
+            const page = pages.find(p => p.page_id === pageId);
+            if (!page) throw new Error('Page not found');
+
+            const properties = Array.isArray(propertyOrProperties) ? propertyOrProperties : [propertyOrProperties];
+
+            const elements = properties.slice(0, 10).map(property => {
+                const propertyUrl = `${window.location.origin}/property/${property.id}`;
+                const imageUrl = (property.images && property.images.length > 0) ? property.images[0] : property.image;
+
+                return {
+                    title: property.title,
+                    image_url: imageUrl,
+                    subtitle: `${property.bedrooms || 0} Beds • ${property.bathrooms || 0} Baths | ₱ ${parseInt(property.price).toLocaleString()}`,
+                    default_action: {
+                        type: 'web_url',
+                        url: propertyUrl,
+                        webview_height_ratio: 'tall'
+                    },
+                    buttons: [
+                        {
+                            type: 'web_url',
+                            url: propertyUrl,
+                            title: 'View Details'
+                        },
+                        {
+                            type: 'postback',
+                            title: 'Inquire',
+                            payload: `INQUIRY_PROPERTY_${property.id}`
+                        }
+                    ]
+                };
+            });
+
+            const payload = {
+                template_type: 'generic',
+                elements: elements
+            };
+
+            const response = await fetch(
+                `${GRAPH_API_BASE}/${pageId}/messages?access_token=${page.page_access_token}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recipient: { id: recipientId },
+                        messaging_type: 'MESSAGE_TAG',
+                        tag: 'ACCOUNT_UPDATE',
+                        message: {
+                            attachment: {
+                                type: 'template',
+                                payload: payload
+                            }
+                        }
+                    })
+                }
+            );
+
+            const result = await response.json();
+            if (result.error) throw new Error(result.error.message);
+
+            // Save to database
+            const { data: conv } = await getSupabase()
+                .from('facebook_conversations')
+                .select('conversation_id')
+                .eq('participant_id', recipientId)
+                .eq('page_id', pageId)
+                .single();
+
+            if (result.message_id && conv) {
+                await getSupabase().from('facebook_messages').insert({
+                    message_id: result.message_id,
+                    conversation_id: conv.conversation_id,
+                    page_id: pageId,
+                    sender_id: pageId,
+                    message_text: properties.length > 1 ? `Sent ${properties.length} properties` : properties[0].title,
+                    timestamp: new Date().toISOString(),
+                    is_from_page: true,
+                    sent_source: 'app',
+                    attachments: [{
+                        type: 'template',
+                        payload: payload
+                    }]
+                });
+            }
+
+            return result;
+        } catch (error) {
+            console.error('Error in sendPropertyCard:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Send Video Card (Media Template)
+     */
+    async sendVideoCard(pageId, recipientId, videoUrl, buttonTitle = 'Book Now!', buttonUrl = '') {
+        try {
+            const pages = await this.getConnectedPages();
+            const page = pages.find(p => p.page_id === pageId);
+            if (!page) throw new Error('Page not found');
+
+            const response = await fetch(
+                `${GRAPH_API_BASE}/${pageId}/messages?access_token=${page.page_access_token}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recipient: { id: recipientId },
+                        messaging_type: 'MESSAGE_TAG',
+                        tag: 'ACCOUNT_UPDATE',
+                        message: {
+                            attachment: {
+                                type: 'template',
+                                payload: {
+                                    template_type: 'media',
+                                    elements: [
+                                        {
+                                            media_type: 'video',
+                                            url: videoUrl,
+                                            buttons: [
+                                                {
+                                                    type: 'web_url',
+                                                    url: buttonUrl || `${window.location.origin}`,
+                                                    title: buttonTitle
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    })
+                }
+            );
+
+            const result = await response.json();
+            if (result.error) throw new Error(result.error.message);
+
+            // Save to database
+            const { data: conv } = await getSupabase()
+                .from('facebook_conversations')
+                .select('conversation_id')
+                .eq('participant_id', recipientId)
+                .eq('page_id', pageId)
+                .single();
+
+            if (result.message_id && conv) {
+                await getSupabase().from('facebook_messages').insert({
+                    message_id: result.message_id,
+                    conversation_id: conv.conversation_id,
+                    page_id: pageId,
+                    sender_id: pageId,
+                    message_text: `[Video Template: ${buttonTitle}]`,
+                    timestamp: new Date().toISOString(),
+                    is_from_page: true,
+                    sent_source: 'app',
+                    attachments: [{
+                        type: 'template',
+                        payload: {
+                            template_type: 'media',
+                            elements: [{ media_type: 'video', url: videoUrl, buttons: [{ title: buttonTitle, url: buttonUrl }] }]
+                        }
+                    }]
+                });
+            }
+
+            return result;
+        } catch (error) {
+            console.error('Error in sendVideoCard:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Send "Book Appointment" button template
      */
     async sendBookingButton(pageId, recipientId, bookingUrl) {

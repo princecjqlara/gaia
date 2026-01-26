@@ -5,7 +5,7 @@ import TeamBrandingSettings from './TeamBrandingSettings';
 import { getTeamBranding } from '../services/teamBrandingService';
 
 
-const PropertyManagement = ({ teamId }) => {
+const PropertyManagement = ({ teamId, organizationId }) => {
     const [view, setView] = useState('list'); // 'list' or 'form'
     const [showPreview, setShowPreview] = useState(false);
     const [showBrandingSettings, setShowBrandingSettings] = useState(false);
