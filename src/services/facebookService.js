@@ -471,22 +471,8 @@ class FacebookService {
      */
     async getConversationsWithPagination(pageId = null, page = 1, limit = 20) {
         try {
-            // Demo Mode Check
-            const isDemoMode = typeof window !== 'undefined' && localStorage.getItem('gaia_demo_mode') === 'true';
-
-            if (isDemoMode) {
-                console.log('Fetching MOCK conversations');
-                // If fetching page 1, return mix of real (if any) and mock
-                // For simplicity, just return mock if page 1
-                if (page === 1) {
-                    return {
-                        conversations: MOCK_CONVERSATIONS,
-                        total: MOCK_CONVERSATIONS.length,
-                        page: 1,
-                        hasMore: false
-                    };
-                }
-            }
+            // Demo Mode Check Removed
+            // const isDemoMode = typeof window !== 'undefined' && localStorage.getItem('gaia_demo_mode') === 'true';
 
             const offset = (page - 1) * limit;
 
