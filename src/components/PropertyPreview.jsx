@@ -1,7 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabaseClient } from '../services/supabase';
 
-const PropertyPreview = ({ properties = [], onClose }) => {
+const DEFAULT_BRANDING = {
+    logo_url: null,
+    team_display_name: 'GAIA',
+    tagline: 'Find Your Dream Home',
+    subtitle: 'Browse our exclusive portfolio of premium properties.',
+    hero_image_url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2070',
+    primary_color: '#10b981',
+    contact_phone: null,
+    contact_email: null,
+    facebook_url: null,
+    instagram_url: null,
+    website_url: null,
+    address: null
+};
+
+const PropertyPreview = ({ properties = [], onClose, branding: propBranding }) => {
+    const branding = { ...DEFAULT_BRANDING, ...propBranding };
+
     const [selectedProperty, setSelectedProperty] = useState(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
 
@@ -467,7 +484,7 @@ const PropertyPreview = ({ properties = [], onClose }) => {
             {/* Banner */}
             <div style={{
                 height: '400px',
-                background: 'linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2070)',
+                background: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${branding.hero_image_url || DEFAULT_BRANDING.hero_image_url})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 display: 'flex',
@@ -477,10 +494,11 @@ const PropertyPreview = ({ properties = [], onClose }) => {
                 color: 'white'
             }}>
                 <div style={{ maxWidth: '800px', padding: '0 2rem' }}>
-                    <h1 className="hero-h1" style={{ fontWeight: '800', marginBottom: '1rem', textShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>Find Your Dream Home</h1>
-                    <p style={{ fontSize: '1.25rem', opacity: 0.9 }}>Browse our exclusive portfolio of premium properties.</p>
+                    <h1 className="hero-h1" style={{ fontWeight: '800', marginBottom: '1rem', textShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>{branding.tagline}</h1>
+                    <p style={{ fontSize: '1.25rem', opacity: 0.9 }}>{branding.subtitle}</p>
                 </div>
             </div>
+
 
             {/* Floating Header with Search */}
             <div style={{
@@ -495,7 +513,13 @@ const PropertyPreview = ({ properties = [], onClose }) => {
                 boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
                 zIndex: 10
             }}>
-                <div style={{ fontWeight: '800', fontSize: '1.5rem', color: '#10b981', tracking: '-0.025em' }}>GAIA</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {branding.logo_url && (
+                        <img src={branding.logo_url} alt="Logo" style={{ height: '36px', width: 'auto', borderRadius: '6px' }} />
+                    )}
+                    <span style={{ fontWeight: '800', fontSize: '1.5rem', color: branding.primary_color }}>{branding.team_display_name}</span>
+                </div>
+
 
                 {/* Search Bar */}
                 <div style={{ flex: 1, maxWidth: '500px', margin: '0 2rem' }}>
@@ -538,7 +562,8 @@ const PropertyPreview = ({ properties = [], onClose }) => {
             <div className="listing-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '4rem 1.5rem' }}>
                 <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
                     <h2 style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#111827', marginBottom: '1rem' }}>Latest Listings</h2>
-                    <div style={{ width: '80px', height: '4px', background: '#10b981', margin: '0 auto' }}></div>
+                    <div style={{ width: '80px', height: '4px', background: branding.primary_color, margin: '0 auto' }}></div>
+
                 </div>
 
                 <div className="listing-grid">
@@ -652,10 +677,58 @@ const PropertyPreview = ({ properties = [], onClose }) => {
 
             {/* Footer */}
             <footer style={{ background: '#111827', color: 'white', padding: '4rem 2rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1rem', color: '#10b981' }}>GAIA</div>
-                <p style={{ opacity: 0.7 }}>Premium Real Estate Portfolio</p>
-                <div style={{ marginTop: '2rem', opacity: 0.5, fontSize: '0.875rem' }}>© 2026 Gaia Properties. All rights reserved.</div>
+                {branding.logo_url && (
+                    <img src={branding.logo_url} alt="Logo" style={{ height: '50px', marginBottom: '1rem', borderRadius: '8px' }} />
+                )}
+                <div style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: branding.primary_color }}>{branding.team_display_name}</div>
+                <p style={{ opacity: 0.7, marginBottom: '1.5rem' }}>Premium Real Estate Portfolio</p>
+
+                {/* Social Media Links */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                    {branding.facebook_url && (
+                        <a href={branding.facebook_url} target="_blank" rel="noopener noreferrer" style={{
+                            width: '44px', height: '44px', borderRadius: '50%', background: '#3b5998', color: 'white',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem',
+                            textDecoration: 'none', transition: 'transform 0.2s'
+                        }} onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'} onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}>
+                            📘
+                        </a>
+                    )}
+                    {branding.instagram_url && (
+                        <a href={branding.instagram_url} target="_blank" rel="noopener noreferrer" style={{
+                            width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)', color: 'white',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem',
+                            textDecoration: 'none', transition: 'transform 0.2s'
+                        }} onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'} onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}>
+                            📸
+                        </a>
+                    )}
+                    {branding.website_url && (
+                        <a href={branding.website_url} target="_blank" rel="noopener noreferrer" style={{
+                            width: '44px', height: '44px', borderRadius: '50%', background: '#6366f1', color: 'white',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem',
+                            textDecoration: 'none', transition: 'transform 0.2s'
+                        }} onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'} onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}>
+                            🌐
+                        </a>
+                    )}
+                </div>
+
+                {/* Contact Info */}
+                {(branding.contact_phone || branding.contact_email) && (
+                    <div style={{ marginBottom: '1rem', opacity: 0.8, fontSize: '0.95rem' }}>
+                        {branding.contact_phone && <span>📞 {branding.contact_phone}</span>}
+                        {branding.contact_phone && branding.contact_email && <span style={{ margin: '0 0.75rem' }}>|</span>}
+                        {branding.contact_email && <span>✉️ {branding.contact_email}</span>}
+                    </div>
+                )}
+                {branding.address && (
+                    <div style={{ marginBottom: '1rem', opacity: 0.7, fontSize: '0.9rem' }}>📍 {branding.address}</div>
+                )}
+
+                <div style={{ marginTop: '2rem', opacity: 0.5, fontSize: '0.875rem' }}>© 2026 {branding.team_display_name}. All rights reserved.</div>
             </footer>
+
         </div>
     );
 };

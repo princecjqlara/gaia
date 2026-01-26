@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabaseClient } from '../services/supabase';
 import PropertyPreview from './PropertyPreview';
+import TeamBrandingSettings from './TeamBrandingSettings';
+import { getTeamBranding } from '../services/teamBrandingService';
 
-const PropertyManagement = () => {
+
+const PropertyManagement = ({ teamId }) => {
     const [view, setView] = useState('list'); // 'list' or 'form'
     const [showPreview, setShowPreview] = useState(false);
+    const [showBrandingSettings, setShowBrandingSettings] = useState(false);
+    const [branding, setBranding] = useState(null);
     const [properties, setProperties] = useState([]);
     const [editingId, setEditingId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState('');
     const [stats, setStats] = useState({ totalViews: 0, topProperties: [], recentViews: [] });
+
 
     const loadStats = async () => {
         try {
@@ -92,9 +98,36 @@ const PropertyManagement = () => {
         }
     }, []);
 
-    if (showPreview) {
-        return <PropertyPreview properties={properties} onClose={() => setShowPreview(false)} />;
+    // Load branding on mount
+    useEffect(() => {
+        if (teamId) {
+            loadBranding();
+        }
+    }, [teamId]);
+
+    async function loadBranding() {
+        const { data } = await getTeamBranding(teamId);
+        if (data) setBranding(data);
     }
+
+    if (showPreview) {
+        return <PropertyPreview properties={properties} onClose={() => setShowPreview(false)} branding={branding} />;
+    }
+
+    if (showBrandingSettings) {
+        return (
+            <div className="modal-overlay active">
+                <TeamBrandingSettings
+                    teamId={teamId}
+                    onClose={() => {
+                        setShowBrandingSettings(false);
+                        loadBranding(); // Reload branding after edit
+                    }}
+                />
+            </div>
+        );
+    }
+
 
     const handleSave = async () => {
         // Basic validation
@@ -299,6 +332,23 @@ const PropertyManagement = () => {
                         <p style={{ color: 'var(--text-muted)' }}>Manage your real estate listings</p>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            onClick={() => setShowBrandingSettings(true)}
+                            style={{
+                                background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '9999px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            🎨 Branding
+                        </button>
                         <button
                             onClick={() => setView('analytics')}
                             style={{
