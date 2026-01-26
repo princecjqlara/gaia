@@ -478,11 +478,7 @@ class FacebookService {
 
             let query = getSupabase()
                 .from('facebook_conversations')
-                .select(`
-                    *,
-                    linked_client:linked_client_id(id, client_name, business_name),
-                    assigned_user:assigned_to(id, name, email)
-                `, { count: 'exact' })
+                .select('*', { count: 'exact' })
                 .or('is_archived.is.null,is_archived.eq.false') // Exclude archived
                 .order('last_message_time', { ascending: false, nullsFirst: false })
                 .range(offset, offset + limit - 1);
