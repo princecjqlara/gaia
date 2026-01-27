@@ -699,6 +699,23 @@ class FacebookService {
     }
 
     /**
+     * Get all properties for sharing
+     */
+    async getAllProperties() {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+            .from('properties')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching properties:', error);
+            return [];
+        }
+        return data || [];
+    },
+
+    /**
      * Send a message via Facebook Graph API
      * Automatically uses ACCOUNT_UPDATE tag when outside 24-hour messaging window
      */

@@ -88,6 +88,23 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     const [showMediaUpload, setShowMediaUpload] = useState(false);
     const [extractingDetails, setExtractingDetails] = useState(false);
 
+    // Properties for sharing
+    const [properties, setProperties] = useState([]);
+    const [showDropUp, setShowDropUp] = useState(false);
+    const [showPropertySelector, setShowPropertySelector] = useState(false);
+
+    // Fetch properties on mount
+    useEffect(() => {
+        const fetchProperties = async () => {
+            try {
+                const props = await facebookService.getAllProperties();
+                setProperties(props);
+            } catch (err) {
+                console.error('Failed to load properties for sharing:', err);
+            }
+        };
+        fetchProperties();
+    }, []);
 
     // New UI state
     const [showBulkModal, setShowBulkModal] = useState(false);
@@ -1822,6 +1839,70 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             }}>
                                 {/* Action Buttons Row */}
                                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.25rem', position: 'relative' }}>
+                                    {/* Action Drop Up */}
+                                    <div style={{ position: 'relative' }}>
+                                        <button
+                                            type="button"
+                                            className={`btn btn-sm ${showDropUp ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setShowDropUp(!showDropUp)}
+                                            title="Quick Actions"
+                                        >
+                                            ⚡
+                                        </button>
+                                        {showDropUp && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: '100%',
+                                                left: 0,
+                                                marginBottom: '0.5rem',
+                                                background: 'var(--bg-primary)',
+                                                border: '1px solid var(--border-color)',
+                                                borderRadius: 'var(--radius-md)',
+                                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                                zIndex: 50,
+                                                minWidth: '220px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                padding: '0.5rem',
+                                                gap: '0.25rem'
+                                            }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-ghost"
+                                                    style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                                                    onClick={() => {
+                                                        setShowDropUp(false);
+                                                        setShowPropertySelector(true);
+                                                    }}
+                                                >
+                                                    🏠 Send Property Card
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-ghost"
+                                                    style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                                                    onClick={() => {
+                                                        setShowDropUp(false);
+                                                        handleSendTopSelling();
+                                                    }}
+                                                >
+                                                    🔥 Send Top Properties
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-ghost"
+                                                    style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                                                    onClick={() => {
+                                                        setShowDropUp(false);
+                                                        handleSendBookingButton();
+                                                    }}
+                                                >
+                                                    📅 Send Booking Link
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <button
                                         type="button"
                                         className="btn btn-sm btn-secondary"
@@ -2414,36 +2495,27 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
                                     Lead Status (Pipeline)
                                 </label>
-                                <div className="pipeline-stage-grid">
+                                <select
+                                    className="form-select"
+                                    value={selectedConversation.lead_status || ''}
+                                    onChange={(e) => updateLeadStatus(selectedConversation.conversation_id, e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.5rem',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--border-color)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontWeight: '500'
+                                    }}
+                                >
+                                    <option value="" disabled>Select Status...</option>
                                     {Object.entries(LEAD_STATUS_CONFIG).map(([value, config]) => (
-                                        <button
-                                            key={value}
-                                            onClick={() => updateLeadStatus(selectedConversation.conversation_id, value)}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.5rem',
-                                                padding: '0.5rem',
-                                                borderRadius: '8px',
-                                                border: selectedConversation.lead_status === value
-                                                    ? `2px solid ${config.color}`
-                                                    : '1px solid var(--border-color)',
-                                                background: selectedConversation.lead_status === value
-                                                    ? config.bgColor
-                                                    : 'var(--bg-primary)',
-                                                color: 'var(--text-primary)',
-                                                cursor: 'pointer',
-                                                fontSize: '0.8rem',
-                                                fontWeight: '500',
-                                                transition: 'all 0.2s',
-                                                textAlign: 'left'
-                                            }}
-                                        >
-                                            <span style={{ fontSize: '1rem' }}>{config.icon}</span>
-                                            <span>{config.label}</span>
-                                        </button>
+                                        <option key={value} value={value}>
+                                            {config.icon} {config.label}
+                                        </option>
                                     ))}
-                                </div>
+                                </select>
                             </div>
 
 
@@ -3331,6 +3403,89 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     />
                 )
             }
+
+            {/* Property Selector Modal */}
+            {showPropertySelector && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2000
+                }}>
+                    <div style={{
+                        background: 'var(--bg-primary)',
+                        borderRadius: 'var(--radius-lg)',
+                        width: '90%',
+                        maxWidth: '800px',
+                        maxHeight: '80vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                    }}>
+                        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Select Property to Send</h3>
+                            <button onClick={() => setShowPropertySelector(false)} className="btn btn-sm btn-ghost" style={{ fontSize: '1.25rem', lineHeight: 1 }}>✕</button>
+                        </div>
+                        <div style={{ padding: '1rem', overflowY: 'auto' }}>
+                            {properties.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                    No properties found. <br />
+                                    <small>Add properties in the Properties tab first.</small>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                                    {properties.map(p => (
+                                        <div key={p.id} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ height: '140px', background: '#e5e7eb', position: 'relative' }}>
+                                                {p.image ? (
+                                                    <img src={p.image} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '2rem' }}>🏠</div>
+                                                )}
+                                                <div style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
+                                                    {typeof p.price === 'number' ? `₱ ${p.price.toLocaleString()}` : p.price}
+                                                </div>
+                                            </div>
+                                            <div style={{ padding: '0.75rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.title}>{p.title}</div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>{p.location || p.address || 'No location'}</div>
+                                                <div style={{ marginTop: 'auto', display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className="btn btn-sm btn-primary"
+                                                        style={{ flex: 1, fontSize: '0.75rem' }}
+                                                        onClick={() => {
+                                                            handleSendPropertyCard(p);
+                                                            setShowPropertySelector(false);
+                                                        }}
+                                                    >
+                                                        Send
+                                                    </button>
+                                                    {p.videos && p.videos.length > 0 && (
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            style={{ fontSize: '0.75rem' }}
+                                                            title="Send Video"
+                                                            onClick={() => {
+                                                                handleSendVideo(p);
+                                                                setShowPropertySelector(false);
+                                                            }}
+                                                        >
+                                                            🎥
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
