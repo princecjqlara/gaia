@@ -224,7 +224,7 @@ export function useFacebookMessenger() {
                 // Mark messages as read
                 await facebookService.markMessagesAsRead(conversation.conversation_id);
 
-                // Load automatic insights (booking status, timeline, stats)
+                // Load automatic insights (booking status, timeline, stats, AI)
                 const insights = await facebookService.getConversationInsights(
                     conversation.conversation_id,
                     conversation.participant_id,
@@ -232,14 +232,13 @@ export function useFacebookMessenger() {
                 );
                 setConversationInsights(insights);
 
-                // Load existing AI analysis if available
-                const savedAnalysis = await facebookService.getAIAnalysis(conversation.conversation_id);
-                if (savedAnalysis?.ai_analysis && Object.keys(savedAnalysis.ai_analysis).length > 0) {
-                    setAiAnalysis(savedAnalysis.ai_analysis);
+                // Set AI analysis from insights if available (populated by getConversationInsights)
+                if (insights?.aiAnalysis) {
+                    setAiAnalysis(insights.aiAnalysis);
                 }
 
                 // Check for existing client
-                await checkExistingClient(conversation.participant_name, savedAnalysis?.extracted_details);
+                await checkExistingClient(conversation.participant_name, insights?.aiAnalysis?.details);
             } catch (err) {
                 console.error('Error loading conversation:', err);
                 setError(err.message);
@@ -277,7 +276,7 @@ export function useFacebookMessenger() {
 
         if (analysis) {
             // Save analysis to database
-            await facebookService.saveAIAnalysis(selectedConversation.conversation_id, analysis);
+            await facebookService.saveAIAnalysisResults(selectedConversation.conversation_id, analysis);
 
             // Check for existing client with extracted details
             await checkExistingClient(selectedConversation.participant_name, analysis.details);

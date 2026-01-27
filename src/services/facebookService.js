@@ -2820,6 +2820,42 @@ class FacebookService {
     }
 
     /**
+     * Save AI analysis results to conversation
+     */
+    async saveAIAnalysisResults(conversationId, analysisData) {
+        try {
+            console.log('[AI] Saving analysis results for:', conversationId);
+
+            const updates = {
+                ai_analysis: JSON.stringify(analysisData),
+                ai_notes: analysisData.notes || '',
+                extracted_details: analysisData.details || {},
+                meeting_detected: analysisData.meeting?.hasMeeting || false,
+                meeting_datetime: analysisData.meeting?.datetime || null,
+                last_analyzed_at: new Date().toISOString()
+            };
+
+            // If lead score is available, update lead status if needed
+            if (analysisData.leadScore?.score) {
+                // updates.lead_status = analysisData.leadScore.score; // Optional: auto-update status
+            }
+
+            const { error } = await getSupabase()
+                .from('facebook_conversations')
+                .update(updates)
+                .eq('conversation_id', conversationId);
+
+            if (error) throw error;
+
+            console.log('[AI] Successfully saved analysis results');
+            return true;
+        } catch (error) {
+            console.error('Error saving AI analysis:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Get automatic insights for a conversation (without AI analysis)
      * Includes: message stats, timeline, booking status
      */
@@ -2889,57 +2925,54 @@ class FacebookService {
                     console.log('[INSIGHTS] Error finding view:', viewError.message);
                 }
 
-                if (viewData && viewData.properties) {
-                    viewedProperty = {
-                        id: viewData.property_id,
-                        title: viewData.properties.title,
-                        price: viewData.properties.price,
-                        image: viewData.properties.images?.[0] || null,
-                        address: viewData.properties.address,
-                        viewedAt: viewData.created_at
-                    };
-                }
+            };
+        }
             }
 
             return {
-                // Message statistics
-                messageCount,
-                customerMessages,
-                agentMessages,
-                firstMessageDate,
-                lastMessageDate,
-                daysSinceFirstContact,
+    // Message statistics
+    messageCount,
+    customerMessages,
+    agentMessages,
+    firstMessageDate,
+    lastMessageDate,
+    daysSinceFirstContact,
 
-                // Booking info
-                hasBooking: !!booking,
-                booking: booking ? {
-                    id: booking.id,
-                    datetime: booking.booking_datetime,
-                    date: booking.booking_date,
-                    time: booking.booking_time,
-                    status: booking.status,
-                    contactName: booking.contact_name,
-                    contactPhone: booking.contact_phone,
-                    notes: booking.notes,
-                    daysInfo: bookingDaysInfo
-                } : null,
+    // Booking info
+    hasBooking: !!booking,
+    booking: booking ? {
+        id: booking.id,
+        datetime: booking.booking_datetime,
+        date: booking.booking_date,
+        time: booking.booking_time,
+        status: booking.status,
+        contactName: booking.contact_name,
+        contactPhone: booking.contact_phone,
+        notes: booking.notes,
+        daysInfo: bookingDaysInfo
+    } : null,
 
-                // Viewed Property (from tracking)
-                viewedProperty,
+    // Viewed Property (from tracking)
+    viewedProperty,
 
-                // Timeline events
-                timeline: [
-                    firstMessageDate && { type: 'first_contact', date: firstMessageDate, label: 'First Contact' },
-                    booking?.created_at && { type: 'booking_created', date: booking.created_at, label: 'Appointment Booked' },
-                    booking?.booking_datetime && { type: 'appointment', date: booking.booking_datetime, label: 'Appointment', status: booking.status },
-                    viewedProperty?.viewedAt && { type: 'property_view', date: viewedProperty.viewedAt, label: `Viewed ${viewedProperty.title}` },
-                    lastMessageDate && { type: 'last_activity', date: lastMessageDate, label: 'Last Message' }
-                ].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date))
-            };
+    // AI Analysis (from DB)
+    aiAnalysis: convData.ai_analysis ? JSON.parse(convData.ai_analysis) : null,
+    aiNotes: convData.ai_notes,
+    leadScore: convData.ai_analysis ? JSON.parse(convData.ai_analysis).leadScore : null,
+
+    // Timeline events
+    timeline: [
+        firstMessageDate && { type: 'first_contact', date: firstMessageDate, label: 'First Contact' },
+        booking?.created_at && { type: 'booking_created', date: booking.created_at, label: 'Appointment Booked' },
+        booking?.booking_datetime && { type: 'appointment', date: booking.booking_datetime, label: 'Appointment', status: booking.status },
+        viewedProperty?.viewedAt && { type: 'property_view', date: viewedProperty.viewedAt, label: `Viewed ${viewedProperty.title}` },
+        lastMessageDate && { type: 'last_activity', date: lastMessageDate, label: 'Last Message' }
+    ].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date))
+};
         } catch (error) {
-            console.error('Error getting conversation insights:', error);
-            return null;
-        }
+    console.error('Error getting conversation insights:', error);
+    return null;
+}
     }
 }
 
