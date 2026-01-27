@@ -2931,6 +2931,7 @@ class FacebookService {
                 }
 
                 // Find stats in property_views matching the participant_id (best) or visitor name (fallback)
+                console.log('[INSIGHTS] Running query with conditions:', orConditions.join(','));
                 const { data: viewsData, error: viewError } = await getSupabase()
                     .from('property_views')
                     .select('*, properties(title, price, images, address, id, bedrooms, bathrooms)')
@@ -2938,11 +2939,13 @@ class FacebookService {
                     .order('created_at', { ascending: false })
                     .limit(5);
 
+                console.log('[INSIGHTS] Query result - viewsData:', viewsData?.length || 0, 'items');
                 if (viewError) {
-                    console.log('[INSIGHTS] Error finding views:', viewError.message);
+                    console.log('[INSIGHTS] Error finding views:', viewError.message, viewError.code);
                 }
 
                 if (viewsData && viewsData.length > 0) {
+                    console.log('[INSIGHTS] Found views:', viewsData.map(v => ({ pid: v.participant_id, name: v.visitor_name, prop: v.property_title })));
                     viewedProperties = viewsData.map(v => ({
                         id: v.property_id,
                         title: v.properties?.title,
@@ -2958,6 +2961,9 @@ class FacebookService {
 
                     // Set most recent for backward compatibility
                     viewedProperty = viewedProperties[0];
+                    console.log('[INSIGHTS] Mapped viewedProperty:', viewedProperty);
+                } else {
+                    console.log('[INSIGHTS] No property views found');
                 }
             }
 

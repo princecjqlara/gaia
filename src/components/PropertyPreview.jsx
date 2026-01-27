@@ -44,31 +44,44 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
         if (selectedProperty) {
             const logView = async () => {
                 try {
+                    console.log('[VIEW TRACKING] Starting view log for:', selectedProperty.title);
+                    console.log('[VIEW TRACKING] Participant ID:', participantId);
+                    console.log('[VIEW TRACKING] Visitor Name:', visitorName);
+                    console.log('[VIEW TRACKING] Property ID:', selectedProperty.id);
+
                     const supabase = getSupabaseClient();
-                    if (!supabase) return;
+                    if (!supabase) {
+                        console.error('[VIEW TRACKING] Supabase client not available!');
+                        return;
+                    }
 
                     // Check if we have a session to get user_id (optional, or anonymous)
                     const { data: { session } } = await supabase.auth.getSession();
+                    console.log('[VIEW TRACKING] Session user:', session?.user?.id || 'anonymous');
 
-                    const { error } = await supabase.from('property_views').insert({
+                    const insertData = {
                         property_id: selectedProperty.id,
                         property_title: selectedProperty.title,
-                        viewer_id: session?.user?.id || null, // Null for anonymous
-                        visitor_name: visitorName || null, // Track specific visitor from URL
-                        participant_id: participantId || null, // Track PSID for 100% reliable matching
+                        viewer_id: session?.user?.id || null,
+                        visitor_name: visitorName || null,
+                        participant_id: participantId || null,
                         view_duration: 0,
                         viewed_at: new Date().toISOString(),
                         source: participantId ? 'fb_messenger' : (visitorName ? 'custom_link' : 'website')
-                    });
+                    };
+
+                    console.log('[VIEW TRACKING] Insert data:', JSON.stringify(insertData));
+
+                    const { data, error } = await supabase.from('property_views').insert(insertData).select();
 
                     if (error) {
-                        console.error('Error logging view (Supabase):', error);
-                        console.error('Error details:', error.details, error.message, error.hint);
+                        console.error('[VIEW TRACKING] ❌ Error logging view:', error);
+                        console.error('[VIEW TRACKING] Error details:', error.details, error.message, error.hint, error.code);
                     } else {
-                        console.log('✅ Successfully logged view for', selectedProperty.title, visitorName ? `by ${visitorName}` : '(anonymous)');
+                        console.log('[VIEW TRACKING] ✅ Successfully logged view!', data);
                     }
                 } catch (err) {
-                    console.error('Error logging view:', err);
+                    console.error('[VIEW TRACKING] Exception:', err);
                 }
             };
             logView();
