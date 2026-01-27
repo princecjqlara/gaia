@@ -513,6 +513,7 @@ export function useFacebookMessenger() {
         try {
             setLoading(true);
 
+            console.log('[HOOK] Sending property card with visitor name:', selectedConversation.participant_name);
             await facebookService.sendPropertyCard(
                 selectedConversation.page_id,
                 selectedConversation.participant_id,

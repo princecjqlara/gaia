@@ -1511,6 +1511,21 @@ class FacebookService {
 
             const properties = Array.isArray(propertyOrProperties) ? propertyOrProperties : [propertyOrProperties];
 
+            // If visitorName is missing, try to fetch it from DB
+            if (!visitorName) {
+                const { data: convData } = await getSupabase()
+                    .from('facebook_conversations')
+                    .select('participant_name')
+                    .eq('participant_id', recipientId)
+                    .eq('page_id', pageId)
+                    .single();
+
+                if (convData?.participant_name) {
+                    visitorName = convData.participant_name;
+                    console.log('[FACEBOOK] Fetched visitor name from DB:', visitorName);
+                }
+            }
+
             const elements = properties.slice(0, 10).map(property => {
                 // Construct URL with visitor tracking if name is available
                 let propertyUrl = `${window.location.origin}/property/${property.id}`;
