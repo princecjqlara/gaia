@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSupabaseClient } from '../services/supabase';
+import { initSupabase, getSupabaseClient } from '../services/supabase';
 import { getPublicTeamBranding } from '../services/teamBrandingService';
 import PropertyPreview from './PropertyPreview';
 
@@ -64,6 +64,8 @@ const PublicPropertiesContainer = ({ onClose }) => {
     const loadData = async (currentTeamId) => {
         setLoading(true);
         try {
+            // Initialize Supabase for public pages
+            initSupabase();
             const supabase = getSupabaseClient();
 
             // 1. Load Properties

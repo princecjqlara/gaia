@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSupabaseClient } from '../services/supabase';
+import { initSupabase, getSupabaseClient } from '../services/supabase';
 import { createPropertyLead } from '../services/leadService';
 import { showToast } from '../utils/toast';
 
@@ -49,18 +49,28 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                     console.log('[VIEW TRACKING] Visitor Name:', visitorName);
                     console.log('[VIEW TRACKING] Property ID:', selectedProperty.id);
 
+                    // Ensure Supabase is initialized for public pages
+                    initSupabase();
                     const supabase = getSupabaseClient();
+
                     if (!supabase) {
                         console.error('[VIEW TRACKING] Supabase client not available!');
                         return;
                     }
 
-                    const { data: { session } } = await supabase.auth.getSession();
+                    // Get session if available (optional for anonymous tracking)
+                    let userId = null;
+                    try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        userId = session?.user?.id || null;
+                    } catch (e) {
+                        // Ignore auth errors for anonymous users
+                    }
 
                     const insertData = {
                         property_id: selectedProperty.id,
                         property_title: selectedProperty.title,
-                        viewer_id: session?.user?.id || null,
+                        viewer_id: userId,
                         visitor_name: visitorName || null,
                         participant_id: participantId || null,
                         view_duration: 0,
@@ -73,44 +83,9 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                     const { data, error } = await supabase.from('property_views').insert(insertData).select();
 
                     if (error) {
-                        console.error('[VIEW TRACKING] ❌ Error logging view:', error);
+                        console.error('[VIEW TRACKING] ❌ Error logging view:', error.message, error.code, error.details);
                     } else {
                         console.log('[VIEW TRACKING] ✅ Successfully logged view!', data);
-
-                        // If this is from Messenger, schedule a follow-up message about the property click
-                        if (participantId) {
-                            try {
-                                // Find the conversation for this participant
-                                const { data: conv } = await supabase
-                                    .from('facebook_conversations')
-                                    .select('conversation_id, page_id')
-                                    .eq('participant_id', participantId)
-                                    .single();
-
-                                if (conv) {
-                                    // Schedule a quick follow-up message (2 minutes to ensure processor catches it)
-                                    const scheduledFor = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-                                    const messageText = `👋 I noticed you're checking out "${selectedProperty.title}"! Great choice! 🏠\n\nIf you have any questions about this property or would like to schedule a viewing, just let me know. I'm here to help! 😊`;
-
-                                    const { error: scheduleError } = await supabase.from('scheduled_messages').insert({
-                                        page_id: conv.page_id,
-                                        message_text: messageText,
-                                        scheduled_for: scheduledFor,
-                                        status: 'pending',
-                                        filter_type: 'selected',
-                                        recipient_ids: [participantId]
-                                    });
-
-                                    if (scheduleError) {
-                                        console.error('[VIEW TRACKING] Error inserting scheduled message:', scheduleError);
-                                    } else {
-                                        console.log('[VIEW TRACKING] ✅ Scheduled property click follow-up message for', scheduledFor);
-                                    }
-                                }
-                            } catch (scheduleError) {
-                                console.error('[VIEW TRACKING] Error scheduling follow-up:', scheduleError);
-                            }
-                        }
                     }
                 } catch (err) {
                     console.error('[VIEW TRACKING] Exception:', err);
