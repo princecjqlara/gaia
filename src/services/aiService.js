@@ -3,9 +3,11 @@
 
 const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
-// Get API key from environment
+// Get API key from environment (check both naming conventions)
 const getApiKey = () => {
-    return import.meta.env?.VITE_NVIDIA_API_KEY || '';
+    return import.meta.env?.VITE_NVIDIA_API_KEY ||
+        import.meta.env?.NVIDIA_API_KEY ||
+        '';
 };
 
 // Base chat completion
