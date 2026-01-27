@@ -81,7 +81,6 @@ GRANT ALL ON ai_action_log TO service_role;
 -- ============================================
 INSERT INTO contact_engagement (
         conversation_id,
-        page_id,
         message_direction,
         day_of_week,
         hour_of_day,
@@ -89,7 +88,6 @@ INSERT INTO contact_engagement (
         message_timestamp
     )
 SELECT conversation_id,
-    page_id,
     CASE
         WHEN is_from_page THEN 'outbound'
         ELSE 'inbound'
@@ -97,13 +95,14 @@ SELECT conversation_id,
     EXTRACT(
         DOW
         FROM timestamp
-    ),
+    )::INTEGER,
     EXTRACT(
         HOUR
         FROM timestamp
-    ),
+    )::INTEGER,
     1,
     timestamp
 FROM facebook_messages
-WHERE timestamp > NOW() - INTERVAL '30 days' ON CONFLICT DO NOTHING;
+WHERE timestamp > NOW() - INTERVAL '30 days'
+    AND conversation_id IS NOT NULL ON CONFLICT DO NOTHING;
 SELECT 'SUCCESS: AI analysis tables created and engagement data backfilled!' as result;

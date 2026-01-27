@@ -692,16 +692,20 @@ async function handlePropertyClick(req, res, body) {
 
         console.log('[PROPERTY CLICK] ✅ Message sent successfully!');
 
-        // 5. Log this as an AI action
-        await db.from('ai_action_log').insert({
-            conversation_id: conversation.conversation_id,
-            action_type: 'property_click_message',
-            details: {
-                property_id: propertyId,
-                property_title: propertyTitle,
-                message_sent: true
-            }
-        }).catch(() => { }); // Ignore if table doesn't exist
+        // 5. Log this as an AI action (optional - ignore errors)
+        try {
+            await db.from('ai_action_log').insert({
+                conversation_id: conversation.conversation_id,
+                action_type: 'property_click_message',
+                details: {
+                    property_id: propertyId,
+                    property_title: propertyTitle,
+                    message_sent: true
+                }
+            });
+        } catch (e) {
+            // Ignore if table doesn't exist
+        }
 
         return res.status(200).json({
             success: true,
