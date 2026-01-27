@@ -657,7 +657,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         }
     };
 
-    const handleSendBookingButton = sendBookingButton;
+
 
     const handleSendTopSelling = async () => {
         // Fallback to first 5 properties (newest first) since we don't have stats here yet
