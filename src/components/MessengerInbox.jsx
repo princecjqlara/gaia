@@ -1803,1714 +1803,1715 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                                 {syncing ? 'Syncing...' : '🔄 Sync Now'}
                                             </button>
                                         </div>
-                                )}
-                                        {messages.map(msg => (
-                                            <div
-                                                key={msg.id}
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: msg.is_from_page ? 'flex-end' : 'flex-start'
-                                                }}
-                                            >
-                                                <div style={{
-                                                    maxWidth: '70%',
-                                                    padding: '0.75rem 1rem',
-                                                    borderRadius: msg.is_from_page
-                                                        ? '1rem 1rem 0 1rem'
-                                                        : '1rem 1rem 1rem 0',
-                                                    background: msg.is_from_page
-                                                        ? 'var(--primary)'
-                                                        : 'var(--bg-secondary)',
-                                                    color: msg.is_from_page
-                                                        ? 'white'
-                                                        : 'var(--text-primary)'
-                                                }}>
-                                                    <div style={{ wordBreak: 'break-word' }}>
-                                                        {msg.message_text}
-                                                    </div>
-                                                    {msg.attachments && msg.attachments.length > 0 && (
-                                                        <div className="message-attachments">
-                                                            {msg.attachments.map((att, idx) => (
-                                                                <React.Fragment key={idx}>
-                                                                    {renderAttachment(att)}
-                                                                </React.Fragment>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div style={{
-                                                        fontSize: '0.7rem',
-                                                        opacity: 0.7,
-                                                        marginTop: '0.25rem',
-                                                        textAlign: 'right'
-                                                    }}>
-                                                        {formatTime(msg.timestamp)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        <div ref={messagesEndRef} />
                                     </div>
-
-                            {/* Message Composer */}
-                                <form onSubmit={handleSendMessage} style={{
-                                    padding: '1rem',
-                                    borderTop: '1px solid var(--border-color)',
-                                    display: 'flex',
-                                    gap: '0.5rem',
-                                    flexDirection: 'column'
-                                }}>
-                                    {/* Action Buttons Row */}
-                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.25rem', position: 'relative' }}>
-                                        {/* Action Drop Up */}
-                                        <div style={{ position: 'relative' }}>
-                                            <button
-                                                type="button"
-                                                className={`btn btn-sm ${showDropUp ? 'btn-primary' : 'btn-secondary'}`}
-                                                onClick={() => setShowDropUp(!showDropUp)}
-                                                title="Quick Actions"
-                                            >
-                                                ⚡
-                                            </button>
-                                            {showDropUp && (
-                                                <div style={{
-                                                    position: 'absolute',
-                                                    bottom: '100%',
-                                                    left: 0,
-                                                    marginBottom: '0.5rem',
-                                                    background: 'var(--bg-primary)',
-                                                    border: '1px solid var(--border-color)',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                                    zIndex: 50,
-                                                    minWidth: '220px',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    padding: '0.5rem',
-                                                    gap: '0.25rem'
-                                                }}>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-ghost"
-                                                        style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-                                                        onClick={() => {
-                                                            setShowDropUp(false);
-                                                            setShowPropertySelector(true);
-                                                        }}
-                                                    >
-                                                        🏠 Send Property Card
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-ghost"
-                                                        style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-                                                        onClick={() => {
-                                                            setShowDropUp(false);
-                                                            handleSendTopSelling();
-                                                        }}
-                                                    >
-                                                        🔥 Send Top Properties
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-ghost"
-                                                        style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-                                                        onClick={() => {
-                                                            setShowDropUp(false);
-                                                            handleSendBookingButton();
-                                                        }}
-                                                    >
-                                                        📅 Send Booking Link
-                                                    </button>
+                                )}
+                                {messages.map(msg => (
+                                    <div
+                                        key={msg.id}
+                                        style={{
+                                            display: 'flex',
+                                            justifyContent: msg.is_from_page ? 'flex-end' : 'flex-start'
+                                        }}
+                                    >
+                                        <div style={{
+                                            maxWidth: '70%',
+                                            padding: '0.75rem 1rem',
+                                            borderRadius: msg.is_from_page
+                                                ? '1rem 1rem 0 1rem'
+                                                : '1rem 1rem 1rem 0',
+                                            background: msg.is_from_page
+                                                ? 'var(--primary)'
+                                                : 'var(--bg-secondary)',
+                                            color: msg.is_from_page
+                                                ? 'white'
+                                                : 'var(--text-primary)'
+                                        }}>
+                                            <div style={{ wordBreak: 'break-word' }}>
+                                                {msg.message_text}
+                                            </div>
+                                            {msg.attachments && msg.attachments.length > 0 && (
+                                                <div className="message-attachments">
+                                                    {msg.attachments.map((att, idx) => (
+                                                        <React.Fragment key={idx}>
+                                                            {renderAttachment(att)}
+                                                        </React.Fragment>
+                                                    ))}
                                                 </div>
                                             )}
+                                            <div style={{
+                                                fontSize: '0.7rem',
+                                                opacity: 0.7,
+                                                marginTop: '0.25rem',
+                                                textAlign: 'right'
+                                            }}>
+                                                {formatTime(msg.timestamp)}
+                                            </div>
                                         </div>
-
-                                        <button
-                                            type="button"
-                                            className="btn btn-sm btn-secondary"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={uploadingMedia}
-                                            title="Attach file (max 25MB)"
-                                        >
-                                            {uploadingMedia ? '⏳' : '📎'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="btn btn-sm btn-secondary"
-                                            onClick={handleSendBookingButton}
-                                            disabled={loading}
-                                            title="Send booking link"
-                                        >
-                                            📅
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`btn btn-sm ${showSavedReplies ? 'btn-primary' : 'btn-secondary'}`}
-                                            onClick={() => setShowSavedReplies(!showSavedReplies)}
-                                            title="Saved replies"
-                                        >
-                                            💬
-                                        </button>
-                                        <input
-                                            type="file"
-                                            ref={fileInputRef}
-                                            style={{ display: 'none' }}
-                                            onChange={handleFileUpload}
-                                            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
-                                        />
-
-                                        {/* Saved Replies Dropdown */}
-                                        {showSavedReplies && (
-                                            <div style={{
-                                                position: 'absolute',
-                                                bottom: '100%',
-                                                left: 0,
-                                                right: 0,
-                                                maxHeight: '250px',
-                                                overflowY: 'auto',
-                                                background: 'var(--bg-primary)',
-                                                border: '1px solid var(--border-color)',
-                                                borderRadius: 'var(--radius-md)',
-                                                marginBottom: '0.5rem',
-                                                boxShadow: '0 -4px 12px rgba(0,0,0,0.3)'
-                                            }}>
-                                                <div style={{
-                                                    padding: '0.5rem 0.75rem',
-                                                    borderBottom: '1px solid var(--border-color)',
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center'
-                                                }}>
-                                                    <span style={{ fontWeight: '600', fontSize: '0.8rem' }}>💬 Saved Replies</span>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-secondary"
-                                                        onClick={() => setShowCreateReply(true)}
-                                                        style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}
-                                                    >
-                                                        + New
-                                                    </button>
-                                                </div>
-
-                                                {savedReplies.length === 0 ? (
-                                                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                        No saved replies yet. Click "+ New" to create one.
-                                                    </div>
-                                                ) : (
-                                                    savedReplies.map(reply => (
-                                                        <div
-                                                            key={reply.id}
-                                                            onClick={() => handleUseSavedReply(reply)}
-                                                            style={{
-                                                                padding: '0.5rem 0.75rem',
-                                                                cursor: 'pointer',
-                                                                borderBottom: '1px solid var(--border-color)',
-                                                                display: 'flex',
-                                                                justifyContent: 'space-between',
-                                                                alignItems: 'flex-start',
-                                                                transition: 'background 0.2s'
-                                                            }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                                                        >
-                                                            <div style={{ flex: 1 }}>
-                                                                <div style={{ fontWeight: '500', fontSize: '0.8rem' }}>
-                                                                    {reply.title}
-                                                                    {reply.shortcut && (
-                                                                        <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-                                                                            /{reply.shortcut}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                                                    {reply.content.substring(0, 60)}{reply.content.length > 60 ? '...' : ''}
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDeleteSavedReply(reply.id);
-                                                                }}
-                                                                style={{
-                                                                    background: 'none',
-                                                                    border: 'none',
-                                                                    color: 'var(--text-muted)',
-                                                                    cursor: 'pointer',
-                                                                    fontSize: '0.7rem'
-                                                                }}
-                                                            >
-                                                                🗑️
-                                                            </button>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Create Saved Reply Modal */}
-                                        {showCreateReply && (
-                                            <div style={{
-                                                position: 'absolute',
-                                                bottom: '100%',
-                                                left: 0,
-                                                right: 0,
-                                                background: 'var(--bg-primary)',
-                                                border: '1px solid var(--border-color)',
-                                                borderRadius: 'var(--radius-md)',
-                                                marginBottom: '0.5rem',
-                                                padding: '0.75rem',
-                                                boxShadow: '0 -4px 12px rgba(0,0,0,0.3)'
-                                            }}>
-                                                <div style={{ marginBottom: '0.5rem' }}>
-                                                    <input
-                                                        type="text"
-                                                        className="form-input"
-                                                        placeholder="Title (e.g., 'Greeting')"
-                                                        value={newReplyTitle}
-                                                        onChange={(e) => setNewReplyTitle(e.target.value)}
-                                                        style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        className="form-input"
-                                                        placeholder="Shortcut (optional, e.g., 'hi')"
-                                                        value={newReplyShortcut}
-                                                        onChange={(e) => setNewReplyShortcut(e.target.value)}
-                                                        style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}
-                                                    />
-                                                    <textarea
-                                                        className="form-input"
-                                                        placeholder="Message content..."
-                                                        value={newReplyContent}
-                                                        onChange={(e) => setNewReplyContent(e.target.value)}
-                                                        rows={3}
-                                                        style={{ fontSize: '0.8rem', resize: 'none' }}
-                                                    />
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-secondary"
-                                                        onClick={() => {
-                                                            setShowCreateReply(false);
-                                                            setNewReplyTitle('');
-                                                            setNewReplyContent('');
-                                                            setNewReplyShortcut('');
-                                                        }}
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-primary"
-                                                        onClick={handleCreateSavedReply}
-                                                        disabled={!newReplyTitle.trim() || !newReplyContent.trim()}
-                                                    >
-                                                        Save
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
-
-                                    {/* Message Input Row */}
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <input
-                                            type="text"
-                                            className="form-input"
-                                            placeholder="Type a message... (use /shortcut for quick replies)"
-                                            value={messageText}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                setMessageText(value);
-
-                                                // Check for shortcut expansion
-                                                if (value.startsWith('/') && value.length > 1) {
-                                                    const shortcut = value.slice(1).toLowerCase();
-                                                    const matchingReply = savedReplies.find(r =>
-                                                        r.shortcut?.toLowerCase() === shortcut
-                                                    );
-                                                    if (matchingReply) {
-                                                        // Show a hint but don't auto-expand yet
-                                                    }
-                                                }
-                                            }}
-                                            onKeyDown={(e) => {
-                                                // Expand shortcut on space or tab after /shortcut
-                                                if ((e.key === ' ' || e.key === 'Tab') && messageText.startsWith('/')) {
-                                                    const shortcut = messageText.slice(1).toLowerCase().trim();
-                                                    const matchingReply = savedReplies.find(r =>
-                                                        r.shortcut?.toLowerCase() === shortcut
-                                                    );
-                                                    if (matchingReply) {
-                                                        e.preventDefault();
-                                                        setMessageText(matchingReply.content);
-                                                        facebookService.useSavedReply(matchingReply.id);
-                                                    }
-                                                }
-                                            }}
-                                            style={{ flex: 1 }}
-                                            disabled={loading}
-                                        />
-                                        <button
-                                            type="submit"
-                                            className="btn btn-primary"
-                                            disabled={loading || !messageText.trim()}
-                                        >
-                                            {loading ? '⏳' : '📤'}
-                                        </button>
-                                    </div>
-                                </form>
-                            </>
-                            ) : (
-                            <div style={{
-                                flex: 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'var(--text-muted)',
-                                flexDirection: 'column',
-                                gap: '1rem'
-                            }}>
-                                <div style={{ fontSize: '3rem' }}>💬</div>
-                                <div>Select a conversation to view messages</div>
+                                ))}
+                                <div ref={messagesEndRef} />
                             </div>
-                    )}
-                        </div>
 
-                    {/* Right Sidebar - Contact Details */}
-                    <div
-                        className={`messenger-details ${mobileView === 'details' ? 'mobile-active' : ''}`}
-                        style={{
-                            borderLeft: '1px solid var(--border-color)',
-                            padding: '1rem',
-                            background: 'var(--bg-primary)',
-                            overflowY: 'auto'
-                        }}>
-                        {selectedConversation ? (
-                            <>
-                                {/* Contact Info */}
-                                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                                    <div style={{
-                                        width: '80px',
-                                        height: '80px',
-                                        borderRadius: '50%',
-                                        background: 'var(--primary)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        color: 'white',
-                                        fontWeight: 'bold',
-                                        fontSize: '2rem',
-                                        margin: '0 auto 0.75rem'
-                                    }}>
-                                        {selectedConversation.participant_picture_url ? (
-                                            <img
-                                                src={selectedConversation.participant_picture_url}
-                                                alt=""
-                                                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                                            />
-                                        ) : (
-                                            selectedConversation.participant_name?.charAt(0)?.toUpperCase() || '?'
+                            {/* Message Composer */}
+                            <form onSubmit={handleSendMessage} style={{
+                                padding: '1rem',
+                                borderTop: '1px solid var(--border-color)',
+                                display: 'flex',
+                                gap: '0.5rem',
+                                flexDirection: 'column'
+                            }}>
+                                {/* Action Buttons Row */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.25rem', position: 'relative' }}>
+                                    {/* Action Drop Up */}
+                                    <div style={{ position: 'relative' }}>
+                                        <button
+                                            type="button"
+                                            className={`btn btn-sm ${showDropUp ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setShowDropUp(!showDropUp)}
+                                            title="Quick Actions"
+                                        >
+                                            ⚡
+                                        </button>
+                                        {showDropUp && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: '100%',
+                                                left: 0,
+                                                marginBottom: '0.5rem',
+                                                background: 'var(--bg-primary)',
+                                                border: '1px solid var(--border-color)',
+                                                borderRadius: 'var(--radius-md)',
+                                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                                zIndex: 50,
+                                                minWidth: '220px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                padding: '0.5rem',
+                                                gap: '0.25rem'
+                                            }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-ghost"
+                                                    style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                                                    onClick={() => {
+                                                        setShowDropUp(false);
+                                                        setShowPropertySelector(true);
+                                                    }}
+                                                >
+                                                    🏠 Send Property Card
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-ghost"
+                                                    style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                                                    onClick={() => {
+                                                        setShowDropUp(false);
+                                                        handleSendTopSelling();
+                                                    }}
+                                                >
+                                                    🔥 Send Top Properties
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-ghost"
+                                                    style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                                                    onClick={() => {
+                                                        setShowDropUp(false);
+                                                        handleSendBookingButton();
+                                                    }}
+                                                >
+                                                    📅 Send Booking Link
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <h4 style={{ margin: 0 }}>
-                                            {selectedConversation.participant_name || 'Unknown'}
-                                        </h4>
-                                        {!selectedConversation.participant_name && (
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        // First try to fetch from Facebook
-                                                        await refreshContactName();
-                                                        alert('Name refreshed successfully!');
-                                                    } catch (err) {
-                                                        console.error('Failed to refresh name:', err);
-                                                        // If Facebook fails, prompt user to enter a custom name
-                                                        const customName = window.prompt(
-                                                            'Facebook could not provide this contact\'s name (privacy restriction).\n\nEnter a name for this contact:',
-                                                            ''
-                                                        );
-                                                        if (customName && customName.trim()) {
-                                                            try {
-                                                                await setContactName(customName.trim());
-                                                                alert('Name set successfully!');
-                                                            } catch (setErr) {
-                                                                console.error('Failed to set custom name:', setErr);
-                                                                alert('Failed to save the name. Please try again.');
-                                                            }
-                                                        }
-                                                    }
-                                                }}
-                                                className="btn btn-sm btn-secondary"
-                                                title="Fetch name from Facebook or set custom name"
-                                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
-                                            >
-                                                🔄 Set Name
-                                            </button>
-                                        )}
-                                    </div>
-                                    {selectedConversation.participant_email && (
-                                        <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                                            {selectedConversation.participant_email}
+
+                                    <button
+                                        type="button"
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={uploadingMedia}
+                                        title="Attach file (max 25MB)"
+                                    >
+                                        {uploadingMedia ? '⏳' : '📎'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={handleSendBookingButton}
+                                        disabled={loading}
+                                        title="Send booking link"
+                                    >
+                                        📅
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`btn btn-sm ${showSavedReplies ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setShowSavedReplies(!showSavedReplies)}
+                                        title="Saved replies"
+                                    >
+                                        💬
+                                    </button>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        style={{ display: 'none' }}
+                                        onChange={handleFileUpload}
+                                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                                    />
+
+                                    {/* Saved Replies Dropdown */}
+                                    {showSavedReplies && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            bottom: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            maxHeight: '250px',
+                                            overflowY: 'auto',
+                                            background: 'var(--bg-primary)',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: 'var(--radius-md)',
+                                            marginBottom: '0.5rem',
+                                            boxShadow: '0 -4px 12px rgba(0,0,0,0.3)'
+                                        }}>
+                                            <div style={{
+                                                padding: '0.5rem 0.75rem',
+                                                borderBottom: '1px solid var(--border-color)',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center'
+                                            }}>
+                                                <span style={{ fontWeight: '600', fontSize: '0.8rem' }}>💬 Saved Replies</span>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-secondary"
+                                                    onClick={() => setShowCreateReply(true)}
+                                                    style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}
+                                                >
+                                                    + New
+                                                </button>
+                                            </div>
+
+                                            {savedReplies.length === 0 ? (
+                                                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                    No saved replies yet. Click "+ New" to create one.
+                                                </div>
+                                            ) : (
+                                                savedReplies.map(reply => (
+                                                    <div
+                                                        key={reply.id}
+                                                        onClick={() => handleUseSavedReply(reply)}
+                                                        style={{
+                                                            padding: '0.5rem 0.75rem',
+                                                            cursor: 'pointer',
+                                                            borderBottom: '1px solid var(--border-color)',
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'flex-start',
+                                                            transition: 'background 0.2s'
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                    >
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontWeight: '500', fontSize: '0.8rem' }}>
+                                                                {reply.title}
+                                                                {reply.shortcut && (
+                                                                    <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                                                                        /{reply.shortcut}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                                {reply.content.substring(0, 60)}{reply.content.length > 60 ? '...' : ''}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteSavedReply(reply.id);
+                                                            }}
+                                                            style={{
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                color: 'var(--text-muted)',
+                                                                cursor: 'pointer',
+                                                                fontSize: '0.7rem'
+                                                            }}
+                                                        >
+                                                            🗑️
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Create Saved Reply Modal */}
+                                    {showCreateReply && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            bottom: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            background: 'var(--bg-primary)',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: 'var(--radius-md)',
+                                            marginBottom: '0.5rem',
+                                            padding: '0.75rem',
+                                            boxShadow: '0 -4px 12px rgba(0,0,0,0.3)'
+                                        }}>
+                                            <div style={{ marginBottom: '0.5rem' }}>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    placeholder="Title (e.g., 'Greeting')"
+                                                    value={newReplyTitle}
+                                                    onChange={(e) => setNewReplyTitle(e.target.value)}
+                                                    style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    placeholder="Shortcut (optional, e.g., 'hi')"
+                                                    value={newReplyShortcut}
+                                                    onChange={(e) => setNewReplyShortcut(e.target.value)}
+                                                    style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}
+                                                />
+                                                <textarea
+                                                    className="form-input"
+                                                    placeholder="Message content..."
+                                                    value={newReplyContent}
+                                                    onChange={(e) => setNewReplyContent(e.target.value)}
+                                                    rows={3}
+                                                    style={{ fontSize: '0.8rem', resize: 'none' }}
+                                                />
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-secondary"
+                                                    onClick={() => {
+                                                        setShowCreateReply(false);
+                                                        setNewReplyTitle('');
+                                                        setNewReplyContent('');
+                                                        setNewReplyShortcut('');
+                                                    }}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-primary"
+                                                    onClick={handleCreateSavedReply}
+                                                    disabled={!newReplyTitle.trim() || !newReplyContent.trim()}
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Contact Details (Phone/Location/Email) */}
-                                {(selectedConversation.contact_info || selectedConversation.email) && (
-                                    <div style={{ marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
-                                        <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Contact Details</h5>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
-                                            {(selectedConversation.contact_info?.email || selectedConversation.participant_email) && (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <span>📧</span> <span style={{ wordBreak: 'break-all' }}>{selectedConversation.contact_info?.email || selectedConversation.participant_email}</span>
-                                                </div>
-                                            )}
-                                            {selectedConversation.contact_info?.phone && (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <span>📞</span> <span>{selectedConversation.contact_info.phone}</span>
-                                                </div>
-                                            )}
-                                            {selectedConversation.contact_info?.location && (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <span>📍</span> <span>{selectedConversation.contact_info.location}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Viewed Property Card - Enhanced */}
-                                {(selectedConversation.viewed_property || conversationInsights?.viewedProperty) && (
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                                            🏠 Viewed Property
-                                        </label>
-                                        <div style={{
-                                            background: 'var(--bg-secondary)',
-                                            borderRadius: 'var(--radius-md)',
-                                            overflow: 'hidden',
-                                            border: '1px solid var(--border-color)',
-                                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                        }}>
-                                            <div style={{ height: '140px', position: 'relative' }}>
-                                                <img
-                                                    src={(selectedConversation.viewed_property || conversationInsights?.viewedProperty).image}
-                                                    alt={(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}
-                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                />
-                                                {/* Price Tag */}
-                                                <div style={{
-                                                    position: 'absolute',
-                                                    bottom: '10px',
-                                                    left: '10px',
-                                                    background: 'rgba(0,0,0,0.7)',
-                                                    color: 'white',
-                                                    padding: '4px 8px',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.9rem',
-                                                    fontWeight: '600'
-                                                }}>
-                                                    ₱ {parseInt((selectedConversation.viewed_property || conversationInsights?.viewedProperty).price).toLocaleString()}
-                                                </div>
-                                            </div>
-                                            <div style={{ padding: '1rem' }}>
-                                                <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem', fontWeight: '600' }}>
-                                                    {(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}
-                                                </h4>
-                                                <div style={{
-                                                    fontSize: '0.75rem',
-                                                    color: 'var(--text-muted)',
-                                                    marginBottom: '0.5rem',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem'
-                                                }}>
-                                                    <span>{(selectedConversation.viewed_property || conversationInsights?.viewedProperty).id.substring(0, 8)}...</span>
-                                                    <span>•</span>
-                                                    <span>2 Beds</span>
-                                                    <span>•</span>
-                                                    <span>2 Baths</span>
-                                                </div>
-
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
-                                                    <button
-                                                        className="btn btn-sm"
-                                                        style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600' }}
-                                                        onClick={() => alert(`Opening details for ${(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}`)}
-                                                    >
-                                                        View Details
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-sm btn-primary"
-                                                        style={{ width: '100%', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                                                        onClick={() => handleSendPropertyCard(selectedConversation.viewed_property || conversationInsights?.viewedProperty)}
-                                                    >
-                                                        📤 Send to Chat
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-sm"
-                                                        style={{ width: '100%', background: '#dc2626', color: 'white', border: '1px solid #dc2626', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                                                        onClick={() => handleSendVideo(selectedConversation.viewed_property || conversationInsights?.viewedProperty)}
-                                                    >
-                                                        🎥 Send Video
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-sm"
-                                                        style={{ width: '100%', background: 'linear-gradient(45deg, #f59e0b, #ef4444)', color: 'white', border: 'none', fontWeight: '700', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-                                                        onClick={handleSendTopSelling}
-                                                    >
-                                                        🔥 Send Top Selling
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-sm"
-                                                        style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                                                        onClick={() => {
-                                                            const prop = selectedConversation.viewed_property || conversationInsights?.viewedProperty;
-                                                            const inquiryMessage = `Hi, I am interested in ${prop.title}. Can you provide more details?`;
-                                                            setMessageText(inquiryMessage);
-                                                        }}
-                                                    >
-                                                        💬 Inquire
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Conversations Summary (AI) */}
-                                {selectedConversation.ai_summary && (
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                                            🤖 AI Summary
-                                        </label>
-                                        <div style={{
-                                            background: 'rgba(124, 58, 237, 0.1)',
-                                            border: '1px solid rgba(124, 58, 237, 0.2)',
-                                            borderRadius: 'var(--radius-md)',
-                                            padding: '1rem'
-                                        }}>
-                                            <p style={{ fontSize: '0.85rem', lineHeight: '1.5', margin: 0, color: 'var(--text-primary)' }}>
-                                                {selectedConversation.ai_summary}
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Tags Section */}
-                                <div style={{ marginBottom: '1rem' }}>
-                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                                        🏷️ Tags
-                                    </label>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.5rem' }}>
-                                        {loadingTags ? (
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading...</span>
-                                        ) : conversationTags.length === 0 ? (
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No tags</span>
-                                        ) : (
-                                            conversationTags.map(tag => (
-                                                <span
-                                                    key={tag.id}
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.25rem',
-                                                        padding: '0.2rem 0.5rem',
-                                                        background: tag.color || '#a855f7',
-                                                        color: 'white',
-                                                        borderRadius: '999px',
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: '500'
-                                                    }}
-                                                >
-                                                    {tag.name}
-                                                    <button
-                                                        onClick={() => handleRemoveTagFromConversation(tag.id)}
-                                                        style={{
-                                                            background: 'none',
-                                                            border: 'none',
-                                                            color: 'white',
-                                                            cursor: 'pointer',
-                                                            padding: '0 2px',
-                                                            fontSize: '0.7rem',
-                                                            opacity: 0.8
-                                                        }}
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </span>
-                                            ))
-                                        )}
-                                    </div>
-                                    {/* Add Tag Dropdown */}
-                                    <select
-                                        className="form-select"
-                                        value=""
+                                {/* Message Input Row */}
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder="Type a message... (use /shortcut for quick replies)"
+                                        value={messageText}
                                         onChange={(e) => {
-                                            if (e.target.value) {
-                                                handleAddTagToConversation(e.target.value);
-                                                e.target.value = '';
+                                            const value = e.target.value;
+                                            setMessageText(value);
+
+                                            // Check for shortcut expansion
+                                            if (value.startsWith('/') && value.length > 1) {
+                                                const shortcut = value.slice(1).toLowerCase();
+                                                const matchingReply = savedReplies.find(r =>
+                                                    r.shortcut?.toLowerCase() === shortcut
+                                                );
+                                                if (matchingReply) {
+                                                    // Show a hint but don't auto-expand yet
+                                                }
                                             }
                                         }}
-                                        style={{ fontSize: '0.75rem', padding: '0.35rem' }}
+                                        onKeyDown={(e) => {
+                                            // Expand shortcut on space or tab after /shortcut
+                                            if ((e.key === ' ' || e.key === 'Tab') && messageText.startsWith('/')) {
+                                                const shortcut = messageText.slice(1).toLowerCase().trim();
+                                                const matchingReply = savedReplies.find(r =>
+                                                    r.shortcut?.toLowerCase() === shortcut
+                                                );
+                                                if (matchingReply) {
+                                                    e.preventDefault();
+                                                    setMessageText(matchingReply.content);
+                                                    facebookService.useSavedReply(matchingReply.id);
+                                                }
+                                            }
+                                        }}
+                                        style={{ flex: 1 }}
+                                        disabled={loading}
+                                    />
+                                    <button
+                                        type="submit"
+                                        className="btn btn-primary"
+                                        disabled={loading || !messageText.trim()}
                                     >
-                                        <option value="">+ Add tag...</option>
-                                        {tags
-                                            .filter(t => !conversationTags.find(ct => ct.id === t.id))
-                                            .map(tag => (
-                                                <option key={tag.id} value={tag.id}>{tag.name}</option>
-                                            ))
+                                        {loading ? '⏳' : '📤'}
+                                    </button>
+                                </div>
+                            </form>
+                        </>
+                    ) : (
+                        <div style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--text-muted)',
+                            flexDirection: 'column',
+                            gap: '1rem'
+                        }}>
+                            <div style={{ fontSize: '3rem' }}>💬</div>
+                            <div>Select a conversation to view messages</div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right Sidebar - Contact Details */}
+                <div
+                    className={`messenger-details ${mobileView === 'details' ? 'mobile-active' : ''}`}
+                    style={{
+                        borderLeft: '1px solid var(--border-color)',
+                        padding: '1rem',
+                        background: 'var(--bg-primary)',
+                        overflowY: 'auto'
+                    }}>
+                    {selectedConversation ? (
+                        <>
+                            {/* Contact Info */}
+                            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                                <div style={{
+                                    width: '80px',
+                                    height: '80px',
+                                    borderRadius: '50%',
+                                    background: 'var(--primary)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontWeight: 'bold',
+                                    fontSize: '2rem',
+                                    margin: '0 auto 0.75rem'
+                                }}>
+                                    {selectedConversation.participant_picture_url ? (
+                                        <img
+                                            src={selectedConversation.participant_picture_url}
+                                            alt=""
+                                            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        selectedConversation.participant_name?.charAt(0)?.toUpperCase() || '?'
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <h4 style={{ margin: 0 }}>
+                                        {selectedConversation.participant_name || 'Unknown'}
+                                    </h4>
+                                    {!selectedConversation.participant_name && (
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    // First try to fetch from Facebook
+                                                    await refreshContactName();
+                                                    alert('Name refreshed successfully!');
+                                                } catch (err) {
+                                                    console.error('Failed to refresh name:', err);
+                                                    // If Facebook fails, prompt user to enter a custom name
+                                                    const customName = window.prompt(
+                                                        'Facebook could not provide this contact\'s name (privacy restriction).\n\nEnter a name for this contact:',
+                                                        ''
+                                                    );
+                                                    if (customName && customName.trim()) {
+                                                        try {
+                                                            await setContactName(customName.trim());
+                                                            alert('Name set successfully!');
+                                                        } catch (setErr) {
+                                                            console.error('Failed to set custom name:', setErr);
+                                                            alert('Failed to save the name. Please try again.');
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                            className="btn btn-sm btn-secondary"
+                                            title="Fetch name from Facebook or set custom name"
+                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                                        >
+                                            🔄 Set Name
+                                        </button>
+                                    )}
+                                </div>
+                                {selectedConversation.participant_email && (
+                                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                        {selectedConversation.participant_email}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Contact Details (Phone/Location/Email) */}
+                            {(selectedConversation.contact_info || selectedConversation.email) && (
+                                <div style={{ marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+                                    <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Contact Details</h5>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                                        {(selectedConversation.contact_info?.email || selectedConversation.participant_email) && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>📧</span> <span style={{ wordBreak: 'break-all' }}>{selectedConversation.contact_info?.email || selectedConversation.participant_email}</span>
+                                            </div>
+                                        )}
+                                        {selectedConversation.contact_info?.phone && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>📞</span> <span>{selectedConversation.contact_info.phone}</span>
+                                            </div>
+                                        )}
+                                        {selectedConversation.contact_info?.location && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>📍</span> <span>{selectedConversation.contact_info.location}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Viewed Property Card - Enhanced */}
+                            {(selectedConversation.viewed_property || conversationInsights?.viewedProperty) && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                                        🏠 Viewed Property
+                                    </label>
+                                    <div style={{
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)',
+                                        overflow: 'hidden',
+                                        border: '1px solid var(--border-color)',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}>
+                                        <div style={{ height: '140px', position: 'relative' }}>
+                                            <img
+                                                src={(selectedConversation.viewed_property || conversationInsights?.viewedProperty).image}
+                                                alt={(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                            {/* Price Tag */}
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: '10px',
+                                                left: '10px',
+                                                background: 'rgba(0,0,0,0.7)',
+                                                color: 'white',
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: '600'
+                                            }}>
+                                                ₱ {parseInt((selectedConversation.viewed_property || conversationInsights?.viewedProperty).price).toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div style={{ padding: '1rem' }}>
+                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem', fontWeight: '600' }}>
+                                                {(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}
+                                            </h4>
+                                            <div style={{
+                                                fontSize: '0.75rem',
+                                                color: 'var(--text-muted)',
+                                                marginBottom: '0.5rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem'
+                                            }}>
+                                                <span>{(selectedConversation.viewed_property || conversationInsights?.viewedProperty).id.substring(0, 8)}...</span>
+                                                <span>•</span>
+                                                <span>2 Beds</span>
+                                                <span>•</span>
+                                                <span>2 Baths</span>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600' }}
+                                                    onClick={() => alert(`Opening details for ${(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}`)}
+                                                >
+                                                    View Details
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm btn-primary"
+                                                    style={{ width: '100%', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                                                    onClick={() => handleSendPropertyCard(selectedConversation.viewed_property || conversationInsights?.viewedProperty)}
+                                                >
+                                                    📤 Send to Chat
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: '#dc2626', color: 'white', border: '1px solid #dc2626', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                                                    onClick={() => handleSendVideo(selectedConversation.viewed_property || conversationInsights?.viewedProperty)}
+                                                >
+                                                    🎥 Send Video
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: 'linear-gradient(45deg, #f59e0b, #ef4444)', color: 'white', border: 'none', fontWeight: '700', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                                    onClick={handleSendTopSelling}
+                                                >
+                                                    🔥 Send Top Selling
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ width: '100%', background: 'white', color: '#111827', border: '1px solid #e5e7eb', fontWeight: '600', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                                                    onClick={() => {
+                                                        const prop = selectedConversation.viewed_property || conversationInsights?.viewedProperty;
+                                                        const inquiryMessage = `Hi, I am interested in ${prop.title}. Can you provide more details?`;
+                                                        setMessageText(inquiryMessage);
+                                                    }}
+                                                >
+                                                    💬 Inquire
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Conversations Summary (AI) */}
+                            {selectedConversation.ai_summary && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                                        🤖 AI Summary
+                                    </label>
+                                    <div style={{
+                                        background: 'rgba(124, 58, 237, 0.1)',
+                                        border: '1px solid rgba(124, 58, 237, 0.2)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: '1rem'
+                                    }}>
+                                        <p style={{ fontSize: '0.85rem', lineHeight: '1.5', margin: 0, color: 'var(--text-primary)' }}>
+                                            {selectedConversation.ai_summary}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tags Section */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                                    🏷️ Tags
+                                </label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.5rem' }}>
+                                    {loadingTags ? (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading...</span>
+                                    ) : conversationTags.length === 0 ? (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No tags</span>
+                                    ) : (
+                                        conversationTags.map(tag => (
+                                            <span
+                                                key={tag.id}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                    padding: '0.2rem 0.5rem',
+                                                    background: tag.color || '#a855f7',
+                                                    color: 'white',
+                                                    borderRadius: '999px',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: '500'
+                                                }}
+                                            >
+                                                {tag.name}
+                                                <button
+                                                    onClick={() => handleRemoveTagFromConversation(tag.id)}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: 'white',
+                                                        cursor: 'pointer',
+                                                        padding: '0 2px',
+                                                        fontSize: '0.7rem',
+                                                        opacity: 0.8
+                                                    }}
+                                                >
+                                                    ×
+                                                </button>
+                                            </span>
+                                        ))
+                                    )}
+                                </div>
+                                {/* Add Tag Dropdown */}
+                                <select
+                                    className="form-select"
+                                    value=""
+                                    onChange={(e) => {
+                                        if (e.target.value) {
+                                            handleAddTagToConversation(e.target.value);
+                                            e.target.value = '';
                                         }
-                                    </select>
-                                </div>
+                                    }}
+                                    style={{ fontSize: '0.75rem', padding: '0.35rem' }}
+                                >
+                                    <option value="">+ Add tag...</option>
+                                    {tags
+                                        .filter(t => !conversationTags.find(ct => ct.id === t.id))
+                                        .map(tag => (
+                                            <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
 
 
 
-                                {/* Link to Client & Assign Group */}
-                                <div className="action-buttons-grid">
-                                    {/* Link to Client */}
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-                                            Link to Client
-                                        </label>
-                                        <select
-                                            className="form-select"
-                                            value={selectedConversation.linked_client_id || ''}
-                                            onChange={(e) => linkToClient(selectedConversation.conversation_id, e.target.value || null)}
-                                            style={{ width: '100%' }}
-                                        >
-                                            <option value="">Not linked</option>
-                                            {clients.map(client => (
-                                                <option key={client.id} value={client.id}>
-                                                    {client.clientName}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Assign to User */}
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-                                            Assigned To
-                                        </label>
-                                        <select
-                                            className="form-select"
-                                            value={selectedConversation.assigned_to || ''}
-                                            onChange={(e) => assignToUser(selectedConversation.conversation_id, e.target.value || null)}
-                                            style={{ width: '100%' }}
-                                        >
-                                            <option value="">Unassigned</option>
-                                            {users.map(user => (
-                                                <option key={user.id} value={user.id}>
-                                                    {user.name || user.email}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {/* Lead Status */}
-                                <div>
+                            {/* Link to Client & Assign Group */}
+                            <div className="action-buttons-grid">
+                                {/* Link to Client */}
+                                <div style={{ flex: 1 }}>
                                     <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-                                        Lead Status (Pipeline)
+                                        Link to Client
                                     </label>
                                     <select
                                         className="form-select"
-                                        value={selectedConversation.lead_status || ''}
-                                        onChange={(e) => updateLeadStatus(selectedConversation.conversation_id, e.target.value)}
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--border-color)',
-                                            background: 'var(--bg-secondary)',
-                                            color: 'var(--text-primary)',
-                                            fontWeight: '500'
-                                        }}
+                                        value={selectedConversation.linked_client_id || ''}
+                                        onChange={(e) => linkToClient(selectedConversation.conversation_id, e.target.value || null)}
+                                        style={{ width: '100%' }}
                                     >
-                                        <option value="" disabled>Select Status...</option>
-                                        {Object.entries(LEAD_STATUS_CONFIG).map(([value, config]) => (
-                                            <option key={value} value={value}>
-                                                {config.icon} {config.label}
+                                        <option value="">Not linked</option>
+                                        {clients.map(client => (
+                                            <option key={client.id} value={client.id}>
+                                                {client.clientName}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
 
-
-                                {/* AI Analysis Button */}
-                                <div style={{ marginTop: '1rem' }}>
-                                    <button
-                                        className="btn btn-secondary"
-                                        onClick={analyzeCurrentConversation}
-                                        disabled={analyzing || messages.length === 0}
+                                {/* Assign to User */}
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
+                                        Assigned To
+                                    </label>
+                                    <select
+                                        className="form-select"
+                                        value={selectedConversation.assigned_to || ''}
+                                        onChange={(e) => assignToUser(selectedConversation.conversation_id, e.target.value || null)}
                                         style={{ width: '100%' }}
                                     >
-                                        {analyzing ? '⏳ Analyzing...' : '🤖 Analyze with AI'}
-                                    </button>
+                                        <option value="">Unassigned</option>
+                                        {users.map(user => (
+                                            <option key={user.id} value={user.id}>
+                                                {user.name || user.email}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
-
-                                {/* Delete Conversation Button */}
-                                <div style={{ marginTop: '0.5rem' }}>
-                                    <button
-                                        className="btn btn-secondary"
-                                        onClick={() => {
-                                            if (window.confirm(`Are you sure you want to delete the conversation with ${selectedConversation.participant_name}? This action cannot be undone.`)) {
-                                                deleteConversation(selectedConversation.conversation_id);
-                                            }
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            color: '#ef4444',
-                                            borderColor: '#ef4444'
-                                        }}
-                                    >
-                                        🗑️ Delete Conversation
-                                    </button>
-                                </div>
-
-                                {/* Conversation Insights Removed */}
-
-                                {/* AI Insights (from analysis) */}
-                                {
-                                    aiAnalysis && (
-                                        <div style={{
-                                            marginTop: '1rem',
-                                            padding: '1rem',
-                                            background: 'var(--bg-secondary)',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--primary-alpha)'
-                                        }}>
-                                            <h5 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                🤖 AI Insights
-                                            </h5>
-
-                                            {/* Lead Score */}
-                                            {aiAnalysis.leadScore && (
-                                                <div style={{ marginBottom: '0.75rem' }}>
-                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lead Score: </span>
-                                                    <span style={{
-                                                        padding: '0.125rem 0.5rem',
-                                                        borderRadius: '999px',
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: '600',
-                                                        background: aiAnalysis.leadScore.score === 'hot' ? 'var(--error)' :
-                                                            aiAnalysis.leadScore.score === 'warm' ? 'var(--warning)' : 'var(--text-muted)',
-                                                        color: 'white'
-                                                    }}>
-                                                        {aiAnalysis.leadScore.score?.toUpperCase()}
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                            {/* Properties Viewed (Mock) */}
-                                            <div style={{ marginBottom: '1.5rem' }}>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <span>🏠 Recently Viewed Properties</span>
-                                                    <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', background: 'var(--primary-alpha)', borderRadius: '4px', color: 'var(--primary)' }}>New</span>
-                                                </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                    {/* Simulated Mock Data based on conversation ID to vary content */}
-                                                    {(selectedConversation.conversation_id.charCodeAt(0) % 2 === 0) ? (
-                                                        <>
-                                                            <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                                                <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Modern 3-Bedroom Villa</div>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                                    <span>Viewed Gallery</span>
-                                                                    <span>2h ago</span>
-                                                                </div>
-                                                            </div>
-                                                            <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                                                <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Downtown Condo Unit</div>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                                    <span>Checked Price</span>
-                                                                    <span>1d ago</span>
-                                                                </div>
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Luxury Penthouse</div>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                                <span>Scheduled Visit</span>
-                                                                <span>5h ago</span>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Meeting Detected */}
-                                            {aiAnalysis.meeting?.hasMeeting && (
-                                                <div style={{
-                                                    padding: '0.75rem',
-                                                    background: 'var(--success-alpha, rgba(74, 222, 128, 0.1))',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    marginBottom: '0.75rem'
-                                                }}>
-                                                    <div style={{ fontWeight: '500', color: 'var(--success)', marginBottom: '0.25rem' }}>
-                                                        📅 Meeting Detected!
-                                                    </div>
-                                                    {aiAnalysis.meeting.datetime && (
-                                                        <div style={{ fontSize: '0.875rem' }}>
-                                                            {new Date(aiAnalysis.meeting.datetime).toLocaleString()}
-                                                        </div>
-                                                    )}
-                                                    {aiAnalysis.meeting.rawTimeText && (
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                                            "{aiAnalysis.meeting.rawTimeText}"
-                                                        </div>
-                                                    )}
-                                                    {!aiAnalysis.meetingBooked && (
-                                                        <button
-                                                            className="btn btn-sm btn-primary"
-                                                            onClick={() => bookMeetingFromAI({}, currentUserId)}
-                                                            disabled={loading}
-                                                            style={{ marginTop: '0.5rem', width: '100%' }}
-                                                        >
-                                                            📆 Book This Meeting
-                                                        </button>
-                                                    )}
-                                                    {aiAnalysis.meetingBooked && (
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.5rem' }}>
-                                                            ✅ Meeting booked!
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Extracted Details */}
-                                            {aiAnalysis.details && Object.values(aiAnalysis.details).some(v => v) && (
-                                                <div style={{ marginBottom: '0.75rem' }}>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                                                        Extracted Details:
-                                                    </div>
-                                                    {aiAnalysis.details.businessName && (
-                                                        <div style={{ fontSize: '0.875rem' }}>🏢 {aiAnalysis.details.businessName}</div>
-                                                    )}
-                                                    {aiAnalysis.details.facebookPage && (
-                                                        <div style={{ fontSize: '0.875rem' }}>📘 {aiAnalysis.details.facebookPage}</div>
-                                                    )}
-                                                    {aiAnalysis.details.niche && (
-                                                        <div style={{ fontSize: '0.875rem' }}>🎯 {aiAnalysis.details.niche}</div>
-                                                    )}
-                                                    {aiAnalysis.details.phone && (
-                                                        <div style={{ fontSize: '0.875rem' }}>📞 {aiAnalysis.details.phone}</div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* AI Notes */}
-                                            {aiAnalysis.notes && (
-                                                <div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                                                        AI Notes:
-                                                    </div>
-                                                    <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
-                                                        {aiAnalysis.notes}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                }
-
-                                {/* Existing Client Warning */}
-                                {
-                                    existingClient && !selectedConversation.linked_client_id && (
-                                        <div style={{
-                                            marginTop: '1rem',
-                                            padding: '1rem',
-                                            background: 'var(--warning-alpha, rgba(251, 191, 36, 0.1))',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--warning)'
-                                        }}>
-                                            <div style={{ fontWeight: '500', color: 'var(--warning)', marginBottom: '0.5rem' }}>
-                                                ⚠️ Existing Lead Found
-                                            </div>
-                                            <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                                                {existingClient.client_name}
-                                                {existingClient.business_name && ` (${existingClient.business_name})`}
-                                            </div>
-                                            <button
-                                                className="btn btn-sm btn-warning"
-                                                onClick={() => updateExistingLead(existingClient.id)}
-                                                disabled={loading}
-                                                style={{ width: '100%' }}
-                                            >
-                                                🔄 Update This Lead
-                                            </button>
-                                        </div>
-                                    )
-                                }
-
-                                {/* Add to Pipeline Button */}
-                                {
-                                    !selectedConversation.linked_client_id && !existingClient && (
-                                        <div style={{ marginTop: '1rem' }}>
-                                            <button
-                                                className="btn btn-primary"
-                                                onClick={async () => {
-                                                    // Start with basic info
-                                                    setTransferForm({
-                                                        clientName: selectedConversation.participant_name || '',
-                                                        businessName: '',
-                                                        contactDetails: '',
-                                                        pageLink: '',
-                                                        niche: '',
-                                                        notes: ''
-                                                    });
-                                                    setShowTransferModal(true);
-
-                                                    // Then run AI extraction in background
-                                                    if (messages && messages.length > 0) {
-                                                        setExtractingDetails(true);
-                                                        try {
-                                                            const [details, notes] = await Promise.all([
-                                                                extractContactDetails(messages, selectedConversation.participant_name),
-                                                                generateNotes(messages, selectedConversation.participant_name)
-                                                            ]);
-
-                                                            // Update form with extracted data
-                                                            setTransferForm(prev => ({
-                                                                ...prev,
-                                                                businessName: details?.businessName || prev.businessName,
-                                                                contactDetails: details?.phone || details?.email || prev.contactDetails,
-                                                                pageLink: details?.facebookPage || details?.website || prev.pageLink,
-                                                                niche: details?.niche || prev.niche,
-                                                                notes: notes || prev.notes
-                                                            }));
-                                                        } catch (err) {
-                                                            console.error('AI extraction error:', err);
-                                                        } finally {
-                                                            setExtractingDetails(false);
-                                                        }
-                                                    }
-                                                }}
-                                                disabled={loading || extractingDetails}
-                                                style={{ width: '100%' }}
-                                            >
-                                                {extractingDetails ? '🤖 Analyzing...' : '➕ Add to Pipeline'}
-                                            </button>
-                                        </div>
-                                    )
-                                }
-
-                                {/* Linked Client Info */}
-                                {
-                                    selectedConversation.linked_client && (
-                                        <div style={{
-                                            marginTop: '1rem',
-                                            padding: '1rem',
-                                            background: 'var(--bg-secondary)',
-                                            borderRadius: 'var(--radius-md)'
-                                        }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                                                <h5 style={{ margin: 0, fontSize: '0.875rem' }}>
-                                                    🔗 Linked Client
-                                                </h5>
-                                                <button
-                                                    onClick={() => {
-                                                        if (window.confirm('Unlink this conversation from the client?')) {
-                                                            linkToClient(selectedConversation.conversation_id, null);
-                                                        }
-                                                    }}
-                                                    style={{
-                                                        padding: '0.25rem 0.5rem',
-                                                        fontSize: '0.7rem',
-                                                        background: 'transparent',
-                                                        border: '1px solid var(--error)',
-                                                        color: 'var(--error)',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    onMouseEnter={(e) => {
-                                                        e.target.style.background = 'var(--error)';
-                                                        e.target.style.color = 'white';
-                                                    }}
-                                                    onMouseLeave={(e) => {
-                                                        e.target.style.background = 'transparent';
-                                                        e.target.style.color = 'var(--error)';
-                                                    }}
-                                                    title="Unlink from client"
-                                                >
-                                                    ✕ Unlink
-                                                </button>
-                                            </div>
-                                            <div style={{ fontWeight: '500' }}>
-                                                {selectedConversation.linked_client.client_name}
-                                            </div>
-                                            {selectedConversation.linked_client.business_name && (
-                                                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                                                    {selectedConversation.linked_client.business_name}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                }
-                            </>
-                        ) : (
-                            <div style={{
-                                textAlign: 'center',
-                                color: 'var(--text-muted)',
-                                paddingTop: '2rem'
-                            }}>
-                                Select a conversation to view details
                             </div>
-                        )
-                        }
-                    </div >
 
-                    {/* Error Toast */}
-                    {
-                        error && (
-                            <div style={{
-                                position: 'fixed',
-                                bottom: '1rem',
-                                right: '1rem',
-                                background: 'var(--error)',
-                                color: 'white',
-                                padding: '0.75rem 1rem',
-                                borderRadius: 'var(--radius-md)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                zIndex: 1000
-                            }}>
-                                <span>⚠️ {error}</span>
-                                <button
-                                    onClick={clearError}
+                            {/* Lead Status */}
+                            <div>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
+                                    Lead Status (Pipeline)
+                                </label>
+                                <select
+                                    className="form-select"
+                                    value={selectedConversation.lead_status || ''}
+                                    onChange={(e) => updateLeadStatus(selectedConversation.conversation_id, e.target.value)}
                                     style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        fontSize: '1rem'
+                                        width: '100%',
+                                        padding: '0.5rem',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--border-color)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontWeight: '500'
                                     }}
                                 >
-                                    ✕
+                                    <option value="" disabled>Select Status...</option>
+                                    {Object.entries(LEAD_STATUS_CONFIG).map(([value, config]) => (
+                                        <option key={value} value={value}>
+                                            {config.icon} {config.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+
+                            {/* AI Analysis Button */}
+                            <div style={{ marginTop: '1rem' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={analyzeCurrentConversation}
+                                    disabled={analyzing || messages.length === 0}
+                                    style={{ width: '100%' }}
+                                >
+                                    {analyzing ? '⏳ Analyzing...' : '🤖 Analyze with AI'}
                                 </button>
                             </div>
-                        )
-                    }
 
-                    {/* Bulk Message Modal */}
-                    {
-                        showBulkModal && (
-                            <div style={{
-                                position: 'fixed',
-                                inset: 0,
-                                background: 'rgba(0,0,0,0.5)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                zIndex: 1001
-                            }}>
-                                <div style={{
-                                    background: 'var(--bg-primary)',
-                                    borderRadius: 'var(--radius-lg)',
-                                    padding: '1.5rem',
-                                    width: '90%',
-                                    maxWidth: '500px'
-                                }}>
-                                    <h3 style={{ marginTop: 0 }}>📢 Send Bulk Message</h3>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                                        Uses ACCOUNT_UPDATE tag for Facebook compliance
-                                    </p>
-
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                                            Send to:
-                                        </label>
-                                        <select
-                                            className="form-input"
-                                            value={bulkFilter}
-                                            onChange={(e) => {
-                                                setBulkFilter(e.target.value);
-                                                if (e.target.value !== 'tag') {
-                                                    setBulkTagFilter('');
-                                                }
-                                            }}
-                                            style={{ width: '100%' }}
-                                        >
-                                            <optgroup label="📋 Contact Status">
-                                                <option value="all">All Conversations</option>
-                                                <option value="selected">Selected Contacts ({selectedConversations.size})</option>
-                                            </optgroup>
-                                            <optgroup label="📅 Booking Status">
-                                                <option value="booked">Booked (In Pipeline)</option>
-                                                <option value="unbooked">Not Booked</option>
-                                            </optgroup>
-                                            <optgroup label="📊 Pipeline Status">
-                                                <option value="pipeline">In Pipeline</option>
-                                                <option value="not_pipeline">Not in Pipeline</option>
-                                            </optgroup>
-                                            <optgroup label="💬 Reply Status">
-                                                <option value="no_reply">Awaiting Reply (No Response)</option>
-                                                <option value="replied">Already Replied</option>
-                                            </optgroup>
-                                            <optgroup label="📝 Proposal Status">
-                                                <option value="proposal_sent">Proposal Sent</option>
-                                                <option value="proposal_waiting">Proposal Waiting</option>
-                                            </optgroup>
-                                            <optgroup label="🏷️ By Tag">
-                                                <option value="tag">Filter by Tag...</option>
-                                            </optgroup>
-                                        </select>
-                                    </div>
-
-                                    {/* Tag Selection - shown when filter is 'tag' */}
-                                    {bulkFilter === 'tag' && (
-                                        <div style={{ marginBottom: '1rem' }}>
-                                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                                                Select Tag:
-                                            </label>
-                                            <select
-                                                className="form-input"
-                                                value={bulkTagFilter}
-                                                onChange={(e) => setBulkTagFilter(e.target.value)}
-                                                style={{ width: '100%' }}
-                                            >
-                                                <option value="">-- Select a tag --</option>
-                                                {tags.map(tag => (
-                                                    <option key={tag.id} value={tag.id}>
-                                                        {tag.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            {tags.length === 0 && (
-                                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                                    No tags created yet. Create tags in the Tags section.
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Show count of recipients */}
-                                    {bulkFilter === 'selected' && (
-                                        <div style={{
-                                            padding: '0.5rem',
-                                            background: 'var(--primary-alpha)',
-                                            borderRadius: 'var(--radius-md)',
-                                            marginBottom: '1rem',
-                                            fontSize: '0.875rem'
-                                        }}>
-                                            {selectedConversations.size > 0
-                                                ? `Will send to ${selectedConversations.size} selected contact${selectedConversations.size !== 1 ? 's' : ''}`
-                                                : '⚠️ No contacts selected. Use checkbox mode to select contacts first.'
-                                            }
-                                        </div>
-                                    )}
-
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                                            Message:
-                                        </label>
-                                        <textarea
-                                            className="form-input"
-                                            value={bulkMessage}
-                                            onChange={(e) => setBulkMessage(e.target.value)}
-                                            placeholder="Hi {first_name}! Type your message here..."
-                                            rows={4}
-                                            style={{ width: '100%', resize: 'vertical' }}
-                                        />
-                                        <div style={{
-                                            marginTop: '0.5rem',
-                                            padding: '0.75rem',
-                                            background: 'var(--bg-secondary)',
-                                            borderRadius: 'var(--radius-md)',
-                                            fontSize: '0.75rem',
-                                            color: 'var(--text-muted)'
-                                        }}>
-                                            <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
-                                                📝 Template Variables (click to insert):
-                                            </div>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                {[
-                                                    { var: '{name}', desc: 'Full name' },
-                                                    { var: '{first_name}', desc: 'First name' },
-                                                    { var: '{date}', desc: 'Today\'s date' },
-                                                    { var: '{time}', desc: 'Current time' },
-                                                    { var: '{day}', desc: 'Day of week' }
-                                                ].map(item => (
-                                                    <button
-                                                        key={item.var}
-                                                        type="button"
-                                                        onClick={() => setBulkMessage(prev => prev + item.var)}
-                                                        style={{
-                                                            padding: '0.25rem 0.5rem',
-                                                            background: 'var(--primary-alpha)',
-                                                            border: '1px solid var(--primary)',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                            color: 'var(--primary)',
-                                                            cursor: 'pointer',
-                                                            fontSize: '0.7rem',
-                                                            fontFamily: 'monospace'
-                                                        }}
-                                                        title={item.desc}
-                                                    >
-                                                        {item.var}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                        <button
-                                            className="btn btn-secondary"
-                                            onClick={() => setShowBulkModal(false)}
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            className="btn btn-primary"
-                                            onClick={handleSendBulkMessage}
-                                            disabled={bulkSending || !bulkMessage.trim()}
-                                        >
-                                            {bulkSending ? 'Sending...' : '📢 Send to All'}
-                                        </button>
-                                    </div>
-                                </div>
+                            {/* Delete Conversation Button */}
+                            <div style={{ marginTop: '0.5rem' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => {
+                                        if (window.confirm(`Are you sure you want to delete the conversation with ${selectedConversation.participant_name}? This action cannot be undone.`)) {
+                                            deleteConversation(selectedConversation.conversation_id);
+                                        }
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        color: '#ef4444',
+                                        borderColor: '#ef4444'
+                                    }}
+                                >
+                                    🗑️ Delete Conversation
+                                </button>
                             </div>
-                        )
-                    }
 
-                    {/* Tags Modal */}
-                    {
-                        showTagsModal && (
-                            <div style={{
-                                position: 'fixed',
-                                inset: 0,
-                                background: 'rgba(0,0,0,0.5)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                zIndex: 1001
-                            }}>
-                                <div style={{
-                                    background: 'var(--bg-primary)',
-                                    borderRadius: 'var(--radius-lg)',
-                                    padding: '1.5rem',
-                                    width: '90%',
-                                    maxWidth: '400px'
-                                }}>
-                                    <h3 style={{ marginTop: 0 }}>🏷️ Manage Tags</h3>
+                            {/* Conversation Insights Removed */}
 
-                                    {/* Create new tag */}
-                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                                        <input
-                                            type="color"
-                                            value={newTagColor}
-                                            onChange={(e) => setNewTagColor(e.target.value)}
-                                            style={{ width: '40px', height: '36px', padding: 0, border: 'none', cursor: 'pointer' }}
-                                        />
-                                        <input
-                                            type="text"
-                                            className="form-input"
-                                            value={newTagName}
-                                            onChange={(e) => setNewTagName(e.target.value)}
-                                            placeholder="New tag name..."
-                                            style={{ flex: 1 }}
-                                        />
-                                        <button
-                                            className="btn btn-primary btn-sm"
-                                            onClick={handleCreateTag}
-                                            disabled={!newTagName.trim()}
-                                        >
-                                            +
-                                        </button>
-                                    </div>
+                            {/* AI Insights (from analysis) */}
+                            {
+                                aiAnalysis && (
+                                    <div style={{
+                                        marginTop: '1rem',
+                                        padding: '1rem',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--primary-alpha)'
+                                    }}>
+                                        <h5 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            🤖 AI Insights
+                                        </h5>
 
-                                    {/* Tag list */}
-                                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                        {tags.length === 0 ? (
-                                            <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
-                                                No tags yet. Create one above!
-                                            </p>
-                                        ) : (
-                                            tags.map(tag => (
-                                                <div
-                                                    key={tag.id}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'space-between',
-                                                        padding: '0.5rem',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        marginBottom: '0.25rem',
-                                                        background: 'var(--bg-secondary)'
-                                                    }}
-                                                >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <div style={{
-                                                            width: '12px',
-                                                            height: '12px',
-                                                            borderRadius: '50%',
-                                                            background: tag.color
-                                                        }} />
-                                                        <span>{tag.name}</span>
+                                        {/* Lead Score */}
+                                        {aiAnalysis.leadScore && (
+                                            <div style={{ marginBottom: '0.75rem' }}>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lead Score: </span>
+                                                <span style={{
+                                                    padding: '0.125rem 0.5rem',
+                                                    borderRadius: '999px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '600',
+                                                    background: aiAnalysis.leadScore.score === 'hot' ? 'var(--error)' :
+                                                        aiAnalysis.leadScore.score === 'warm' ? 'var(--warning)' : 'var(--text-muted)',
+                                                    color: 'white'
+                                                }}>
+                                                    {aiAnalysis.leadScore.score?.toUpperCase()}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {/* Properties Viewed (Mock) */}
+                                        <div style={{ marginBottom: '1.5rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>🏠 Recently Viewed Properties</span>
+                                                <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', background: 'var(--primary-alpha)', borderRadius: '4px', color: 'var(--primary)' }}>New</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                {/* Simulated Mock Data based on conversation ID to vary content */}
+                                                {(selectedConversation.conversation_id.charCodeAt(0) % 2 === 0) ? (
+                                                    <>
+                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Modern 3-Bedroom Villa</div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                                <span>Viewed Gallery</span>
+                                                                <span>2h ago</span>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Downtown Condo Unit</div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                                <span>Checked Price</span>
+                                                                <span>1d ago</span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                        <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Luxury Penthouse</div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                            <span>Scheduled Visit</span>
+                                                            <span>5h ago</span>
+                                                        </div>
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleDeleteTag(tag.id)}
-                                                        style={{
-                                                            background: 'transparent',
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            color: 'var(--text-muted)'
-                                                        }}
-                                                    >
-                                                        🗑️
-                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Meeting Detected */}
+                                        {aiAnalysis.meeting?.hasMeeting && (
+                                            <div style={{
+                                                padding: '0.75rem',
+                                                background: 'var(--success-alpha, rgba(74, 222, 128, 0.1))',
+                                                borderRadius: 'var(--radius-sm)',
+                                                marginBottom: '0.75rem'
+                                            }}>
+                                                <div style={{ fontWeight: '500', color: 'var(--success)', marginBottom: '0.25rem' }}>
+                                                    📅 Meeting Detected!
                                                 </div>
-                                            ))
+                                                {aiAnalysis.meeting.datetime && (
+                                                    <div style={{ fontSize: '0.875rem' }}>
+                                                        {new Date(aiAnalysis.meeting.datetime).toLocaleString()}
+                                                    </div>
+                                                )}
+                                                {aiAnalysis.meeting.rawTimeText && (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                                        "{aiAnalysis.meeting.rawTimeText}"
+                                                    </div>
+                                                )}
+                                                {!aiAnalysis.meetingBooked && (
+                                                    <button
+                                                        className="btn btn-sm btn-primary"
+                                                        onClick={() => bookMeetingFromAI({}, currentUserId)}
+                                                        disabled={loading}
+                                                        style={{ marginTop: '0.5rem', width: '100%' }}
+                                                    >
+                                                        📆 Book This Meeting
+                                                    </button>
+                                                )}
+                                                {aiAnalysis.meetingBooked && (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.5rem' }}>
+                                                        ✅ Meeting booked!
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Extracted Details */}
+                                        {aiAnalysis.details && Object.values(aiAnalysis.details).some(v => v) && (
+                                            <div style={{ marginBottom: '0.75rem' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                                    Extracted Details:
+                                                </div>
+                                                {aiAnalysis.details.businessName && (
+                                                    <div style={{ fontSize: '0.875rem' }}>🏢 {aiAnalysis.details.businessName}</div>
+                                                )}
+                                                {aiAnalysis.details.facebookPage && (
+                                                    <div style={{ fontSize: '0.875rem' }}>📘 {aiAnalysis.details.facebookPage}</div>
+                                                )}
+                                                {aiAnalysis.details.niche && (
+                                                    <div style={{ fontSize: '0.875rem' }}>🎯 {aiAnalysis.details.niche}</div>
+                                                )}
+                                                {aiAnalysis.details.phone && (
+                                                    <div style={{ fontSize: '0.875rem' }}>📞 {aiAnalysis.details.phone}</div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* AI Notes */}
+                                        {aiAnalysis.notes && (
+                                            <div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                                    AI Notes:
+                                                </div>
+                                                <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
+                                                    {aiAnalysis.notes}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
+                                )
+                            }
 
-                                    <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                            {/* Existing Client Warning */}
+                            {
+                                existingClient && !selectedConversation.linked_client_id && (
+                                    <div style={{
+                                        marginTop: '1rem',
+                                        padding: '1rem',
+                                        background: 'var(--warning-alpha, rgba(251, 191, 36, 0.1))',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--warning)'
+                                    }}>
+                                        <div style={{ fontWeight: '500', color: 'var(--warning)', marginBottom: '0.5rem' }}>
+                                            ⚠️ Existing Lead Found
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                                            {existingClient.client_name}
+                                            {existingClient.business_name && ` (${existingClient.business_name})`}
+                                        </div>
                                         <button
-                                            className="btn btn-secondary"
-                                            onClick={() => setShowTagsModal(false)}
+                                            className="btn btn-sm btn-warning"
+                                            onClick={() => updateExistingLead(existingClient.id)}
+                                            disabled={loading}
+                                            style={{ width: '100%' }}
                                         >
-                                            Close
+                                            🔄 Update This Lead
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-                        )
-                    }
+                                )
+                            }
 
-                    {/* Transfer to Pipeline Confirmation Modal */}
-                    {
-                        showTransferModal && (
-                            <div style={{
-                                position: 'fixed',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                background: 'rgba(0,0,0,0.7)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                zIndex: 1000
-                            }}>
-                                <div style={{
-                                    background: 'var(--bg-primary)',
-                                    padding: '1.5rem',
-                                    borderRadius: 'var(--radius-lg)',
-                                    width: '100%',
-                                    maxWidth: '500px',
-                                    maxHeight: '90vh',
-                                    overflow: 'auto'
-                                }}>
-                                    <h3 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        ➕ Add to Pipeline
-                                    </h3>
-                                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                                        Review and edit the details before adding to pipeline:
-                                    </p>
-
-                                    {/* AI Extraction Banner */}
-                                    {extractingDetails && (
-                                        <div style={{
-                                            padding: '0.75rem',
-                                            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
-                                            borderRadius: 'var(--radius-md)',
-                                            marginBottom: '1rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            border: '1px solid rgba(99, 102, 241, 0.3)'
-                                        }}>
-                                            <span className="spinner" style={{ width: '16px', height: '16px' }}>🤖</span>
-                                            <span style={{ fontSize: '0.875rem', color: 'var(--primary)' }}>
-                                                AI is extracting contact details from conversation...
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                                Client Name *
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={transferForm.clientName}
-                                                onChange={(e) => setTransferForm(prev => ({ ...prev, clientName: e.target.value }))}
-                                                placeholder="Enter client name"
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)'
-                                                }}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                                Business Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={transferForm.businessName}
-                                                onChange={(e) => setTransferForm(prev => ({ ...prev, businessName: e.target.value }))}
-                                                placeholder="Enter business name"
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)'
-                                                }}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                                Contact Details (Phone/Email)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={transferForm.contactDetails}
-                                                onChange={(e) => setTransferForm(prev => ({ ...prev, contactDetails: e.target.value }))}
-                                                placeholder="Enter phone or email"
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)'
-                                                }}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                                Facebook Page Link
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={transferForm.pageLink}
-                                                onChange={(e) => setTransferForm(prev => ({ ...prev, pageLink: e.target.value }))}
-                                                placeholder="Enter Facebook page URL"
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)'
-                                                }}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                                Niche/Industry
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={transferForm.niche}
-                                                onChange={(e) => setTransferForm(prev => ({ ...prev, niche: e.target.value }))}
-                                                placeholder="Enter business niche"
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)'
-                                                }}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                                                Notes
-                                            </label>
-                                            <textarea
-                                                value={transferForm.notes}
-                                                onChange={(e) => setTransferForm(prev => ({ ...prev, notes: e.target.value }))}
-                                                placeholder="Additional notes..."
-                                                rows={3}
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)',
-                                                    resize: 'vertical'
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                        <button
-                                            className="btn btn-secondary"
-                                            onClick={() => setShowTransferModal(false)}
-                                        >
-                                            Cancel
-                                        </button>
+                            {/* Add to Pipeline Button */}
+                            {
+                                !selectedConversation.linked_client_id && !existingClient && (
+                                    <div style={{ marginTop: '1rem' }}>
                                         <button
                                             className="btn btn-primary"
                                             onClick={async () => {
-                                                await transferToClient({
-                                                    clientName: transferForm.clientName,
-                                                    businessName: transferForm.businessName,
-                                                    contactDetails: transferForm.contactDetails,
-                                                    facebookPage: transferForm.pageLink,
-                                                    niche: transferForm.niche,
-                                                    notes: transferForm.notes
-                                                }, currentUserId);
-                                                setShowTransferModal(false);
+                                                // Start with basic info
+                                                setTransferForm({
+                                                    clientName: selectedConversation.participant_name || '',
+                                                    businessName: '',
+                                                    contactDetails: '',
+                                                    pageLink: '',
+                                                    niche: '',
+                                                    notes: ''
+                                                });
+                                                setShowTransferModal(true);
+
+                                                // Then run AI extraction in background
+                                                if (messages && messages.length > 0) {
+                                                    setExtractingDetails(true);
+                                                    try {
+                                                        const [details, notes] = await Promise.all([
+                                                            extractContactDetails(messages, selectedConversation.participant_name),
+                                                            generateNotes(messages, selectedConversation.participant_name)
+                                                        ]);
+
+                                                        // Update form with extracted data
+                                                        setTransferForm(prev => ({
+                                                            ...prev,
+                                                            businessName: details?.businessName || prev.businessName,
+                                                            contactDetails: details?.phone || details?.email || prev.contactDetails,
+                                                            pageLink: details?.facebookPage || details?.website || prev.pageLink,
+                                                            niche: details?.niche || prev.niche,
+                                                            notes: notes || prev.notes
+                                                        }));
+                                                    } catch (err) {
+                                                        console.error('AI extraction error:', err);
+                                                    } finally {
+                                                        setExtractingDetails(false);
+                                                    }
+                                                }
                                             }}
-                                            disabled={!transferForm.clientName || loading}
+                                            disabled={loading || extractingDetails}
+                                            style={{ width: '100%' }}
                                         >
-                                            {loading ? 'Adding...' : '✅ Add to Pipeline'}
+                                            {extractingDetails ? '🤖 Analyzing...' : '➕ Add to Pipeline'}
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-                        )
+                                )
+                            }
+
+                            {/* Linked Client Info */}
+                            {
+                                selectedConversation.linked_client && (
+                                    <div style={{
+                                        marginTop: '1rem',
+                                        padding: '1rem',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                            <h5 style={{ margin: 0, fontSize: '0.875rem' }}>
+                                                🔗 Linked Client
+                                            </h5>
+                                            <button
+                                                onClick={() => {
+                                                    if (window.confirm('Unlink this conversation from the client?')) {
+                                                        linkToClient(selectedConversation.conversation_id, null);
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '0.25rem 0.5rem',
+                                                    fontSize: '0.7rem',
+                                                    background: 'transparent',
+                                                    border: '1px solid var(--error)',
+                                                    color: 'var(--error)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.target.style.background = 'var(--error)';
+                                                    e.target.style.color = 'white';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.target.style.background = 'transparent';
+                                                    e.target.style.color = 'var(--error)';
+                                                }}
+                                                title="Unlink from client"
+                                            >
+                                                ✕ Unlink
+                                            </button>
+                                        </div>
+                                        <div style={{ fontWeight: '500' }}>
+                                            {selectedConversation.linked_client.client_name}
+                                        </div>
+                                        {selectedConversation.linked_client.business_name && (
+                                            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                                {selectedConversation.linked_client.business_name}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }
+                        </>
+                    ) : (
+                        <div style={{
+                            textAlign: 'center',
+                            color: 'var(--text-muted)',
+                            paddingTop: '2rem'
+                        }}>
+                            Select a conversation to view details
+                        </div>
+                    )
                     }
                 </div >
 
-                {/* Warning Dashboard Modal */}
+                {/* Error Toast */}
                 {
-                    showWarningDashboard && (
-                        <WarningDashboard
-                            conversations={conversations}
-                            onSelectConversation={(conv) => {
-                                selectConversation(conv);
-                                setMobileView('chat');
-                            }}
-                            onClose={() => setShowWarningDashboard(false)}
-                            warningSettings={warningSettings}
-                        />
-                    )
-                }
-
-                {/* AI Control Panel Modal */}
-                {
-                    showAIControlPanel && selectedConversation && (
-                        <AIControlPanel
-                            conversationId={selectedConversation.conversation_id}
-                            participantName={selectedConversation.participant_name}
-                            onClose={() => setShowAIControlPanel(false)}
-                        />
-                    )
-                }
-
-                {/* AI Chatbot Settings Modal */}
-                {
-                    showAIChatbotSettings && (
-                        <AIChatbotSettings
-                            onClose={() => setShowAIChatbotSettings(false)}
-                        />
-                    )
-                }
-
-                {/* Best Times Overview Modal */}
-                {
-                    showBestTimes && (
-                        <BestTimesOverview
-                            onClose={() => setShowBestTimes(false)}
-                        />
-                    )
-                }
-
-                {/* Property Selector Modal */}
-                {showPropertySelector && (
-                    <div style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 2000
-                    }}>
+                    error && (
                         <div style={{
-                            background: 'var(--bg-primary)',
-                            borderRadius: 'var(--radius-lg)',
-                            width: '90%',
-                            maxWidth: '800px',
-                            maxHeight: '80vh',
+                            position: 'fixed',
+                            bottom: '1rem',
+                            right: '1rem',
+                            background: 'var(--error)',
+                            color: 'white',
+                            padding: '0.75rem 1rem',
+                            borderRadius: 'var(--radius-md)',
                             display: 'flex',
-                            flexDirection: 'column',
-                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            zIndex: 1000
                         }}>
-                            <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Select Property to Send</h3>
-                                <button onClick={() => setShowPropertySelector(false)} className="btn btn-sm btn-ghost" style={{ fontSize: '1.25rem', lineHeight: 1 }}>✕</button>
-                            </div>
-                            <div style={{ padding: '1rem', overflowY: 'auto' }}>
-                                {properties.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                                        No properties found. <br />
-                                        <small>Add properties in the Properties tab first.</small>
+                            <span>⚠️ {error}</span>
+                            <button
+                                onClick={clearError}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '1rem'
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    )
+                }
+
+                {/* Bulk Message Modal */}
+                {
+                    showBulkModal && (
+                        <div style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1001
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                borderRadius: 'var(--radius-lg)',
+                                padding: '1.5rem',
+                                width: '90%',
+                                maxWidth: '500px'
+                            }}>
+                                <h3 style={{ marginTop: 0 }}>📢 Send Bulk Message</h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                    Uses ACCOUNT_UPDATE tag for Facebook compliance
+                                </p>
+
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                        Send to:
+                                    </label>
+                                    <select
+                                        className="form-input"
+                                        value={bulkFilter}
+                                        onChange={(e) => {
+                                            setBulkFilter(e.target.value);
+                                            if (e.target.value !== 'tag') {
+                                                setBulkTagFilter('');
+                                            }
+                                        }}
+                                        style={{ width: '100%' }}
+                                    >
+                                        <optgroup label="📋 Contact Status">
+                                            <option value="all">All Conversations</option>
+                                            <option value="selected">Selected Contacts ({selectedConversations.size})</option>
+                                        </optgroup>
+                                        <optgroup label="📅 Booking Status">
+                                            <option value="booked">Booked (In Pipeline)</option>
+                                            <option value="unbooked">Not Booked</option>
+                                        </optgroup>
+                                        <optgroup label="📊 Pipeline Status">
+                                            <option value="pipeline">In Pipeline</option>
+                                            <option value="not_pipeline">Not in Pipeline</option>
+                                        </optgroup>
+                                        <optgroup label="💬 Reply Status">
+                                            <option value="no_reply">Awaiting Reply (No Response)</option>
+                                            <option value="replied">Already Replied</option>
+                                        </optgroup>
+                                        <optgroup label="📝 Proposal Status">
+                                            <option value="proposal_sent">Proposal Sent</option>
+                                            <option value="proposal_waiting">Proposal Waiting</option>
+                                        </optgroup>
+                                        <optgroup label="🏷️ By Tag">
+                                            <option value="tag">Filter by Tag...</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                {/* Tag Selection - shown when filter is 'tag' */}
+                                {bulkFilter === 'tag' && (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                            Select Tag:
+                                        </label>
+                                        <select
+                                            className="form-input"
+                                            value={bulkTagFilter}
+                                            onChange={(e) => setBulkTagFilter(e.target.value)}
+                                            style={{ width: '100%' }}
+                                        >
+                                            <option value="">-- Select a tag --</option>
+                                            {tags.map(tag => (
+                                                <option key={tag.id} value={tag.id}>
+                                                    {tag.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {tags.length === 0 && (
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                No tags created yet. Create tags in the Tags section.
+                                            </p>
+                                        )}
                                     </div>
-                                ) : (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
-                                        {properties.map(p => (
-                                            <div key={p.id} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ height: '140px', background: '#e5e7eb', position: 'relative' }}>
-                                                    {p.image ? (
-                                                        <img src={p.image} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '2rem' }}>🏠</div>
-                                                    )}
-                                                    <div style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
-                                                        {typeof p.price === 'number' ? `₱ ${p.price.toLocaleString()}` : p.price}
-                                                    </div>
+                                )}
+
+                                {/* Show count of recipients */}
+                                {bulkFilter === 'selected' && (
+                                    <div style={{
+                                        padding: '0.5rem',
+                                        background: 'var(--primary-alpha)',
+                                        borderRadius: 'var(--radius-md)',
+                                        marginBottom: '1rem',
+                                        fontSize: '0.875rem'
+                                    }}>
+                                        {selectedConversations.size > 0
+                                            ? `Will send to ${selectedConversations.size} selected contact${selectedConversations.size !== 1 ? 's' : ''}`
+                                            : '⚠️ No contacts selected. Use checkbox mode to select contacts first.'
+                                        }
+                                    </div>
+                                )}
+
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                        Message:
+                                    </label>
+                                    <textarea
+                                        className="form-input"
+                                        value={bulkMessage}
+                                        onChange={(e) => setBulkMessage(e.target.value)}
+                                        placeholder="Hi {first_name}! Type your message here..."
+                                        rows={4}
+                                        style={{ width: '100%', resize: 'vertical' }}
+                                    />
+                                    <div style={{
+                                        marginTop: '0.5rem',
+                                        padding: '0.75rem',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-md)',
+                                        fontSize: '0.75rem',
+                                        color: 'var(--text-muted)'
+                                    }}>
+                                        <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                                            📝 Template Variables (click to insert):
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            {[
+                                                { var: '{name}', desc: 'Full name' },
+                                                { var: '{first_name}', desc: 'First name' },
+                                                { var: '{date}', desc: 'Today\'s date' },
+                                                { var: '{time}', desc: 'Current time' },
+                                                { var: '{day}', desc: 'Day of week' }
+                                            ].map(item => (
+                                                <button
+                                                    key={item.var}
+                                                    type="button"
+                                                    onClick={() => setBulkMessage(prev => prev + item.var)}
+                                                    style={{
+                                                        padding: '0.25rem 0.5rem',
+                                                        background: 'var(--primary-alpha)',
+                                                        border: '1px solid var(--primary)',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        color: 'var(--primary)',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.7rem',
+                                                        fontFamily: 'monospace'
+                                                    }}
+                                                    title={item.desc}
+                                                >
+                                                    {item.var}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowBulkModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleSendBulkMessage}
+                                        disabled={bulkSending || !bulkMessage.trim()}
+                                    >
+                                        {bulkSending ? 'Sending...' : '📢 Send to All'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+
+                {/* Tags Modal */}
+                {
+                    showTagsModal && (
+                        <div style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1001
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                borderRadius: 'var(--radius-lg)',
+                                padding: '1.5rem',
+                                width: '90%',
+                                maxWidth: '400px'
+                            }}>
+                                <h3 style={{ marginTop: 0 }}>🏷️ Manage Tags</h3>
+
+                                {/* Create new tag */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                                    <input
+                                        type="color"
+                                        value={newTagColor}
+                                        onChange={(e) => setNewTagColor(e.target.value)}
+                                        style={{ width: '40px', height: '36px', padding: 0, border: 'none', cursor: 'pointer' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        value={newTagName}
+                                        onChange={(e) => setNewTagName(e.target.value)}
+                                        placeholder="New tag name..."
+                                        style={{ flex: 1 }}
+                                    />
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={handleCreateTag}
+                                        disabled={!newTagName.trim()}
+                                    >
+                                        +
+                                    </button>
+                                </div>
+
+                                {/* Tag list */}
+                                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                    {tags.length === 0 ? (
+                                        <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
+                                            No tags yet. Create one above!
+                                        </p>
+                                    ) : (
+                                        tags.map(tag => (
+                                            <div
+                                                key={tag.id}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '0.5rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    marginBottom: '0.25rem',
+                                                    background: 'var(--bg-secondary)'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <div style={{
+                                                        width: '12px',
+                                                        height: '12px',
+                                                        borderRadius: '50%',
+                                                        background: tag.color
+                                                    }} />
+                                                    <span>{tag.name}</span>
                                                 </div>
-                                                <div style={{ padding: '0.75rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                                    <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.title}>{p.title}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>{p.location || p.address || 'No location'}</div>
-                                                    <div style={{ marginTop: 'auto', display: 'flex', gap: '0.5rem' }}>
+                                                <button
+                                                    onClick={() => handleDeleteTag(tag.id)}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        color: 'var(--text-muted)'
+                                                    }}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowTagsModal(false)}
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+
+                {/* Transfer to Pipeline Confirmation Modal */}
+                {
+                    showTransferModal && (
+                        <div style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'rgba(0,0,0,0.7)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                padding: '1.5rem',
+                                borderRadius: 'var(--radius-lg)',
+                                width: '100%',
+                                maxWidth: '500px',
+                                maxHeight: '90vh',
+                                overflow: 'auto'
+                            }}>
+                                <h3 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    ➕ Add to Pipeline
+                                </h3>
+                                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                                    Review and edit the details before adding to pipeline:
+                                </p>
+
+                                {/* AI Extraction Banner */}
+                                {extractingDetails && (
+                                    <div style={{
+                                        padding: '0.75rem',
+                                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                                        borderRadius: 'var(--radius-md)',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        border: '1px solid rgba(99, 102, 241, 0.3)'
+                                    }}>
+                                        <span className="spinner" style={{ width: '16px', height: '16px' }}>🤖</span>
+                                        <span style={{ fontSize: '0.875rem', color: 'var(--primary)' }}>
+                                            AI is extracting contact details from conversation...
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Client Name *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.clientName}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, clientName: e.target.value }))}
+                                            placeholder="Enter client name"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Business Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.businessName}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, businessName: e.target.value }))}
+                                            placeholder="Enter business name"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Contact Details (Phone/Email)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.contactDetails}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, contactDetails: e.target.value }))}
+                                            placeholder="Enter phone or email"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Facebook Page Link
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.pageLink}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, pageLink: e.target.value }))}
+                                            placeholder="Enter Facebook page URL"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Niche/Industry
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transferForm.niche}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, niche: e.target.value }))}
+                                            placeholder="Enter business niche"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                                            Notes
+                                        </label>
+                                        <textarea
+                                            value={transferForm.notes}
+                                            onChange={(e) => setTransferForm(prev => ({ ...prev, notes: e.target.value }))}
+                                            placeholder="Additional notes..."
+                                            rows={3}
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                border: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)',
+                                                resize: 'vertical'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowTransferModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={async () => {
+                                            await transferToClient({
+                                                clientName: transferForm.clientName,
+                                                businessName: transferForm.businessName,
+                                                contactDetails: transferForm.contactDetails,
+                                                facebookPage: transferForm.pageLink,
+                                                niche: transferForm.niche,
+                                                notes: transferForm.notes
+                                            }, currentUserId);
+                                            setShowTransferModal(false);
+                                        }}
+                                        disabled={!transferForm.clientName || loading}
+                                    >
+                                        {loading ? 'Adding...' : '✅ Add to Pipeline'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+            </div >
+
+            {/* Warning Dashboard Modal */}
+            {
+                showWarningDashboard && (
+                    <WarningDashboard
+                        conversations={conversations}
+                        onSelectConversation={(conv) => {
+                            selectConversation(conv);
+                            setMobileView('chat');
+                        }}
+                        onClose={() => setShowWarningDashboard(false)}
+                        warningSettings={warningSettings}
+                    />
+                )
+            }
+
+            {/* AI Control Panel Modal */}
+            {
+                showAIControlPanel && selectedConversation && (
+                    <AIControlPanel
+                        conversationId={selectedConversation.conversation_id}
+                        participantName={selectedConversation.participant_name}
+                        onClose={() => setShowAIControlPanel(false)}
+                    />
+                )
+            }
+
+            {/* AI Chatbot Settings Modal */}
+            {
+                showAIChatbotSettings && (
+                    <AIChatbotSettings
+                        onClose={() => setShowAIChatbotSettings(false)}
+                    />
+                )
+            }
+
+            {/* Best Times Overview Modal */}
+            {
+                showBestTimes && (
+                    <BestTimesOverview
+                        onClose={() => setShowBestTimes(false)}
+                    />
+                )
+            }
+
+            {/* Property Selector Modal */}
+            {showPropertySelector && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2000
+                }}>
+                    <div style={{
+                        background: 'var(--bg-primary)',
+                        borderRadius: 'var(--radius-lg)',
+                        width: '90%',
+                        maxWidth: '800px',
+                        maxHeight: '80vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                    }}>
+                        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Select Property to Send</h3>
+                            <button onClick={() => setShowPropertySelector(false)} className="btn btn-sm btn-ghost" style={{ fontSize: '1.25rem', lineHeight: 1 }}>✕</button>
+                        </div>
+                        <div style={{ padding: '1rem', overflowY: 'auto' }}>
+                            {properties.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                    No properties found. <br />
+                                    <small>Add properties in the Properties tab first.</small>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                                    {properties.map(p => (
+                                        <div key={p.id} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ height: '140px', background: '#e5e7eb', position: 'relative' }}>
+                                                {p.image ? (
+                                                    <img src={p.image} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '2rem' }}>🏠</div>
+                                                )}
+                                                <div style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
+                                                    {typeof p.price === 'number' ? `₱ ${p.price.toLocaleString()}` : p.price}
+                                                </div>
+                                            </div>
+                                            <div style={{ padding: '0.75rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.title}>{p.title}</div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>{p.location || p.address || 'No location'}</div>
+                                                <div style={{ marginTop: 'auto', display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className="btn btn-sm btn-primary"
+                                                        style={{ flex: 1, fontSize: '0.75rem' }}
+                                                        onClick={() => {
+                                                            handleSendPropertyCard(p);
+                                                            setShowPropertySelector(false);
+                                                        }}
+                                                    >
+                                                        Send
+                                                    </button>
+                                                    {p.videos && p.videos.length > 0 && (
                                                         <button
-                                                            className="btn btn-sm btn-primary"
-                                                            style={{ flex: 1, fontSize: '0.75rem' }}
+                                                            className="btn btn-sm btn-secondary"
+                                                            style={{ fontSize: '0.75rem' }}
+                                                            title="Send Video"
                                                             onClick={() => {
-                                                                handleSendPropertyCard(p);
+                                                                handleSendVideo(p);
                                                                 setShowPropertySelector(false);
                                                             }}
                                                         >
-                                                            Send
+                                                            🎥
                                                         </button>
-                                                        {p.videos && p.videos.length > 0 && (
-                                                            <button
-                                                                className="btn btn-sm btn-secondary"
-                                                                style={{ fontSize: '0.75rem' }}
-                                                                title="Send Video"
-                                                                onClick={() => {
-                                                                    handleSendVideo(p);
-                                                                    setShowPropertySelector(false);
-                                                                }}
-                                                            >
-                                                                🎥
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
-                )}
-            </>
-            );
+                </div>
+            )}
+        </>
+    );
 };
 
-            export default MessengerInbox;
+export default MessengerInbox;
