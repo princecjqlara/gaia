@@ -2854,14 +2854,20 @@ class FacebookService {
                 .single();
 
             if (convData?.participant_name) {
-                // Find stats in property_views matching the visitor name
-                const { data: viewData } = await getSupabase()
+                console.log(`[INSIGHTS] Looking for property views for name: "${convData.participant_name}"`);
+
+                // Find stats in property_views matching the visitor name (case-insensitive)
+                const { data: viewData, error: viewError } = await getSupabase()
                     .from('property_views')
                     .select('*, properties(title, price, images, address, id)')
-                    .eq('visitor_name', convData.participant_name)
+                    .ilike('visitor_name', convData.participant_name)
                     .order('created_at', { ascending: false })
                     .limit(1)
                     .single();
+
+                if (viewError && viewError.code !== 'PGRST116') {
+                    console.log('[INSIGHTS] Error finding view:', viewError.message);
+                }
 
                 if (viewData && viewData.properties) {
                     viewedProperty = {

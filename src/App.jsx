@@ -95,8 +95,11 @@ function App() {
 
     // Public Property Routes
     const propertyMatch = path.match(/^\/property\/([a-zA-Z0-9-]+)$/);
+    const trackingPropertyMatch = path.match(/^\/u\/[^/]+\/property\/([a-zA-Z0-9-]+)$/); // Matches /u/:visitorName/property/:id
+    const trackingListMatch = path.match(/^\/u\/[^/]+\/properties$/); // Matches /u/:visitorName/properties
     const isPropertiesPath = path === '/properties';
-    if (propertyMatch || isPropertiesPath) {
+
+    if (propertyMatch || isPropertiesPath || trackingPropertyMatch || trackingListMatch) {
       setShowPublicProperties(true);
       return;
     }
@@ -107,7 +110,10 @@ function App() {
       const matchRoom = newPath.match(/^\/room\/([a-zA-Z0-9]+)$/);
       const matchBook = newPath.match(/^\/book\/([a-zA-Z0-9]+)$/);
       const isBookingPath = newPath === '/booking' || newPath.startsWith('/booking');
+
       const matchProp = newPath.match(/^\/property\/([a-zA-Z0-9-]+)$/);
+      const matchTrackProp = newPath.match(/^\/u\/[^/]+\/property\/([a-zA-Z0-9-]+)$/);
+      const matchTrackList = newPath.match(/^\/u\/[^/]+\/properties$/);
       const isPropPath = newPath === '/properties';
 
       if (matchRoom) {
@@ -120,7 +126,7 @@ function App() {
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
         setShowPublicProperties(false);
-      } else if (matchProp || isPropPath) {
+      } else if (matchProp || isPropPath || matchTrackProp || matchTrackList) {
         setShowPublicProperties(true);
         setShowBookingPage(false);
         setShowMeetingRoom(false);
