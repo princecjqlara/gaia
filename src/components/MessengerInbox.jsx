@@ -657,20 +657,20 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         }
     };
 
+    const handleSendBookingButton = sendBookingButton;
+
     const handleSendTopSelling = async () => {
-        // Get top 3 properties from stats or just the first few
-        const topProps = stats?.topProperties?.map(tp =>
-            properties.find(p => p.id === tp.id)
-        ).filter(Boolean).slice(0, 5);
+        // Fallback to first 5 properties (newest first) since we don't have stats here yet
+        const topProps = (properties || []).slice(0, 5);
 
         if (!topProps || topProps.length === 0) {
-            alert('No top selling properties found.');
+            alert('No properties found to send.');
             return;
         }
 
         const success = await sendPropertyCard(topProps);
         if (!success) {
-            alert('Failed to send top selling carousel.');
+            alert('Failed to send top properties.');
         }
     };
     const formatTime = (timestamp) => {
