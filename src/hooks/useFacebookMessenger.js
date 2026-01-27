@@ -278,6 +278,14 @@ export function useFacebookMessenger() {
             // Save analysis to database
             await facebookService.saveAIAnalysisResults(selectedConversation.conversation_id, analysis);
 
+            // Refresh conversation insights to get updated AI summary, contact info, etc.
+            const updatedInsights = await facebookService.getConversationInsights(
+                selectedConversation.conversation_id,
+                selectedConversation.participant_id,
+                selectedConversation.page_id
+            );
+            setConversationInsights(updatedInsights);
+
             // Check for existing client with extracted details
             await checkExistingClient(selectedConversation.participant_name, analysis.details);
         }
@@ -1087,6 +1095,7 @@ export function useFacebookMessenger() {
         loadMessages,
         selectConversation,
         refreshMessages,
+        sendMessage,
         sendVideoMessage,
         // Lead status
         sendMediaMessage,
