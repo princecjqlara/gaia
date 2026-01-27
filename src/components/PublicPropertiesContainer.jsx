@@ -8,46 +8,61 @@ const PublicPropertiesContainer = ({ onClose }) => {
     const [branding, setBranding] = useState(null);
     const [loading, setLoading] = useState(true);
     const [initialPropertyId, setInitialPropertyId] = useState(null);
+    const [teamId, setTeamId] = useState(null);
 
     useEffect(() => {
-        // Parse URL for initial property ID
+        // Parse URL for team ID and property ID
         const path = window.location.pathname;
-        const match = path.match(/^\/property\/([a-zA-Z0-9-]+)$/);
-        if (match) {
-            setInitialPropertyId(match[1]);
+
+        // Match /:teamId/property/:id
+        const teamPropMatch = path.match(/^\/([a-zA-Z0-9-]+)\/property\/([a-zA-Z0-9-]+)$/);
+        // Match /:teamId/properties
+        const teamPropsMatch = path.match(/^\/([a-zA-Z0-9-]+)\/properties$/);
+        // Match /property/:id (no team)
+        const propMatch = path.match(/^\/property\/([a-zA-Z0-9-]+)$/);
+
+        if (teamPropMatch) {
+            setTeamId(teamPropMatch[1]);
+            setInitialPropertyId(teamPropMatch[2]);
+        } else if (teamPropsMatch) {
+            setTeamId(teamPropsMatch[1]);
+        } else if (propMatch) {
+            setInitialPropertyId(propMatch[1]);
         }
 
-        loadData();
+        loadData(teamPropMatch ? teamPropMatch[1] : (teamPropsMatch ? teamPropsMatch[1] : null));
     }, []);
 
-    const loadData = async () => {
+    const loadData = async (currentTeamId) => {
         setLoading(true);
         try {
             const supabase = getSupabaseClient();
 
             // 1. Load Properties
-            const { data: props, error: propError } = await supabase
+            // If we have teamId, we *could* filter, but since we don't know if properties have team_id column,
+            // we'll fetch all for now and rely on client side or simply show all.
+            // Ideally: .eq('team_id', currentTeamId) if column exists.
+            let query = supabase
                 .from('properties')
                 .select('*')
                 .order('created_at', { ascending: false });
 
+            const { data: props, error: propError } = await query;
+
             if (propError) throw propError;
             setProperties(props || []);
 
-            // 2. Load Branding (Use first team found or specific if needed)
-            // For now, we'll try to get branding from the first property's creator or a default team
-            // If we have an organization/team ID in query params, use that
-            // Otherwise, fetch generic or specific one. 
-            // Since this is a general directory, we might need a way to know WHICH team's branding to show.
-            // For now, we'll assume single tenant or just fetch the first team's branding.
-
-            // Try to find a team ID from local storage or query param, else default
-            // This part might need refinement for multi-tenant. 
-            // For now, let's fetch the first team.
-            const { data: teams } = await supabase.from('teams').select('id').limit(1);
-            if (teams && teams.length > 0) {
-                const brand = await getPublicTeamBranding(teams[0].id);
-                setBranding(brand);
+            // 2. Load Branding
+            if (currentTeamId) {
+                const brand = await getPublicTeamBranding(currentTeamId);
+                if (brand) setBranding(brand);
+            } else {
+                // Fallback: Fetch first team's branding if no team specified
+                const { data: teams } = await supabase.from('teams').select('id').limit(1);
+                if (teams && teams.length > 0) {
+                    const brand = await getPublicTeamBranding(teams[0].id);
+                    setBranding(brand);
+                }
             }
 
         } catch (err) {
@@ -93,47 +108,32 @@ const PublicPropertiesContainer = ({ onClose }) => {
         ? properties.find(p => p.id === initialPropertyId)
         : null;
 
-    // Wrap PropertyPreview to handle URL updates
-    const WrappedPropertyPreview = () => {
-        // We need to inject logic into PropertyPreview to update URL.
-        // Since PropertyPreview manages its own "selectedProperty" state, 
-        // we might pass initial state. 
-        // A better approach is to modify PropertyPreview to accept "selectedProperty" prop 
-        // but it controls it internally.
-        // Actually, PropertyPreview takes `properties`. 
-        // It renders the list if no selectedProperty.
-        // We can pass `initialSelected` but PropertyPreview uses `const [selectedProperty, setSelectedProperty] = useState(null);`
-        // We might need to modify PropertyPreview to accept `initialSelectedProperty`.
-
-        // However, we can't easily modify PropertyPreview w/o editing it.
-        // Let's modify PropertyPreview to accept an optional `initialPropertyId` or `selectedProperty` prop that it respects.
-        // Looking at PropertyPreview code... line 28: `const [selectedProperty, setSelectedProperty] = useState(null);`
-        // It doesn't accept an initial value from props.
-
-        // I will first modify PropertyPreview to accept `initialProperty` prop.
-        return (
-            <PropertyPreview
-                properties={properties}
-                branding={branding}
-                onClose={() => {
-                    // Update URL to /
-                    window.history.pushState({}, '', '/');
-                    if (onClose) onClose();
-                }}
-                initialProperty={initialSelected}
-                onPropertySelect={(property) => {
-                    // Update URL when property is selected
-                    if (property) {
-                        window.history.pushState({}, '', `/property/${property.id}`);
-                    } else {
-                        window.history.pushState({}, '', `/properties`);
-                    }
-                }}
-            />
-        );
-    }
-
-    return <WrappedPropertyPreview />;
+    return (
+        <PropertyPreview
+            properties={properties}
+            branding={branding}
+            onClose={() => {
+                // Update URL to /
+                window.history.pushState({}, '', '/');
+                if (onClose) onClose();
+            }}
+            initialProperty={initialSelected}
+            onPropertySelect={(property) => {
+                // Update URL when property is selected
+                if (property) {
+                    const newPath = teamId
+                        ? `/${teamId}/property/${property.id}`
+                        : `/property/${property.id}`;
+                    window.history.pushState({}, '', newPath);
+                } else {
+                    const newPath = teamId
+                        ? `/${teamId}/properties`
+                        : `/properties`;
+                    window.history.pushState({}, '', newPath);
+                }
+            }}
+        />
+    );
 };
 
 export default PublicPropertiesContainer;
