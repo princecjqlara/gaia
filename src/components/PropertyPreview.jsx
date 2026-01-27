@@ -49,40 +49,6 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                     console.log('[VIEW TRACKING] Visitor Name:', visitorName);
                     console.log('[VIEW TRACKING] Property ID:', selectedProperty.id);
 
-                    // If we have a participant ID, use the server-side API for reliable tracking
-                    // This will also send a confirmation message to the contact
-                    if (participantId) {
-                        console.log('[VIEW TRACKING] Using server-side API for messaging...');
-                        try {
-                            const apiUrl = `${window.location.origin}/api/property-click`;
-                            const response = await fetch(apiUrl, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    participantId,
-                                    propertyId: selectedProperty.id,
-                                    propertyTitle: selectedProperty.title,
-                                    propertyUrl: window.location.href
-                                })
-                            });
-
-                            if (response.ok) {
-                                const result = await response.json();
-                                console.log('[VIEW TRACKING] ✅ Server API result:', result);
-                                if (result.messageSent) {
-                                    console.log('[VIEW TRACKING] ✅ Confirmation message sent to contact!');
-                                }
-                                // Server already logged the view, so we're done
-                                return;
-                            } else {
-                                console.warn('[VIEW TRACKING] Server API failed, falling back to client-side logging');
-                            }
-                        } catch (apiError) {
-                            console.warn('[VIEW TRACKING] Server API error:', apiError.message);
-                        }
-                    }
-
-                    // Fallback: Log directly to Supabase (for non-Messenger traffic or API failures)
                     const supabase = getSupabaseClient();
                     if (!supabase) {
                         console.error('[VIEW TRACKING] Supabase client not available!');
@@ -90,7 +56,6 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                     }
 
                     const { data: { session } } = await supabase.auth.getSession();
-                    console.log('[VIEW TRACKING] Session user:', session?.user?.id || 'anonymous');
 
                     const insertData = {
                         property_id: selectedProperty.id,
@@ -103,15 +68,50 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                         source: participantId ? 'fb_messenger' : (visitorName ? 'custom_link' : 'website')
                     };
 
-                    console.log('[VIEW TRACKING] Fallback insert data:', JSON.stringify(insertData));
+                    console.log('[VIEW TRACKING] Insert data:', JSON.stringify(insertData));
 
                     const { data, error } = await supabase.from('property_views').insert(insertData).select();
 
                     if (error) {
                         console.error('[VIEW TRACKING] ❌ Error logging view:', error);
-                        console.error('[VIEW TRACKING] Error details:', error.details, error.message, error.hint, error.code);
                     } else {
-                        console.log('[VIEW TRACKING] ✅ Successfully logged view (client-side)!', data);
+                        console.log('[VIEW TRACKING] ✅ Successfully logged view!', data);
+
+                        // If this is from Messenger, schedule a follow-up message about the property click
+                        if (participantId) {
+                            try {
+                                // Find the conversation for this participant
+                                const { data: conv } = await supabase
+                                    .from('facebook_conversations')
+                                    .select('conversation_id, page_id')
+                                    .eq('participant_id', participantId)
+                                    .single();
+
+                                if (conv) {
+                                    // Schedule a quick follow-up message (sends in 30 seconds)
+                                    const scheduledAt = new Date(Date.now() + 30 * 1000).toISOString();
+                                    const messageContent = `👋 I noticed you're checking out "${selectedProperty.title}"! Great choice! 🏠\n\nIf you have any questions about this property or would like to schedule a viewing, just let me know. I'm here to help! 😊`;
+
+                                    await supabase.from('scheduled_messages').insert({
+                                        conversation_id: conv.conversation_id,
+                                        page_id: conv.page_id,
+                                        message_content: messageContent,
+                                        scheduled_at: scheduledAt,
+                                        status: 'pending',
+                                        message_type: 'property_click_followup',
+                                        metadata: {
+                                            property_id: selectedProperty.id,
+                                            property_title: selectedProperty.title,
+                                            trigger: 'property_click'
+                                        }
+                                    });
+
+                                    console.log('[VIEW TRACKING] ✅ Scheduled property click follow-up message');
+                                }
+                            } catch (scheduleError) {
+                                console.error('[VIEW TRACKING] Error scheduling follow-up:', scheduleError);
+                            }
+                        }
                     }
                 } catch (err) {
                     console.error('[VIEW TRACKING] Exception:', err);
