@@ -23,9 +23,16 @@ const DEFAULT_BRANDING = {
     stats: []
 };
 
-const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId }) => {
+const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId, initialProperty = null, onPropertySelect }) => {
     const branding = { ...DEFAULT_BRANDING, ...propBranding };
-    const [selectedProperty, setSelectedProperty] = useState(null);
+    const [selectedProperty, setSelectedPropertyState] = useState(initialProperty);
+
+    const setSelectedProperty = (property) => {
+        setSelectedPropertyState(property);
+        if (onPropertySelect) {
+            onPropertySelect(property);
+        }
+    };
     const [searchQuery, setSearchQuery] = useState('');
     const [leadForm, setLeadForm] = useState({ name: '', email: '', phone: '', message: '' });
     const [submittingLead, setSubmittingLead] = useState(false);

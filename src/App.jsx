@@ -25,6 +25,7 @@ import UnassignedClientsPanel from './components/UnassignedClientsPanel';
 import ContactsWithPhonePanel from './components/ContactsWithPhonePanel';
 import PropertyManagement from './components/PropertyManagement';
 import OrganizerDashboard from './components/OrganizerDashboard';
+import PublicPropertiesContainer from './components/PublicPropertiesContainer';
 import { useSupabase } from './hooks/useSupabase';
 import { useScheduledMessageProcessor } from './hooks/useScheduledMessageProcessor';
 import { useClockInOut } from './hooks/useClockInOut';
@@ -71,6 +72,7 @@ function App() {
 
   // Check for /room/:slug or /book/:pageId URL on load
   const [showBookingPage, setShowBookingPage] = useState(false);
+  const [showPublicProperties, setShowPublicProperties] = useState(false);
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -91,25 +93,43 @@ function App() {
       return;
     }
 
+    // Public Property Routes
+    const propertyMatch = path.match(/^\/property\/([a-zA-Z0-9-]+)$/);
+    const isPropertiesPath = path === '/properties';
+    if (propertyMatch || isPropertiesPath) {
+      setShowPublicProperties(true);
+      return;
+    }
+
     // Listen for popstate (back/forward)
     const handlePopState = () => {
       const newPath = window.location.pathname;
       const matchRoom = newPath.match(/^\/room\/([a-zA-Z0-9]+)$/);
       const matchBook = newPath.match(/^\/book\/([a-zA-Z0-9]+)$/);
       const isBookingPath = newPath === '/booking' || newPath.startsWith('/booking');
+      const matchProp = newPath.match(/^\/property\/([a-zA-Z0-9-]+)$/);
+      const isPropPath = newPath === '/properties';
 
       if (matchRoom) {
         setMeetingRoomSlug(matchRoom[1]);
         setShowMeetingRoom(true);
         setShowBookingPage(false);
+        setShowPublicProperties(false);
       } else if (matchBook || isBookingPath) {
         setShowBookingPage(true);
+        setShowMeetingRoom(false);
+        setMeetingRoomSlug(null);
+        setShowPublicProperties(false);
+      } else if (matchProp || isPropPath) {
+        setShowPublicProperties(true);
+        setShowBookingPage(false);
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
       } else {
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
         setShowBookingPage(false);
+        setShowPublicProperties(false);
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -781,8 +801,18 @@ function App() {
         <BookingPage />
       )}
 
-      {/* Landing page - shown when not logged in AND not in meeting AND not booking */}
-      {!isLoggedIn && !showMeetingRoom && !showBookingPage && (
+      {/* Public Properties Page */}
+      {showPublicProperties && (
+        <PublicPropertiesContainer
+          onClose={() => {
+            setShowPublicProperties(false);
+            window.history.pushState({}, '', '/');
+          }}
+        />
+      )}
+
+      {/* Landing page - shown when not logged in AND not in meeting AND not booking AND not viewing properties */}
+      {!isLoggedIn && !showMeetingRoom && !showBookingPage && !showPublicProperties && (
         <LandingPage
           onLogin={() => {
             setIsSignUpMode(false);
