@@ -1503,7 +1503,7 @@ class FacebookService {
     /**
      * Send Property Card (Generic Template)
      */
-    async sendPropertyCard(pageId, recipientId, propertyOrProperties) {
+    async sendPropertyCard(pageId, recipientId, propertyOrProperties, visitorName = null) {
         try {
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
@@ -1512,7 +1512,12 @@ class FacebookService {
             const properties = Array.isArray(propertyOrProperties) ? propertyOrProperties : [propertyOrProperties];
 
             const elements = properties.slice(0, 10).map(property => {
-                const propertyUrl = `${window.location.origin}/property/${property.id}`;
+                // Construct URL with visitor tracking if name is available
+                let propertyUrl = `${window.location.origin}/property/${property.id}`;
+                if (visitorName) {
+                    propertyUrl = `${window.location.origin}/u/${encodeURIComponent(visitorName)}/property/${property.id}`;
+                }
+
                 const imageUrl = (property.images && property.images.length > 0) ? property.images[0] : property.image;
 
                 return {

@@ -516,7 +516,8 @@ export function useFacebookMessenger() {
             await facebookService.sendPropertyCard(
                 selectedConversation.page_id,
                 selectedConversation.participant_id,
-                propertyOrProperties
+                propertyOrProperties,
+                selectedConversation.participant_name // Pass name for tracking
             );
 
             // Sync and reload

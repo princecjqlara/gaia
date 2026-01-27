@@ -647,10 +647,14 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
             alert('This property has no video available.');
             return;
         }
+        const propertyUrl = selectedConversation.participant_name
+            ? `${window.location.origin}/u/${encodeURIComponent(selectedConversation.participant_name)}/property/${property.id}`
+            : `${window.location.origin}/property/${property.id}`;
+
         const success = await sendVideoMessage(
             property.videos[0],
             'View Property Details',
-            `${window.location.origin}/property/${property.id}`
+            propertyUrl
         );
         if (!success) {
             alert('Failed to send video. Please try again.');
