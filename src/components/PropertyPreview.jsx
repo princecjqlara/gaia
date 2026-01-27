@@ -50,7 +50,7 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                     // Check if we have a session to get user_id (optional, or anonymous)
                     const { data: { session } } = await supabase.auth.getSession();
 
-                    await supabase.from('property_views').insert({
+                    const { error } = await supabase.from('property_views').insert({
                         property_id: selectedProperty.id,
                         property_title: selectedProperty.title,
                         viewer_id: session?.user?.id || null, // Null for anonymous
@@ -59,7 +59,13 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                         viewed_at: new Date().toISOString(),
                         source: visitorName ? 'custom_link' : 'website'
                     });
-                    console.log('Logged view for', selectedProperty.title, visitorName ? `by ${visitorName}` : '');
+
+                    if (error) {
+                        console.error('Error logging view (Supabase):', error);
+                        console.error('Error details:', error.details, error.message, error.hint);
+                    } else {
+                        console.log('✅ Successfully logged view for', selectedProperty.title, visitorName ? `by ${visitorName}` : '(anonymous)');
+                    }
                 } catch (err) {
                     console.error('Error logging view:', err);
                 }
