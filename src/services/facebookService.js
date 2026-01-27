@@ -629,6 +629,26 @@ class FacebookService {
 
                 if (!error && data) {
                     messages.push(data);
+
+                    // Record engagement data for best time to contact calculation
+                    try {
+                        const msgDate = new Date(msg.created_time);
+                        await getSupabase()
+                            .from('contact_engagement')
+                            .upsert({
+                                conversation_id: conversationId,
+                                page_id: pageId,
+                                participant_id: msg.from?.id,
+                                message_direction: msg.from?.id === pageId ? 'outbound' : 'inbound',
+                                day_of_week: msgDate.getDay(),
+                                hour_of_day: msgDate.getHours(),
+                                engagement_score: 1,
+                                message_timestamp: msg.created_time
+                            }, { onConflict: 'conversation_id,message_timestamp', ignoreDuplicates: true });
+                    } catch (engErr) {
+                        // Silently fail - engagement tracking is optional
+                        console.log('[SYNC] Could not record engagement:', engErr.message);
+                    }
                 }
             }
 
@@ -2905,14 +2925,78 @@ class FacebookService {
             let viewedProperties = [];
             let viewedProperty = null; // Keep for backward compatibility/timeline
 
-            // First get the participant name from the conversation
+            // First get the participant name and extracted details from the conversation
             const { data: convData, error: convError } = await getSupabase()
                 .from('facebook_conversations')
-                .select('participant_id, participant_name, ai_analysis, ai_notes, ai_summary')
+                .select('participant_id, participant_name, ai_analysis, ai_notes, ai_summary, extracted_details')
                 .eq('conversation_id', conversationId)
                 .single();
 
             if (convError || !convData) return null;
+
+            // 4. Calculate best time to contact from engagement data
+            let bestTimeToContact = null;
+            try {
+                const { data: engagementData } = await getSupabase()
+                    .from('contact_engagement')
+                    .select('day_of_week, hour_of_day, engagement_score')
+                    .eq('conversation_id', conversationId)
+                    .eq('message_direction', 'inbound'); // Customer messages
+
+                if (engagementData && engagementData.length > 0) {
+                    // Group by day and hour, sum engagement scores
+                    const timeScores = {};
+                    engagementData.forEach(e => {
+                        const key = `${e.day_of_week}-${e.hour_of_day}`;
+                        timeScores[key] = (timeScores[key] || 0) + (e.engagement_score || 1);
+                    });
+
+                    // Find the best time slot
+                    let bestKey = null;
+                    let bestScore = 0;
+                    Object.entries(timeScores).forEach(([key, score]) => {
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestKey = key;
+                        }
+                    });
+
+                    if (bestKey) {
+                        const [dayOfWeek, hourOfDay] = bestKey.split('-').map(Number);
+                        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const hour = hourOfDay > 12 ? hourOfDay - 12 : hourOfDay || 12;
+                        const ampm = hourOfDay >= 12 ? 'PM' : 'AM';
+                        bestTimeToContact = {
+                            day: days[dayOfWeek],
+                            dayOfWeek,
+                            hour: hourOfDay,
+                            formatted: `${days[dayOfWeek]}s around ${hour}:00 ${ampm}`,
+                            confidence: Math.min(engagementData.length / 5, 1) // Higher confidence with more data
+                        };
+                    }
+                }
+            } catch (engErr) {
+                console.log('[INSIGHTS] Could not calculate best time to contact:', engErr.message);
+            }
+
+            // 5. Parse extracted contact info from AI analysis
+            let contactInfo = null;
+            if (convData.extracted_details) {
+                const details = typeof convData.extracted_details === 'string'
+                    ? JSON.parse(convData.extracted_details)
+                    : convData.extracted_details;
+                if (details && (details.phone || details.email || details.businessName)) {
+                    contactInfo = {
+                        phone: details.phone || null,
+                        email: details.email || null,
+                        location: details.location || null,
+                        businessName: details.businessName || null,
+                        website: details.website || null,
+                        facebookPage: details.facebookPage || null,
+                        niche: details.niche || null
+                    };
+                }
+            }
 
             if (convData?.participant_name || convData?.participant_id || participantId) {
                 const pid = participantId || convData?.participant_id;
@@ -2994,9 +3078,16 @@ class FacebookService {
                 viewedProperty,
                 viewedProperties,
 
+                // Contact Info (scraped from messages via AI)
+                contactInfo,
+
+                // Best Time to Contact (calculated from engagement data)
+                bestTimeToContact,
+
                 // AI Analysis (from DB)
                 aiAnalysis: convData.ai_analysis ? JSON.parse(convData.ai_analysis) : null,
                 aiNotes: convData.ai_notes,
+                aiSummary: convData.ai_summary,
                 leadScore: convData.ai_analysis ? JSON.parse(convData.ai_analysis).leadScore : null,
 
                 // Timeline events

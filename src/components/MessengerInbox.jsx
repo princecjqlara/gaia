@@ -2285,24 +2285,51 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 )}
                             </div>
 
+                            {/* Best Time to Contact (AI calculated) */}
+                            {conversationInsights?.bestTimeToContact && (
+                                <div style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1))', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                    <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <span>⏰</span> Best Time to Contact
+                                    </h5>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--success)' }}>
+                                        {conversationInsights.bestTimeToContact.formatted}
+                                    </div>
+                                    {conversationInsights.bestTimeToContact.confidence < 0.5 && (
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                            (Limited data - more messages will improve accuracy)
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Contact Details (Phone/Location/Email) */}
-                            {(selectedConversation.contact_info || selectedConversation.email) && (
+                            {(selectedConversation.contact_info || conversationInsights?.contactInfo || selectedConversation.email) && (
                                 <div style={{ marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
-                                    <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Contact Details</h5>
+                                    <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>📋 Contact Details (Scraped)</h5>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
-                                        {(selectedConversation.contact_info?.email || selectedConversation.participant_email) && (
+                                        {(selectedConversation.contact_info?.email || conversationInsights?.contactInfo?.email || selectedConversation.participant_email) && (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <span>📧</span> <span style={{ wordBreak: 'break-all' }}>{selectedConversation.contact_info?.email || selectedConversation.participant_email}</span>
+                                                <span>📧</span> <span style={{ wordBreak: 'break-all' }}>{selectedConversation.contact_info?.email || conversationInsights?.contactInfo?.email || selectedConversation.participant_email}</span>
                                             </div>
                                         )}
-                                        {selectedConversation.contact_info?.phone && (
+                                        {(selectedConversation.contact_info?.phone || conversationInsights?.contactInfo?.phone) && (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <span>📞</span> <span>{selectedConversation.contact_info.phone}</span>
+                                                <span>📞</span> <span>{selectedConversation.contact_info?.phone || conversationInsights?.contactInfo?.phone}</span>
                                             </div>
                                         )}
-                                        {selectedConversation.contact_info?.location && (
+                                        {(selectedConversation.contact_info?.location || conversationInsights?.contactInfo?.location) && (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <span>📍</span> <span>{selectedConversation.contact_info.location}</span>
+                                                <span>📍</span> <span>{selectedConversation.contact_info?.location || conversationInsights?.contactInfo?.location}</span>
+                                            </div>
+                                        )}
+                                        {conversationInsights?.contactInfo?.businessName && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>🏢</span> <span>{conversationInsights.contactInfo.businessName}</span>
+                                            </div>
+                                        )}
+                                        {conversationInsights?.contactInfo?.website && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span>🌐</span> <a href={conversationInsights.contactInfo.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', wordBreak: 'break-all' }}>{conversationInsights.contactInfo.website}</a>
                                             </div>
                                         )}
                                     </div>
@@ -2409,7 +2436,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             )}
 
                             {/* Conversations Summary (AI) */}
-                            {(selectedConversation.ai_summary || conversationInsights?.aiNotes || aiAnalysis?.notes) && (
+                            {(selectedConversation.ai_summary || conversationInsights?.aiNotes || conversationInsights?.aiSummary || aiAnalysis?.notes) && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
                                         🤖 AI Summary
@@ -2421,7 +2448,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                         padding: '1rem'
                                     }}>
                                         <p style={{ fontSize: '0.85rem', lineHeight: '1.5', margin: 0, color: 'var(--text-primary)' }}>
-                                            {conversationInsights?.aiNotes || aiAnalysis?.notes || selectedConversation.ai_summary}
+                                            {conversationInsights?.aiNotes || conversationInsights?.aiSummary || aiAnalysis?.notes || selectedConversation.ai_summary}
                                         </p>
                                     </div>
                                 </div>
