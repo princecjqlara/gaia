@@ -669,8 +669,8 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
             return;
         }
         const propertyUrl = selectedConversation.participant_name
-            ? `${window.location.origin}/u/${encodeURIComponent(selectedConversation.participant_name)}/property/${property.id}`
-            : `${window.location.origin}/property/${property.id}`;
+            ? `${window.location.origin}/u/${encodeURIComponent(selectedConversation.participant_name)}/property/${property.id}?pid=${selectedConversation.participant_id}`
+            : `${window.location.origin}/property/${property.id}?pid=${selectedConversation.participant_id}`;
 
         const success = await sendVideoMessage(
             property.videos[0],

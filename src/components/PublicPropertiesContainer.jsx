@@ -10,8 +10,14 @@ const PublicPropertiesContainer = ({ onClose }) => {
     const [initialPropertyId, setInitialPropertyId] = useState(null);
     const [teamId, setTeamId] = useState(null);
     const [visitorName, setVisitorName] = useState(null);
+    const [participantId, setParticipantId] = useState(null);
 
     useEffect(() => {
+        // Parse search params for pid
+        const params = new URLSearchParams(window.location.search);
+        const pid = params.get('pid');
+        if (pid) setParticipantId(pid);
+
         // Parse URL for team ID, visitor name, and property ID
         const path = window.location.pathname;
 
@@ -138,6 +144,7 @@ const PublicPropertiesContainer = ({ onClose }) => {
             }}
             initialProperty={initialSelected}
             visitorName={visitorName} // Pass visitor name for tracking
+            participantId={participantId} // Pass participant ID for tracking
             onPropertySelect={(property) => {
                 // Update URL when property is selected
                 let newPath = '';

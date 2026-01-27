@@ -55,9 +55,10 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                         property_title: selectedProperty.title,
                         viewer_id: session?.user?.id || null, // Null for anonymous
                         visitor_name: visitorName || null, // Track specific visitor from URL
+                        participant_id: participantId || null, // Track PSID for 100% reliable matching
                         view_duration: 0,
                         viewed_at: new Date().toISOString(),
-                        source: visitorName ? 'custom_link' : 'website'
+                        source: participantId ? 'fb_messenger' : (visitorName ? 'custom_link' : 'website')
                     });
 
                     if (error) {

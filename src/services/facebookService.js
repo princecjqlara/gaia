@@ -1528,9 +1528,10 @@ class FacebookService {
 
             const elements = properties.slice(0, 10).map(property => {
                 // Construct URL with visitor tracking if name is available
-                let propertyUrl = `${window.location.origin}/property/${property.id}`;
+                // Include recipientId as pid for more reliable tracking
+                let propertyUrl = `${window.location.origin}/property/${property.id}?pid=${recipientId}`;
                 if (visitorName) {
-                    propertyUrl = `${window.location.origin}/u/${encodeURIComponent(visitorName)}/property/${property.id}`;
+                    propertyUrl = `${window.location.origin}/u/${encodeURIComponent(visitorName)}/property/${property.id}?pid=${recipientId}`;
                 }
 
                 const imageUrl = (property.images && property.images.length > 0) ? property.images[0] : property.image;
@@ -2914,11 +2915,11 @@ class FacebookService {
             if (convData?.participant_name) {
                 console.log(`[INSIGHTS] Looking for property views for name: "${convData.participant_name}"`);
 
-                // Find stats in property_views matching the visitor name (case-insensitive)
+                // Find stats in property_views matching the participant_id (best) or visitor name (fallback)
                 const { data: viewsData, error: viewError } = await getSupabase()
                     .from('property_views')
                     .select('*, properties(title, price, images, address, id)')
-                    .ilike('visitor_name', convData.participant_name)
+                    .or(`participant_id.eq."${participantId}",visitor_name.ilike."${convData.participant_name}"`)
                     .order('created_at', { ascending: false })
                     .limit(5);
 
