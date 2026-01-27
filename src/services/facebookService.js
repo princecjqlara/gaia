@@ -2839,6 +2839,38 @@ class FacebookService {
                     : { type: 'past', days: Math.abs(diffDays) };
             }
 
+            // 3. Get viewed property by name (for personalized link tracking)
+            let viewedProperty = null;
+
+            // First get the participant name from the conversation
+            const { data: convData } = await getSupabase()
+                .from('facebook_conversations')
+                .select('participant_name')
+                .eq('conversation_id', conversationId)
+                .single();
+
+            if (convData?.participant_name) {
+                // Find stats in property_views matching the visitor name
+                const { data: viewData } = await getSupabase()
+                    .from('property_views')
+                    .select('*, properties(title, price, images, address, id)')
+                    .eq('visitor_name', convData.participant_name)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (viewData && viewData.properties) {
+                    viewedProperty = {
+                        id: viewData.property_id,
+                        title: viewData.properties.title,
+                        price: viewData.properties.price,
+                        image: viewData.properties.images?.[0] || null,
+                        address: viewData.properties.address,
+                        viewedAt: viewData.created_at
+                    };
+                }
+            }
+
             return {
                 // Message statistics
                 messageCount,
@@ -2862,11 +2894,15 @@ class FacebookService {
                     daysInfo: bookingDaysInfo
                 } : null,
 
+                // Viewed Property (from tracking)
+                viewedProperty,
+
                 // Timeline events
                 timeline: [
                     firstMessageDate && { type: 'first_contact', date: firstMessageDate, label: 'First Contact' },
                     booking?.created_at && { type: 'booking_created', date: booking.created_at, label: 'Appointment Booked' },
                     booking?.booking_datetime && { type: 'appointment', date: booking.booking_datetime, label: 'Appointment', status: booking.status },
+                    viewedProperty?.viewedAt && { type: 'property_view', date: viewedProperty.viewedAt, label: `Viewed ${viewedProperty.title}` },
                     lastMessageDate && { type: 'last_activity', date: lastMessageDate, label: 'Last Message' }
                 ].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date))
             };
