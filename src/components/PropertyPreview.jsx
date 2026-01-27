@@ -23,7 +23,7 @@ const DEFAULT_BRANDING = {
     stats: []
 };
 
-const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId, initialProperty = null, onPropertySelect, visitorName }) => {
+const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId, initialProperty = null, onPropertySelect, visitorName, participantId }) => {
     const branding = { ...DEFAULT_BRANDING, ...propBranding };
     const [selectedProperty, setSelectedPropertyState] = useState(initialProperty);
 
@@ -73,7 +73,7 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
             };
             logView();
         }
-    }, [selectedProperty, visitorName]);
+    }, [selectedProperty, visitorName, participantId]);
 
     // Helper to get suggested properties
     const getSuggestedProperties = () => {

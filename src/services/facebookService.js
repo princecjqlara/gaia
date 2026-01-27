@@ -2914,14 +2914,27 @@ class FacebookService {
 
             if (convError || !convData) return null;
 
-            if (convData?.participant_name) {
-                console.log(`[INSIGHTS] Looking for property views for name: "${convData.participant_name}"`);
+            if (convData?.participant_name || convData?.participant_id || participantId) {
+                const pid = participantId || convData?.participant_id;
+                const visitorName = convData?.participant_name;
+                console.log(`[INSIGHTS] Looking for property views for PID: "${pid}" / Name: "${visitorName}"`);
+
+                // Build OR conditions for finding matching views
+                let orConditions = [];
+                if (pid) orConditions.push(`participant_id.eq.${pid}`);
+                if (visitorName) orConditions.push(`visitor_name.eq.${visitorName}`);
+
+                // Fallback if no conditions
+                if (orConditions.length === 0) {
+                    console.log('[INSIGHTS] No participant_id or visitor_name available for lookup');
+                    return null;
+                }
 
                 // Find stats in property_views matching the participant_id (best) or visitor name (fallback)
                 const { data: viewsData, error: viewError } = await getSupabase()
                     .from('property_views')
-                    .select('*, properties(title, price, images, address, id)')
-                    .or(`participant_id.eq.${participantId || 'NULL'},visitor_name.eq."${convData.participant_name || 'unknown'}"`)
+                    .select('*, properties(title, price, images, address, id, bedrooms, bathrooms)')
+                    .or(orConditions.join(','))
                     .order('created_at', { ascending: false })
                     .limit(5);
 
@@ -2932,13 +2945,15 @@ class FacebookService {
                 if (viewsData && viewsData.length > 0) {
                     viewedProperties = viewsData.map(v => ({
                         id: v.property_id,
-                        title: v.properties.title,
-                        price: v.properties.price,
-                        image: v.properties.images?.[0] || null,
-                        address: v.properties.address,
+                        title: v.properties?.title,
+                        price: v.properties?.price,
+                        image: v.properties?.images?.[0] || null,
+                        address: v.properties?.address,
+                        bedrooms: v.properties?.bedrooms || 0,
+                        bathrooms: v.properties?.bathrooms || 0,
                         viewedAt: v.created_at,
-                        viewedGallery: v.gallery_viewed || false, // Assuming these columns exist or default
-                        checkedPrice: true // properties usually have price
+                        viewedGallery: v.gallery_viewed || false,
+                        checkedPrice: true
                     }));
 
                     // Set most recent for backward compatibility
