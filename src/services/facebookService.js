@@ -643,7 +643,7 @@ class FacebookService {
      * Get messages for a conversation from database
      * Loads only the most recent 30 messages for fast initial load
      */
-    async getMessages(conversationId, limit = 20) {
+    async getMessages(conversationId, limit = 100) {
         try {
             // Mock Message Support
             if (conversationId && conversationId.startsWith('mock_')) {
@@ -2925,54 +2925,62 @@ class FacebookService {
                     console.log('[INSIGHTS] Error finding view:', viewError.message);
                 }
 
-            };
-        }
+                if (viewData && viewData.properties) {
+                    viewedProperty = {
+                        id: viewData.property_id,
+                        title: viewData.properties.title,
+                        price: viewData.properties.price,
+                        image: viewData.properties.images?.[0] || null,
+                        address: viewData.properties.address,
+                        viewedAt: viewData.created_at
+                    };
+                }
             }
 
             return {
-    // Message statistics
-    messageCount,
-    customerMessages,
-    agentMessages,
-    firstMessageDate,
-    lastMessageDate,
-    daysSinceFirstContact,
+                // Message statistics
+                messageCount,
+                customerMessages,
+                agentMessages,
+                firstMessageDate,
+                lastMessageDate,
+                daysSinceFirstContact,
 
-    // Booking info
-    hasBooking: !!booking,
-    booking: booking ? {
-        id: booking.id,
-        datetime: booking.booking_datetime,
-        date: booking.booking_date,
-        time: booking.booking_time,
-        status: booking.status,
-        contactName: booking.contact_name,
-        contactPhone: booking.contact_phone,
-        notes: booking.notes,
-        daysInfo: bookingDaysInfo
-    } : null,
+                // Booking info
+                hasBooking: !!booking,
+                booking: booking ? {
+                    id: booking.id,
+                    datetime: booking.booking_datetime,
+                    date: booking.booking_date,
+                    time: booking.booking_time,
+                    status: booking.status,
+                    contactName: booking.contact_name,
+                    contactPhone: booking.contact_phone,
+                    notes: booking.notes,
+                    daysInfo: bookingDaysInfo
+                } : null,
 
-    // Viewed Property (from tracking)
-    viewedProperty,
+                // Viewed Property (from tracking)
+                viewedProperty,
 
-    // AI Analysis (from DB)
-    aiAnalysis: convData.ai_analysis ? JSON.parse(convData.ai_analysis) : null,
-    aiNotes: convData.ai_notes,
-    leadScore: convData.ai_analysis ? JSON.parse(convData.ai_analysis).leadScore : null,
+                // AI Analysis (from DB)
+                aiAnalysis: convData.ai_analysis ? JSON.parse(convData.ai_analysis) : null,
+                aiNotes: convData.ai_notes,
+                leadScore: convData.ai_analysis ? JSON.parse(convData.ai_analysis).leadScore : null,
 
-    // Timeline events
-    timeline: [
-        firstMessageDate && { type: 'first_contact', date: firstMessageDate, label: 'First Contact' },
-        booking?.created_at && { type: 'booking_created', date: booking.created_at, label: 'Appointment Booked' },
-        booking?.booking_datetime && { type: 'appointment', date: booking.booking_datetime, label: 'Appointment', status: booking.status },
-        viewedProperty?.viewedAt && { type: 'property_view', date: viewedProperty.viewedAt, label: `Viewed ${viewedProperty.title}` },
-        lastMessageDate && { type: 'last_activity', date: lastMessageDate, label: 'Last Message' }
-    ].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date))
-};
+                // Timeline events
+                timeline: [
+                    firstMessageDate && { type: 'first_contact', date: firstMessageDate, label: 'First Contact' },
+                    booking?.created_at && { type: 'booking_created', date: booking.created_at, label: 'Appointment Booked' },
+                    booking?.booking_datetime && { type: 'appointment', date: booking.booking_datetime, label: 'Appointment', status: booking.status },
+                    viewedProperty?.viewedAt && { type: 'property_view', date: viewedProperty.viewedAt, label: `Viewed ${viewedProperty.title}` },
+                    lastMessageDate && { type: 'last_activity', date: lastMessageDate, label: 'Last Message' }
+                ].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date))
+            };
         } catch (error) {
-    console.error('Error getting conversation insights:', error);
-    return null;
-}
+            console.error('Error getting conversation insights:', error);
+            return null;
+        }
     }
 }
 

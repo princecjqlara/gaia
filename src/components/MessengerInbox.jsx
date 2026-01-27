@@ -73,6 +73,25 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         bulkUpdateLeadStatus
     } = useFacebookMessenger();
 
+    const lastAnalyzedCountRef = useRef(0);
+
+    // Auto-analyze conversation every 3 messages
+    useEffect(() => {
+        if (selectedConversation && messages.length > 0) {
+            // Only analyze if message count is a multiple of 3 AND we haven't analyzed this count yet
+            if (messages.length % 3 === 0 && messages.length !== lastAnalyzedCountRef.current) {
+                console.log(`[Auto-AI] Message count ${messages.length} (multiple of 3). Triggering analysis...`);
+                lastAnalyzedCountRef.current = messages.length;
+                analyzeCurrentConversation();
+            }
+        } else {
+            // Reset when conversation changes/clears
+            if (lastAnalyzedCountRef.current !== 0) {
+                lastAnalyzedCountRef.current = 0;
+            }
+        }
+    }, [messages.length, selectedConversation?.conversation_id]); // Depend on length and ID to avoid excessive runs
+
     const [messageText, setMessageText] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [showTransferModal, setShowTransferModal] = useState(false);
