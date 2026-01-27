@@ -2357,9 +2357,9 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                             }}>
                                                 <span>{(selectedConversation.viewed_property || conversationInsights?.viewedProperty).id.substring(0, 8)}...</span>
                                                 <span>•</span>
-                                                <span>2 Beds</span>
+                                                <span>{(selectedConversation.viewed_property || conversationInsights?.viewedProperty).bedrooms || 0} Beds</span>
                                                 <span>•</span>
-                                                <span>2 Baths</span>
+                                                <span>{(selectedConversation.viewed_property || conversationInsights?.viewedProperty).bathrooms || 0} Baths</span>
                                             </div>
 
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>

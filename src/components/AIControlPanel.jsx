@@ -17,6 +17,11 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     const [agentContext, setAgentContext] = useState(''); // External context for AI
     const [savingContext, setSavingContext] = useState(false);
     const [bestTimeDisabled, setBestTimeDisabled] = useState(false);
+    const [activeTab, setActiveTab] = useState('status');
+    const [actionLog, setActionLog] = useState([]);
+    const [activeGoal, setActiveGoal] = useState(null);
+    const [showGoalSelector, setShowGoalSelector] = useState(false);
+    const [adminConfig, setAdminConfig] = useState(null);
 
     const supabase = getSupabaseClient();
 
@@ -30,17 +35,24 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     const loadAllData = async () => {
         setLoading(true);
         try {
-            const [safety, followUps, time, convData] = await Promise.all([
+            const [safety, followUps, time, convData, goal, actions] = await Promise.all([
                 checkSafetyStatus(conversationId),
                 getScheduledFollowUps(conversationId, { includeAll: true }),
                 calculateBestTimeToContact(conversationId),
-                supabase.from('facebook_conversations').select('agent_context, intuition_followup_disabled, best_time_scheduling_disabled').eq('conversation_id', conversationId).single()
+                supabase.from('facebook_conversations')
+                    .select('agent_context, intuition_followup_disabled, best_time_scheduling_disabled')
+                    .eq('conversation_id', conversationId)
+                    .single(),
+                getActiveGoal(conversationId),
+                loadActionLog()
             ]);
 
             setSafetyStatus(safety);
             setScheduledFollowUps(followUps);
             setBestTime(time);
             setAgentContext(convData?.data?.agent_context || '');
+            setActiveGoal(goal);
+            setActionLog(actions);
 
             // Merge disabled flags into safetyStatus object for easy access or separate state
             // Re-using safetyStatus structure or extending it
@@ -339,10 +351,9 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     return (
         <div style={styles.overlay} onClick={onClose}>
             <div style={styles.panel} onClick={e => e.stopPropagation()}>
-                {/* No Tabs - Single View */}
                 <div style={styles.header}>
                     <div>
-                        <h2 style={styles.title}>🤖 AI Controls</h2>
+                        <h2 style={styles.title}>🤖 AI Settings</h2>
                         <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#9ca3af' }}>
                             {participantName || 'Contact'}
                         </p>
@@ -350,676 +361,132 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                     <button style={styles.closeBtn} onClick={onClose}>×</button>
                 </div>
 
-                {/* Content */}
                 <div style={styles.content}>
-                    {/* Status Tab */}
-                    {activeTab === 'status' && (
-                        <>
-                            <div style={styles.section}>
-                                <h3 style={styles.sectionTitle}>AI Status</h3>
-                                <div style={styles.statusCard}>
-                                    <div style={styles.statusRow}>
-                                        <span>AI Messaging</span>
-                                        <span style={{
-                                            ...styles.badge,
-                                            ...(safetyStatus?.canAIRespond ? styles.badgeGreen : styles.badgeRed)
-                                        }}>
-                                            {safetyStatus?.canAIRespond ? 'Active' : 'Paused'}
-                                        </span>
-                                    </div>
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>General Controls</h3>
 
-                                    {safetyStatus?.blockReason && (
-                                        <div style={styles.statusRow}>
-                                            <span>Reason</span>
-                                            <span style={{ ...styles.badge, ...styles.badgeYellow }}>
-                                                {safetyStatus.blockReason.replace('_', ' ')}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div style={styles.statusRow}>
-                                        <span>Confidence</span>
-                                        <span style={{
-                                            ...styles.badge,
-                                            ...(safetyStatus?.confidence >= 0.7 ? styles.badgeGreen :
-                                                safetyStatus?.confidence >= 0.4 ? styles.badgeYellow : styles.badgeRed)
-                                        }}>
-                                            {((safetyStatus?.confidence || 0) * 100).toFixed(0)}%
-                                        </span>
-                                    </div>
-
-                                    {safetyStatus?.optedOut && (
-                                        <div style={{
-                                            marginTop: '12px',
-                                            padding: '8px 12px',
-                                            background: 'rgba(239, 68, 68, 0.2)',
-                                            borderRadius: '6px',
-                                            fontSize: '12px',
-                                            color: '#f87171'
-                                        }}>
-                                            ⚠️ Contact has opted out of AI messaging
-                                        </div>
-                                    )}
-                                </div>
-
-                                <button
-                                    style={{
-                                        ...styles.button,
-                                        ...(safetyStatus?.canAIRespond ? styles.buttonDanger : styles.buttonPrimary),
-                                        width: '100%'
-                                    }}
-                                    onClick={handleToggleAI}
-                                    disabled={safetyStatus?.optedOut}
-                                >
-                                    {safetyStatus?.canAIRespond ? '⏸️ Pause AI' : '▶️ Resume AI'}
-                                </button>
-
-                                {/* Disable Intuition Follow-ups Toggle */}
-                                <button
-                                    style={{
-                                        ...styles.button,
-                                        ...styles.buttonSecondary,
-                                        width: '100%',
-                                        marginTop: '8px',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                    }}
-                                    onClick={async () => {
-                                        try {
-                                            const { data: conv } = await supabase
-                                                .from('facebook_conversations')
-                                                .select('intuition_followup_disabled')
-                                                .eq('conversation_id', conversationId)
-                                                .single();
-
-                                            const newValue = !conv?.intuition_followup_disabled;
-                                            await supabase
-                                                .from('facebook_conversations')
-                                                .update({ intuition_followup_disabled: newValue })
-                                                .eq('conversation_id', conversationId);
-
-                                            alert(newValue
-                                                ? '✅ Intuition follow-ups disabled. Bot will still respond to messages.'
-                                                : '✅ Intuition follow-ups enabled.');
-                                            await loadAllData();
-                                        } catch (err) {
-                                            console.error('Error toggling intuition:', err);
-                                            alert('Failed to toggle setting');
-                                        }
-                                    }}
-                                >
-                                    <span>🔮 Intuition Follow-ups</span>
-                                    <span style={{
-                                        ...styles.badge,
-                                        ...(safetyStatus?.intuitionDisabled ? styles.badgeRed : styles.badgeGreen)
-                                    }}>
-                                        {safetyStatus?.intuitionDisabled ? 'OFF' : 'ON'}
-                                    </span>
-                                </button>
-
-                                {/* Best Time Scheduling Toggle */}
-                                <button
-                                    style={{
-                                        ...styles.button,
-                                        ...styles.buttonSecondary,
-                                        width: '100%',
-                                        marginTop: '8px',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                    }}
-                                    onClick={async () => {
-                                        try {
-                                            const newValue = !bestTimeDisabled;
-                                            await supabase
-                                                .from('facebook_conversations')
-                                                .update({ best_time_scheduling_disabled: newValue })
-                                                .eq('conversation_id', conversationId);
-
-                                            alert(newValue
-                                                ? '✅ Smart scheduling disabled.'
-                                                : '✅ Smart scheduling enabled.');
-                                            await loadAllData();
-                                        } catch (err) {
-                                            console.error('Error toggling smart scheduling:', err);
-                                            alert('Failed to toggle setting (Column might be missing in DB?)');
-                                        }
-                                    }}
-                                >
-                                    <span>📅 Smart Scheduling</span>
-                                    <span style={{
-                                        ...styles.badge,
-                                        ...(bestTimeDisabled ? styles.badgeRed : styles.badgeGreen)
-                                    }}>
-                                        {bestTimeDisabled ? 'OFF' : 'ON'}
-                                    </span>
-                                </button>
-                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-                                    Disable to prevent AI from auto-scheduling messages at optimal times
-                                </div>
+                        <div style={styles.statusCard}>
+                            <div style={styles.statusRow}>
+                                <span>AI Response Status</span>
+                                <span style={{
+                                    ...styles.badge,
+                                    ...(safetyStatus?.canAIRespond ? styles.badgeGreen : styles.badgeRed)
+                                }}>
+                                    {safetyStatus?.canAIRespond ? 'Active' : 'Paused'}
+                                </span>
                             </div>
 
-                            {/* Agent Context Section */}
-                            <div style={styles.section}>
-                                <h3 style={styles.sectionTitle}>📝 External Context for AI</h3>
-                                <div style={styles.statusCard}>
-                                    <textarea
-                                        value={agentContext}
-                                        onChange={(e) => setAgentContext(e.target.value)}
-                                        placeholder="Add any external context here (phone calls, emails, etc.) that the AI should know about when following up..."
-                                        style={{
-                                            width: '100%',
-                                            minHeight: '80px',
-                                            padding: '10px',
-                                            background: '#1a1a2e',
-                                            border: '1px solid #3d3d5c',
-                                            borderRadius: '6px',
-                                            color: '#e5e7eb',
-                                            fontSize: '13px',
-                                            resize: 'vertical',
-                                            fontFamily: 'inherit'
-                                        }}
-                                    />
-                                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '11px', color: '#6b7280' }}>
-                                            AI will use this context when generating responses
-                                        </span>
-                                        <button
-                                            style={{
-                                                ...styles.button,
-                                                ...styles.buttonPrimary,
-                                                padding: '6px 14px',
-                                                fontSize: '12px'
-                                            }}
-                                            onClick={handleSaveContext}
-                                            disabled={savingContext}
-                                        >
-                                            {savingContext ? 'Saving...' : '💾 Save Context'}
-                                        </button>
-                                    </div>
+                            {safetyStatus?.blockReason && (
+                                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+                                    Reason: {safetyStatus.blockReason.replace('_', ' ')}
                                 </div>
-                            </div>
+                            )}
+                        </div>
 
-                            {/* Next Intuition Follow-up Section */}
-                            <div style={styles.section}>
-                                <h3 style={styles.sectionTitle}>🔮 Next Intuition Follow-up</h3>
-                                {(() => {
-                                    const nextFollowUp = scheduledFollowUps?.find(f => f.status === 'pending');
+                        {/* AI Messaging Toggle */}
+                        <div style={{ marginBottom: '16px' }}>
+                            <button
+                                style={{
+                                    ...styles.button,
+                                    ...(safetyStatus?.canAIRespond ? styles.buttonDanger : styles.buttonPrimary),
+                                    width: '100%'
+                                }}
+                                onClick={handleToggleAI}
+                                disabled={safetyStatus?.optedOut}
+                            >
+                                {safetyStatus?.canAIRespond ? '⏸️ Pause AI Messaging' : '▶️ Resume AI Messaging'}
+                            </button>
+                            {safetyStatus?.optedOut && (
+                                <div style={{ fontSize: '11px', color: '#f87171', marginTop: '4px', textAlign: 'center' }}>
+                                    ⚠️ Contact has opted out
+                                </div>
+                            )}
+                        </div>
 
-                                    if (!nextFollowUp) {
-                                        return (
-                                            <div style={{
-                                                ...styles.statusCard,
-                                                background: 'rgba(107, 114, 128, 0.1)',
-                                                border: '1px solid rgba(107, 114, 128, 0.2)'
-                                            }}>
-                                                <div style={{
-                                                    textAlign: 'center',
-                                                    padding: '16px',
-                                                    color: '#9ca3af'
-                                                }}>
-                                                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>💤</div>
-                                                    <div style={{ fontSize: '13px' }}>No follow-up scheduled yet</div>
-                                                    <div style={{ fontSize: '11px', marginTop: '6px', fontStyle: 'italic' }}>
-                                                        AI will schedule one after detecting silence
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
+                        {/* Intuition Follow-ups Toggle */}
+                        <div style={{ marginBottom: '12px' }}>
+                            <button
+                                style={{
+                                    ...styles.button,
+                                    ...styles.buttonSecondary,
+                                    width: '100%',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}
+                                onClick={async () => {
+                                    try {
+                                        const { data: conv } = await supabase
+                                            .from('facebook_conversations')
+                                            .select('intuition_followup_disabled')
+                                            .eq('conversation_id', conversationId)
+                                            .single();
+
+                                        const newValue = !conv?.intuition_followup_disabled;
+                                        await supabase
+                                            .from('facebook_conversations')
+                                            .update({ intuition_followup_disabled: newValue })
+                                            .eq('conversation_id', conversationId);
+
+                                        await loadAllData();
+                                    } catch (err) {
+                                        console.error('Error toggling intuition:', err);
                                     }
+                                }}
+                            >
+                                <span>🔮 Intuition Follow-ups</span>
+                                <span style={{
+                                    ...styles.badge,
+                                    ...(safetyStatus?.intuitionDisabled ? styles.badgeRed : styles.badgeGreen)
+                                }}>
+                                    {safetyStatus?.intuitionDisabled ? 'OFF' : 'ON'}
+                                </span>
+                            </button>
+                        </div>
 
-                                    const scheduledDate = new Date(nextFollowUp.scheduled_at);
-                                    const now = new Date();
-                                    const diffMs = scheduledDate - now;
-                                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                                    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                                    const isPast = diffMs < 0;
+                        {/* Smart Scheduling Toggle */}
+                        <div style={{ marginBottom: '12px' }}>
+                            <button
+                                style={{
+                                    ...styles.button,
+                                    ...styles.buttonSecondary,
+                                    width: '100%',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}
+                                onClick={async () => {
+                                    try {
+                                        const newValue = !bestTimeDisabled;
+                                        await supabase
+                                            .from('facebook_conversations')
+                                            .update({ best_time_scheduling_disabled: newValue })
+                                            .eq('conversation_id', conversationId);
 
-                                    return (
-                                        <div style={{
-                                            ...styles.statusCard,
-                                            background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%)',
-                                            border: '1px solid rgba(234, 179, 8, 0.3)'
-                                        }}>
-                                            <div style={styles.statusRow}>
-                                                <span>Scheduled For</span>
-                                                <span style={{ fontWeight: 500, color: '#fcd34d' }}>
-                                                    {scheduledDate.toLocaleString()}
-                                                </span>
-                                            </div>
-                                            <div style={styles.statusRow}>
-                                                <span>Time Remaining</span>
-                                                <span style={{
-                                                    ...styles.badge,
-                                                    background: isPast ? 'rgba(239, 68, 68, 0.3)' : 'rgba(234, 179, 8, 0.3)',
-                                                    color: isPast ? '#f87171' : '#fcd34d'
-                                                }}>
-                                                    {isPast ? 'Processing...' :
-                                                        diffHours > 0 ? `${diffHours}h ${diffMins}m` : `${diffMins}m`}
-                                                </span>
-                                            </div>
-                                            {nextFollowUp.follow_up_type && (
-                                                <div style={styles.statusRow}>
-                                                    <span>Type</span>
-                                                    <span style={{ fontSize: '13px', color: '#9ca3af' }}>
-                                                        {nextFollowUp.follow_up_type.replace(/_/g, ' ')}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {nextFollowUp.reason && (
-                                                <div style={{
-                                                    marginTop: '12px',
-                                                    padding: '10px 12px',
-                                                    background: 'rgba(168, 85, 247, 0.15)',
-                                                    borderRadius: '8px',
-                                                    border: '1px solid rgba(168, 85, 247, 0.3)'
-                                                }}>
-                                                    <div style={{
-                                                        fontSize: '11px',
-                                                        color: '#c084fc',
-                                                        fontWeight: 600,
-                                                        marginBottom: '4px'
-                                                    }}>
-                                                        🧠 AI Intuition
-                                                    </div>
-                                                    <div style={{
-                                                        fontSize: '12px',
-                                                        color: '#e9d5ff',
-                                                        lineHeight: '1.4'
-                                                    }}>
-                                                        {nextFollowUp.reason}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {/* Conversation Summary Section */}
-                                            {(() => {
-                                                // Try to parse summary from latest action log
-                                                const summary = nextFollowUp.action_data?.conversation_summary;
-                                                if (!summary) return null;
+                                        await loadAllData();
+                                    } catch (err) {
+                                        console.error('Error toggling smart scheduling:', err);
+                                    }
+                                }}
+                            >
+                                <span>📅 Smart Scheduling</span>
+                                <span style={{
+                                    ...styles.badge,
+                                    ...(bestTimeDisabled ? styles.badgeRed : styles.badgeGreen)
+                                }}>
+                                    {bestTimeDisabled ? 'OFF' : 'ON'}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
 
-                                                return (
-                                                    <div style={{
-                                                        marginTop: '12px',
-                                                        padding: '12px',
-                                                        background: 'rgba(59, 130, 246, 0.15)',
-                                                        borderRadius: '8px',
-                                                        border: '1px solid rgba(59, 130, 246, 0.3)'
-                                                    }}>
-                                                        <div style={{
-                                                            fontSize: '11px',
-                                                            color: '#60a5fa',
-                                                            fontWeight: 600,
-                                                            marginBottom: '8px'
-                                                        }}>
-                                                            📊 Conversation Summary
-                                                        </div>
-                                                        <div style={{ fontSize: '12px', color: '#bfdbfe', lineHeight: '1.6' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                                <span style={{ color: '#9ca3af' }}>Interest Level:</span>
-                                                                <span style={{
-                                                                    color: summary.interest_level === 'hot' ? '#ef4444' :
-                                                                        summary.interest_level === 'warm' ? '#f59e0b' :
-                                                                            summary.interest_level === 'cold' ? '#60a5fa' : '#9ca3af',
-                                                                    fontWeight: 600,
-                                                                    textTransform: 'uppercase'
-                                                                }}>
-                                                                    {summary.interest_level === 'hot' ? '🔥 ' :
-                                                                        summary.interest_level === 'warm' ? '🌡️ ' :
-                                                                            summary.interest_level === 'cold' ? '❄️ ' : '❓ '}
-                                                                    {summary.interest_level || 'Unknown'}
-                                                                </span>
-                                                            </div>
-                                                            {summary.interested_in && (
-                                                                <div style={{ marginBottom: '4px' }}>
-                                                                    <span style={{ color: '#9ca3af' }}>Interested In: </span>
-                                                                    <span>{summary.interested_in}</span>
-                                                                </div>
-                                                            )}
-                                                            {summary.contact_status && (
-                                                                <div style={{ marginBottom: '4px' }}>
-                                                                    <span style={{ color: '#9ca3af' }}>Status: </span>
-                                                                    <span>{summary.contact_status}</span>
-                                                                </div>
-                                                            )}
-                                                            {summary.last_topic && (
-                                                                <div style={{ marginBottom: '4px' }}>
-                                                                    <span style={{ color: '#9ca3af' }}>Last Topic: </span>
-                                                                    <span>{summary.last_topic}</span>
-                                                                </div>
-                                                            )}
-                                                            {summary.buying_signals && summary.buying_signals !== 'none' && (
-                                                                <div style={{ marginBottom: '4px', color: '#34d399' }}>
-                                                                    <span style={{ color: '#9ca3af' }}>💰 Buying Signals: </span>
-                                                                    <span>{summary.buying_signals}</span>
-                                                                </div>
-                                                            )}
-                                                            {summary.objections && summary.objections !== 'none' && (
-                                                                <div style={{ marginBottom: '4px', color: '#f87171' }}>
-                                                                    <span style={{ color: '#9ca3af' }}>⚠️ Objections: </span>
-                                                                    <span>{summary.objections}</span>
-                                                                </div>
-                                                            )}
-                                                            {summary.next_action && (
-                                                                <div style={{
-                                                                    marginTop: '8px',
-                                                                    padding: '6px 8px',
-                                                                    background: 'rgba(34, 197, 94, 0.2)',
-                                                                    borderRadius: '4px',
-                                                                    color: '#86efac'
-                                                                }}>
-                                                                    <span style={{ fontWeight: 600 }}>Next: </span>
-                                                                    {summary.next_action}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })()}
-                                            <div style={{
-                                                fontSize: '11px',
-                                                color: '#9ca3af',
-                                                marginTop: '10px',
-                                                fontStyle: 'italic',
-                                                borderTop: '1px solid rgba(255,255,255,0.1)',
-                                                paddingTop: '10px'
-                                            }}>
-                                                ⚡ Updates automatically when customer messages
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
+                    {/* Simple Action Summary if history exists */}
+                    {actionLog.length > 0 && (
+                        <div style={{ ...styles.section, marginTop: '24px' }}>
+                            <h3 style={styles.sectionTitle}>Recent Activity</h3>
+                            <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                                {actionLog[0].action_type.replace(/_/g, ' ')} — {new Date(actionLog[0].created_at).toLocaleTimeString()}
                             </div>
-
-                            {bestTime && (
-                                <div style={styles.section}>
-                                    <h3 style={styles.sectionTitle}>Best Times to Contact</h3>
-                                    <div style={styles.statusCard}>
-                                        {/* Show all best time slots */}
-                                        {bestTime.bestSlots && bestTime.bestSlots.length > 0 ? (
-                                            <div style={{ marginBottom: '12px' }}>
-                                                {bestTime.bestSlots.map((slot, idx) => (
-                                                    <div key={idx} style={{
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        padding: '8px 12px',
-                                                        background: idx === 0 ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-                                                        borderRadius: '6px',
-                                                        marginBottom: '4px'
-                                                    }}>
-                                                        <span style={{
-                                                            color: idx === 0 ? '#a5b4fc' : '#9ca3af',
-                                                            fontWeight: idx === 0 ? 600 : 400
-                                                        }}>
-                                                            {idx === 0 ? '⭐ ' : ''}
-                                                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][slot.dayOfWeek]} at {slot.hourOfDay}:00
-                                                        </span>
-                                                        <span style={{
-                                                            fontSize: '11px',
-                                                            padding: '2px 8px',
-                                                            borderRadius: '10px',
-                                                            background: 'rgba(139, 92, 246, 0.2)',
-                                                            color: '#c4b5fd'
-                                                        }}>
-                                                            {(slot.score * 100).toFixed(0)}%
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div style={styles.statusRow}>
-                                                <span>Optimal Time</span>
-                                                <span style={{ fontWeight: 500 }}>
-                                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][bestTime.dayOfWeek]} at {bestTime.hourOfDay}:00
-                                                </span>
-                                            </div>
-                                        )}
-                                        <div style={styles.statusRow}>
-                                            <span>Next Occurrence</span>
-                                            <span style={{ fontSize: '13px', color: '#9ca3af' }}>
-                                                {new Date(bestTime.nextBestTime).toLocaleString()}
-                                            </span>
-                                        </div>
-                                        <div style={styles.statusRow}>
-                                            <span>Confidence</span>
-                                            <span style={{ ...styles.badge, ...styles.badgePurple }}>
-                                                {(bestTime.confidence * 100).toFixed(0)}%
-                                            </span>
-                                        </div>
-                                        {bestTime.dataPoints === 0 && (
-                                            <div style={{
-                                                fontSize: '11px',
-                                                color: '#6b7280',
-                                                marginTop: '8px',
-                                                fontStyle: 'italic'
-                                            }}>
-                                                📊 Based on defaults. Times will improve as contact engages.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* Goals Tab */}
-                    {activeTab === 'goals' && (
-                        <>
-                            {/* Check if admin has set a global goal */}
-                            {adminConfig?.default_goal && !activeGoal ? (
-                                <div style={styles.section}>
-                                    <h3 style={styles.sectionTitle}>Goal Management</h3>
-                                    <div style={{
-                                        ...styles.statusCard,
-                                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)',
-                                        border: '1px solid rgba(129, 140, 248, 0.3)'
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                                            <span style={{ fontSize: '32px' }}>🔒</span>
-                                            <div>
-                                                <div style={{ fontWeight: 600, fontSize: '16px', color: '#e5e7eb', marginBottom: '4px' }}>
-                                                    Goals Managed by Admin
-                                                </div>
-                                                <div style={{ fontSize: '13px', color: '#9ca3af' }}>
-                                                    A global goal has been set for all contacts
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            padding: '12px',
-                                            background: 'rgba(0,0,0,0.2)',
-                                            borderRadius: '8px'
-                                        }}>
-                                            <span style={{ fontSize: '20px' }}>
-                                                {adminConfig.default_goal === 'booking' ? '📅' :
-                                                    adminConfig.default_goal === 'closing' ? '💰' :
-                                                        adminConfig.default_goal === 'follow_up' ? '🔄' :
-                                                            adminConfig.default_goal === 'qualification' ? '🎯' :
-                                                                adminConfig.default_goal === 'information' ? 'ℹ️' : '🎯'}
-                                            </span>
-                                            <div style={{ color: '#e5e7eb', fontWeight: 500 }}>
-                                                {adminConfig.default_goal === 'booking' ? 'Book a Call' :
-                                                    adminConfig.default_goal === 'closing' ? 'Close Sale' :
-                                                        adminConfig.default_goal === 'follow_up' ? 'Re-engage Lead' :
-                                                            adminConfig.default_goal === 'qualification' ? 'Qualify Lead' :
-                                                                adminConfig.default_goal === 'information' ? 'Provide Information' :
-                                                                    adminConfig.default_goal}
-                                            </div>
-                                        </div>
-                                        <div style={{ marginTop: '12px', fontSize: '12px', color: '#6b7280' }}>
-                                            Contact your admin to change goal settings
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : activeGoal ? (
-                                <div style={styles.section}>
-                                    <h3 style={styles.sectionTitle}>Active Goal</h3>
-                                    <div style={styles.goalCard}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                            <span style={{ fontSize: '24px' }}>
-                                                {GOAL_TYPES[activeGoal.goal_type]?.icon || '🎯'}
-                                            </span>
-                                            <span style={{ fontSize: '16px', fontWeight: 600 }}>
-                                                {GOAL_TYPES[activeGoal.goal_type]?.name || activeGoal.goal_type}
-                                            </span>
-                                        </div>
-                                        <div style={{
-                                            background: 'rgba(255,255,255,0.2)',
-                                            borderRadius: '4px',
-                                            height: '8px',
-                                            marginBottom: '8px'
-                                        }}>
-                                            <div style={{
-                                                background: 'white',
-                                                borderRadius: '4px',
-                                                height: '100%',
-                                                width: `${activeGoal.progress_score || 0}%`
-                                            }} />
-                                        </div>
-                                        <div style={{ fontSize: '12px', opacity: 0.9 }}>
-                                            Progress: {activeGoal.progress_score || 0}%
-                                        </div>
-                                    </div>
-                                    <button
-                                        style={{ ...styles.button, ...styles.buttonDanger }}
-                                        onClick={handleAbandonGoal}
-                                    >
-                                        Abandon Goal
-                                    </button>
-                                </div>
-                            ) : (
-                                <div style={styles.section}>
-                                    <h3 style={styles.sectionTitle}>Set a Goal</h3>
-                                    {Object.entries(GOAL_TYPES).map(([type, info]) => (
-                                        <div
-                                            key={type}
-                                            style={styles.goalOption}
-                                            onClick={() => handleSetGoal(type)}
-                                            onMouseEnter={e => {
-                                                e.currentTarget.style.borderColor = '#818cf8';
-                                                e.currentTarget.style.background = '#2d2d44';
-                                            }}
-                                            onMouseLeave={e => {
-                                                e.currentTarget.style.borderColor = 'transparent';
-                                                e.currentTarget.style.background = '#252542';
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                <span style={{ fontSize: '24px' }}>{info.icon}</span>
-                                                <div>
-                                                    <div style={{ fontWeight: 500 }}>{info.name}</div>
-                                                    <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-                                                        {info.description}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* Follow-ups Tab */}
-                    {activeTab === 'followups' && (
-                        <>
-                            <div style={styles.section}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                    <h3 style={{ ...styles.sectionTitle, margin: 0 }}>Scheduled Follow-ups</h3>
-                                    <button
-                                        style={{ ...styles.button, ...styles.buttonPrimary }}
-                                        onClick={handleScheduleFollowUp}
-                                    >
-                                        + Schedule
-                                    </button>
-                                </div>
-
-                                {scheduledFollowUps.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '24px', color: '#6b7280' }}>
-                                        No scheduled follow-ups
-                                    </div>
-                                ) : (
-                                    scheduledFollowUps.map(fu => (
-                                        <div key={fu.id} style={styles.followUpItem}>
-                                            <div>
-                                                <div style={{ fontWeight: 500, marginBottom: '4px' }}>
-                                                    {fu.follow_up_type.replace('_', ' ')}
-                                                </div>
-                                                <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                                                    {new Date(fu.scheduled_at).toLocaleString()}
-                                                </div>
-                                                {fu.reason && (
-                                                    <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                                                        {fu.reason}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{
-                                                    ...styles.badge,
-                                                    ...(fu.status === 'pending' ? styles.badgeYellow :
-                                                        fu.status === 'sent' ? styles.badgeGreen : styles.badgeRed)
-                                                }}>
-                                                    {fu.status}
-                                                </span>
-                                                {fu.status === 'pending' && (
-                                                    <button
-                                                        style={{ ...styles.button, ...styles.buttonSecondary, padding: '4px 8px' }}
-                                                        onClick={() => handleCancelFollowUp(fu.id)}
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </>
-                    )}
-
-                    {/* History Tab */}
-                    {activeTab === 'history' && (
-                        <div style={styles.section}>
-                            <h3 style={styles.sectionTitle}>AI Action Log</h3>
-                            {actionLog.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '24px', color: '#6b7280' }}>
-                                    No actions recorded yet
-                                </div>
-                            ) : (
-                                actionLog.map(log => (
-                                    <div key={log.id} style={styles.logItem}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                            <span style={{
-                                                fontWeight: 500,
-                                                color: log.action_type.includes('sent') ? '#059669' :
-                                                    log.action_type.includes('takeover') ? '#dc2626' : '#374151'
-                                            }}>
-                                                {log.action_type.replace(/_/g, ' ')}
-                                            </span>
-                                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                                                {new Date(log.created_at).toLocaleTimeString()}
-                                            </span>
-                                        </div>
-                                        {log.explanation && (
-                                            <div style={{ color: '#6b7280', fontSize: '12px' }}>
-                                                {log.explanation}
-                                            </div>
-                                        )}
-                                        {log.confidence_score && (
-                                            <div style={{ marginTop: '4px' }}>
-                                                <span style={{ ...styles.badge, ...styles.badgePurple }}>
-                                                    {(log.confidence_score * 100).toFixed(0)}% confidence
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
-                            )}
                         </div>
                     )}
                 </div>

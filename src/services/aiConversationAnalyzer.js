@@ -130,12 +130,21 @@ Include:
 
 Keep notes concise (2-4 bullet points). Use professional tone.`;
 
-    const result = await nvidiaChat([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Contact: ${participantName || 'Unknown'}\n\nConversation:\n${conversationText}` }
-    ], { temperature: 0.5, maxTokens: 512 });
+    if (!messages || messages.length === 0) return '';
+    console.log(`[AI] Generating notes for ${participantName} with ${messages.length} messages`);
 
-    return result || '';
+    try {
+        const result = await nvidiaChat([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Contact: ${participantName || 'Unknown'}\n\nConversation:\n${conversationText}` }
+        ], { temperature: 0.5, maxTokens: 512 });
+
+        console.log(`[AI] Note generation result length: ${result?.length || 0}`);
+        return result || '';
+    } catch (err) {
+        console.error('[AI] Error generating notes:', err);
+        return '';
+    }
 };
 
 /**

@@ -2906,11 +2906,13 @@ class FacebookService {
             let viewedProperty = null; // Keep for backward compatibility/timeline
 
             // First get the participant name from the conversation
-            const { data: convData } = await getSupabase()
+            const { data: convData, error: convError } = await getSupabase()
                 .from('facebook_conversations')
-                .select('participant_name, ai_analysis, ai_notes')
+                .select('participant_id, participant_name, ai_analysis, ai_notes, ai_summary')
                 .eq('conversation_id', conversationId)
                 .single();
+
+            if (convError || !convData) return null;
 
             if (convData?.participant_name) {
                 console.log(`[INSIGHTS] Looking for property views for name: "${convData.participant_name}"`);
@@ -2919,7 +2921,7 @@ class FacebookService {
                 const { data: viewsData, error: viewError } = await getSupabase()
                     .from('property_views')
                     .select('*, properties(title, price, images, address, id)')
-                    .or(`participant_id.eq."${participantId}",visitor_name.ilike."${convData.participant_name}"`)
+                    .or(`participant_id.eq.${participantId || 'NULL'},visitor_name.eq."${convData.participant_name || 'unknown'}"`)
                     .order('created_at', { ascending: false })
                     .limit(5);
 
