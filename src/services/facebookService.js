@@ -713,7 +713,7 @@ class FacebookService {
             return [];
         }
         return data || [];
-    },
+    }
 
     /**
      * Send a message via Facebook Graph API
