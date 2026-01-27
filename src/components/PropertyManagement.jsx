@@ -95,13 +95,41 @@ const PropertyManagement = ({ teamId, organizationId }) => {
 
     const [formData, setFormData] = useState(initialFormState);
 
-    // Load properties from LocalStorage/Supabase on mount
+    // Load properties from Supabase on mount
     useEffect(() => {
-        const savedProps = localStorage.getItem('gaia_properties');
-        if (savedProps) {
-            setProperties(JSON.parse(savedProps));
-        }
+        loadProperties();
     }, []);
+
+    async function loadProperties() {
+        try {
+            const supabase = getSupabaseClient();
+            if (!supabase) return;
+
+            const { data, error } = await supabase
+                .from('properties')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Map snake_case to camelCase for internal use
+            const mappedProperties = (data || []).map(p => ({
+                ...p,
+                floorArea: p.floor_area,
+                lotArea: p.lot_area,
+                yearBuilt: p.year_built,
+                downPayment: p.down_payment,
+                monthlyAmortization: p.monthly_amortization,
+                paymentTerms: p.payment_terms,
+                is_featured: p.is_featured,
+                createdAt: p.created_at
+            }));
+
+            setProperties(mappedProperties);
+        } catch (err) {
+            console.error('Error loading properties:', err);
+        }
+    }
 
     // Load branding on mount
     useEffect(() => {
@@ -146,25 +174,56 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         // Basic validation
         if (!formData.title) return alert('Property Title is required');
 
-        const newProperty = {
-            ...formData,
-            id: editingId || Date.now().toString(),
-            createdAt: new Date().toISOString()
-        };
+        setLoading(true);
+        try {
+            const supabase = getSupabaseClient();
 
-        let updatedProperties;
-        if (editingId) {
-            updatedProperties = properties.map(p => p.id === editingId ? newProperty : p);
-        } else {
-            updatedProperties = [newProperty, ...properties];
+            // Map camelCase to snake_case
+            const propertyData = {
+                title: formData.title,
+                type: formData.type,
+                status: formData.status,
+                address: formData.address,
+                description: formData.description,
+                bedrooms: formData.bedrooms,
+                bathrooms: formData.bathrooms,
+                garage: formData.garage,
+                floor_area: formData.floorArea,
+                lot_area: formData.lotArea,
+                year_built: formData.yearBuilt,
+                price: formData.price,
+                down_payment: formData.downPayment,
+                monthly_amortization: formData.monthlyAmortization,
+                payment_terms: formData.paymentTerms,
+                images: formData.images,
+                videos: formData.videos,
+                is_featured: formData.is_featured,
+                created_at: editingId ? undefined : new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+
+            const { data, error } = await supabase
+                .from('properties')
+                .upsert({
+                    id: editingId || undefined,
+                    ...propertyData
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            await loadProperties();
+            setView('list');
+            setFormData(initialFormState);
+            setEditingId(null);
+            alert(editingId ? 'Property updated!' : 'Property listed successfully!');
+        } catch (err) {
+            console.error('Error saving property:', err);
+            alert('Failed to save property: ' + err.message);
+        } finally {
+            setLoading(false);
         }
-
-        setProperties(updatedProperties);
-        localStorage.setItem('gaia_properties', JSON.stringify(updatedProperties));
-
-        setView('list');
-        setFormData(initialFormState);
-        setEditingId(null);
     };
 
     const handleEdit = (property) => {
@@ -173,11 +232,23 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         setView('form');
     };
 
-    const handleDelete = (id) => {
+    const handleDelete = async (id) => {
         if (!confirm('Are you sure you want to delete this property?')) return;
-        const updated = properties.filter(p => p.id !== id);
-        setProperties(updated);
-        localStorage.setItem('gaia_properties', JSON.stringify(updated));
+
+        try {
+            const supabase = getSupabaseClient();
+            const { error } = await supabase
+                .from('properties')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+
+            await loadProperties();
+        } catch (err) {
+            console.error('Error deleting property:', err);
+            alert('Failed to delete property');
+        }
     };
 
     const handleMediaUpload = async (e) => {
@@ -257,10 +328,9 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         }));
     };
 
-    const generateMockData = () => {
+    const generateMockData = async () => {
         const mockProperties = [
             {
-                id: '1',
                 title: 'Modern Luxury Villa in Forbes Park',
                 type: 'House & Lot',
                 status: 'For Sale',
@@ -269,22 +339,20 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 bedrooms: 5,
                 bathrooms: 6,
                 garage: 4,
-                floorArea: 850,
-                lotArea: 1200,
-                yearBuilt: 2024,
+                floor_area: 850,
+                lot_area: 1200,
+                year_built: 2024,
                 price: 450000000,
-                downPayment: 90000000,
-                monthlyAmortization: 2500000,
-                paymentTerms: 'Cash or Bank Financing',
+                down_payment: 90000000,
+                monthly_amortization: 2500000,
+                payment_terms: 'Cash or Bank Financing',
                 images: [
                     'https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1000',
                     'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1000',
                     'https://images.unsplash.com/photo-1600596542815-27bfef402399?q=80&w=1000'
-                ],
-                createdAt: new Date().toISOString()
+                ]
             },
             {
-                id: '2',
                 title: 'High-Rise Condo with BGC Skyline View',
                 type: 'Condominium',
                 status: 'For Rent',
@@ -293,21 +361,19 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 bedrooms: 2,
                 bathrooms: 2,
                 garage: 1,
-                floorArea: 95,
-                lotArea: 0,
-                yearBuilt: 2022,
+                floor_area: 95,
+                lot_area: 0,
+                year_built: 2022,
                 price: 180000,
-                downPayment: 36000,
-                monthlyAmortization: 180000,
-                paymentTerms: '2 months advance, 2 months deposit',
+                down_payment: 36000,
+                monthly_amortization: 180000,
+                payment_terms: '2 months advance, 2 months deposit',
                 images: [
                     'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1000',
                     'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?q=80&w=1000'
-                ],
-                createdAt: new Date().toISOString()
+                ]
             },
             {
-                id: '3',
                 title: 'Spacious Townhouse in Quezon City',
                 type: 'Townhouse',
                 status: 'For Sale',
@@ -316,23 +382,37 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 bedrooms: 4,
                 bathrooms: 4,
                 garage: 2,
-                floorArea: 280,
-                lotArea: 100,
-                yearBuilt: 2025,
+                floor_area: 280,
+                lot_area: 100,
+                year_built: 2025,
                 price: 35000000,
-                downPayment: 7000000,
-                monthlyAmortization: 180000,
-                paymentTerms: '20% DP, 80% Bank Financing',
+                down_payment: 7000000,
+                monthly_amortization: 180000,
+                payment_terms: '20% DP, 80% Bank Financing',
                 images: [
                     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000',
                     'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=1000'
-                ],
-                createdAt: new Date().toISOString()
+                ]
             }
         ];
 
-        setProperties(mockProperties);
-        localStorage.setItem('gaia_properties', JSON.stringify(mockProperties));
+        try {
+            const supabase = getSupabaseClient();
+            setLoading(true);
+            const { error } = await supabase
+                .from('properties')
+                .insert(mockProperties);
+
+            if (error) throw error;
+
+            await loadProperties();
+            alert('Mock data loaded successfully!');
+        } catch (err) {
+            console.error("Error loading mock data", err);
+            alert("Failed to load mock data");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Render List View
@@ -515,9 +595,38 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                     backgroundPosition: 'center',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center'
+                                    justifyContent: 'center',
+                                    position: 'relative'
                                 }}>
                                     {!property.images[0] && <span style={{ fontSize: '2rem' }}>🏠</span>}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDelete(property.id);
+                                        }}
+                                        title="Delete Property"
+                                        style={{
+                                            position: 'absolute',
+                                            top: '0.5rem',
+                                            right: '0.5rem',
+                                            background: 'rgba(239, 68, 68, 0.9)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '50%',
+                                            width: '28px',
+                                            height: '28px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            opacity: 0.9,
+                                            transition: 'opacity 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.9'}
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
                                 <div style={{ padding: '1rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
