@@ -256,13 +256,13 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         if (files.length === 0) return;
 
         // Use Cloudinary for upload
-        const cloudName = localStorage.getItem('cloudinary_cloud_name') || prompt('Enter Cloudinary Cloud Name:');
-        const uploadPreset = localStorage.getItem('cloudinary_upload_preset') || prompt('Enter Cloudinary Upload Preset (Unsigned):');
+        const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || localStorage.getItem('cloudinary_cloud_name') || prompt('Enter Cloudinary Cloud Name:');
+        const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || localStorage.getItem('cloudinary_upload_preset') || prompt('Enter Cloudinary Upload Preset (Unsigned):');
 
         if (!cloudName || !uploadPreset) {
-            localStorage.setItem('cloudinary_cloud_name', cloudName || '');
-            localStorage.setItem('cloudinary_upload_preset', uploadPreset || '');
-            return alert('Cloudinary configuration missing. Please provide Cloud Name and Upload Preset.');
+            if (cloudName) localStorage.setItem('cloudinary_cloud_name', cloudName);
+            if (uploadPreset) localStorage.setItem('cloudinary_upload_preset', uploadPreset);
+            return alert('Cloudinary configuration missing. Please check your .env file or provide credentials.');
         } else {
             localStorage.setItem('cloudinary_cloud_name', cloudName);
             localStorage.setItem('cloudinary_upload_preset', uploadPreset);
