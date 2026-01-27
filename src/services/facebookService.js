@@ -112,9 +112,13 @@ class FacebookService {
     isWebhookCreatedConversation(conversationId) {
         if (!conversationId) return false;
         if (conversationId.startsWith('mock_')) return true; // Treat mock as webhook/local
+        // Allow t_ IDs to sync - they are valid Graph API IDs in many contexts
+        // Only skip if it's obviously not a valid FB ID (e.g. extremely short)
         const match = conversationId.match(/^t_(\d+)$/);
-        if (!match) return false;
-        return match[1].length < 18;
+        if (match) {
+            return match[1].length < 6; // Only treat very short IDs (like t_1) as local/test
+        }
+        return false;
     }
 
     /**
