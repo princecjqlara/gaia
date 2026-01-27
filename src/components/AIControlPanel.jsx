@@ -480,6 +480,122 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                         </div>
                     </div>
 
+                    {/* Next Intuition Follow-up Section */}
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>🔮 Next Intuition Follow-up</h3>
+                        {scheduledFollowUps && scheduledFollowUps.length > 0 ? (
+                            <div style={styles.statusCard}>
+                                {scheduledFollowUps.slice(0, 3).map((followUp, idx) => (
+                                    <div key={idx} style={{
+                                        ...styles.statusRow,
+                                        marginBottom: idx < scheduledFollowUps.length - 1 ? '8px' : 0,
+                                        paddingBottom: idx < scheduledFollowUps.length - 1 ? '8px' : 0,
+                                        borderBottom: idx < scheduledFollowUps.length - 1 ? '1px solid #374151' : 'none'
+                                    }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '12px', color: '#e5e7eb' }}>
+                                                {new Date(followUp.scheduled_at).toLocaleDateString('en-US', {
+                                                    weekday: 'short',
+                                                    month: 'short',
+                                                    day: 'numeric'
+                                                })}
+                                            </div>
+                                            <div style={{ fontSize: '14px', color: '#10b981', fontWeight: '500' }}>
+                                                {new Date(followUp.scheduled_at).toLocaleTimeString('en-US', {
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                    hour12: true
+                                                })}
+                                            </div>
+                                            {followUp.reason && (
+                                                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
+                                                    {followUp.reason}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <span style={{
+                                            ...styles.badge,
+                                            ...(followUp.status === 'pending' ? styles.badgeGreen : styles.badgeRed)
+                                        }}>
+                                            {followUp.status || 'pending'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                                No follow-ups scheduled
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Best Time to Contact Section */}
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>📊 Best Time to Contact</h3>
+                        {bestTime ? (
+                            <div style={styles.statusCard}>
+                                {bestTime.bestTimes && bestTime.bestTimes.length > 0 ? (
+                                    <div>
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
+                                                Optimal Contact Windows
+                                            </div>
+                                            {bestTime.bestTimes.slice(0, 3).map((time, idx) => (
+                                                <div key={idx} style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    padding: '4px 0'
+                                                }}>
+                                                    <span style={{ fontSize: '13px', color: '#e5e7eb' }}>
+                                                        {time.day} {time.hour}:00 - {time.hour + 1}:00
+                                                    </span>
+                                                    <span style={{
+                                                        fontSize: '11px',
+                                                        color: '#10b981',
+                                                        fontWeight: '500'
+                                                    }}>
+                                                        {time.score || time.responseRate || '—'}% response
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : bestTime.bestHour !== undefined ? (
+                                    <div>
+                                        <div style={styles.statusRow}>
+                                            <span>Best Hour</span>
+                                            <span style={{ color: '#10b981', fontWeight: '500' }}>
+                                                {bestTime.bestHour}:00 - {bestTime.bestHour + 1}:00
+                                            </span>
+                                        </div>
+                                        {bestTime.bestDay && (
+                                            <div style={{ ...styles.statusRow, marginTop: '4px' }}>
+                                                <span>Best Day</span>
+                                                <span style={{ color: '#10b981', fontWeight: '500' }}>
+                                                    {bestTime.bestDay}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                        Not enough data yet
+                                    </div>
+                                )}
+                                {bestTime.averageResponseTime && (
+                                    <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+                                        Avg response time: {Math.round(bestTime.averageResponseTime / 60)} min
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                                Analyzing conversation patterns...
+                            </div>
+                        )}
+                    </div>
+
                     {/* Simple Action Summary if history exists */}
                     {actionLog.length > 0 && (
                         <div style={{ ...styles.section, marginTop: '24px' }}>
