@@ -15,6 +15,31 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     pendingFollowups: 0
   });
 
+  const [connectedPages, setConnectedPages] = useState([]);
+  const [isLoadingPages, setIsLoadingPages] = useState(false);
+
+  // Fetch connected pages on mount
+  useEffect(() => {
+    const fetchPages = async () => {
+      setIsLoadingPages(true);
+      try {
+        const pages = await facebookService.getConnectedPages();
+        setConnectedPages(pages);
+        if (pages.length > 0) {
+          setActivePageId(pages[0].page_id);
+          // Also update local storage for other components
+          localStorage.setItem('connected_facebook_pages', JSON.stringify(pages));
+          localStorage.setItem('selectedPageId', pages[0].page_id);
+        }
+      } catch (err) {
+        console.error('Error loading connected pages:', err);
+      } finally {
+        setIsLoadingPages(false);
+      }
+    };
+    fetchPages();
+  }, []);
+
   // Fetch AI stats on mount
   useEffect(() => {
     const fetchAiStats = async () => {
@@ -519,74 +544,101 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                   border: '1px solid var(--border-color)',
                   textAlign: 'center'
                 }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📘</div>
-                  <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                    To connect your Facebook Page, you'll need to set up a Facebook App in the Meta Developer Console.
-                  </p>
-                  <a
-                    href="https://developers.facebook.com/apps"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary"
-                    style={{ marginRight: '0.5rem' }}
-                  >
-                    Open Meta Developer Console
-                  </a>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      // Facebook OAuth flow - open in popup window
-                      const appId = import.meta.env.VITE_FACEBOOK_APP_ID || '2887110501632122';
-                      const redirectUri = encodeURIComponent(window.location.origin + '/api/facebook/callback');
-                      const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata';
-                      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
-
-                      // Open popup window
-                      const width = 600;
-                      const height = 700;
-                      const left = (window.screen.width - width) / 2;
-                      const top = (window.screen.height - height) / 2;
-
-                      const popup = window.open(
-                        oauthUrl,
-                        'facebook_oauth',
-                        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
-                      );
-
-                      // Poll for popup close and URL changes
-                      const pollTimer = setInterval(() => {
-                        try {
-                          if (!popup || popup.closed) {
-                            clearInterval(pollTimer);
-                            // Check if URL has changed (OAuth callback was processed)
-                            const urlParams = new URLSearchParams(window.location.search);
-                            if (urlParams.get('fb_pages') || urlParams.get('fb_error')) {
-                              window.location.reload(); // Reload to trigger URL param handler
-                            }
-                            return;
-                          }
-
-                          // Try to read popup URL to detect callback
-                          if (popup.location.href.includes(window.location.origin)) {
-                            const popupUrl = new URL(popup.location.href);
-                            const fbPages = popupUrl.searchParams.get('fb_pages');
-                            const fbError = popupUrl.searchParams.get('fb_error');
-
-                            if (fbPages || fbError) {
-                              clearInterval(pollTimer);
-                              popup.close();
-                              // Navigate main window to get the params
-                              window.location.href = popup.location.href;
+                  {isLoadingPages ? (
+                    <div style={{ padding: '2rem' }}>Loading connection status...</div>
+                  ) : connectedPages.length > 0 ? (
+                    <div>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+                      <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                        Connected to {connectedPages[0].page_name}
+                      </h3>
+                      <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                        Page ID: {connectedPages[0].page_id}
+                      </p>
+                      <button
+                        className="btn btn-danger"
+                        onClick={async () => {
+                          if (confirm('Are you sure you want to disconnect this page?')) {
+                            try {
+                              await facebookService.disconnectPage(connectedPages[0].page_id);
+                              setConnectedPages([]);
+                              localStorage.removeItem('connected_facebook_pages');
+                              localStorage.removeItem('selectedPageId');
+                              alert('Page disconnected successfully');
+                            } catch (err) {
+                              alert('Failed to disconnect page');
+                              console.error(err);
                             }
                           }
-                        } catch (e) {
-                          // Cross-origin error - popup is still on Facebook domain
-                        }
-                      }, 500);
-                    }}
-                  >
-                    Connect Facebook Page
-                  </button>
+                        }}
+                      >
+                        Disconnect Page
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📘</div>
+                      <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                        To connect your Facebook Page, you'll need to set up a Facebook App in the Meta Developer Console.
+                      </p>
+                      <button
+                        className="btn btn-primary"
+                        style={{ marginRight: '0.5rem' }}
+                        onClick={() => {
+                          // Facebook OAuth flow - open in popup window
+                          const appId = import.meta.env.VITE_FACEBOOK_APP_ID || '2887110501632122';
+                          const redirectUri = encodeURIComponent(window.location.origin + '/api/facebook/callback');
+                          const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata';
+                          const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+
+                          // Open popup window
+                          const width = 600;
+                          const height = 700;
+                          const left = (window.screen.width - width) / 2;
+                          const top = (window.screen.height - height) / 2;
+
+                          const popup = window.open(
+                            oauthUrl,
+                            'facebook_oauth',
+                            `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
+                          );
+
+                          // Poll for popup close and URL changes
+                          const pollTimer = setInterval(() => {
+                            try {
+                              if (!popup || popup.closed) {
+                                clearInterval(pollTimer);
+                                // Check if URL has changed (OAuth callback was processed)
+                                const urlParams = new URLSearchParams(window.location.search);
+                                if (urlParams.get('fb_pages') || urlParams.get('fb_error')) {
+                                  window.location.reload(); // Reload to trigger URL param handler
+                                }
+                                return;
+                              }
+
+                              // Try to read popup URL to detect callback
+                              if (popup.location.href.includes(window.location.origin)) {
+                                const popupUrl = new URL(popup.location.href);
+                                const fbPages = popupUrl.searchParams.get('fb_pages');
+                                const fbError = popupUrl.searchParams.get('fb_error');
+
+                                if (fbPages || fbError) {
+                                  clearInterval(pollTimer);
+                                  popup.close();
+                                  // Navigate main window to get the params
+                                  window.location.href = popup.location.href;
+                                }
+                              }
+                            } catch (e) {
+                              // Cross-origin error - popup is still on Facebook domain
+                            }
+                          }, 500);
+                        }}
+                      >
+                        Connect Facebook Page
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
