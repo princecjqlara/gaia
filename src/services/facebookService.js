@@ -2829,6 +2829,7 @@ class FacebookService {
             const updates = {
                 ai_analysis: JSON.stringify(analysisData),
                 ai_notes: analysisData.notes || '',
+                ai_summary: analysisData.notes || '', // Populate ai_summary for compatibility
                 extracted_details: analysisData.details || {},
                 meeting_detected: analysisData.meeting?.hasMeeting || false,
                 meeting_datetime: analysisData.meeting?.datetime || null,
@@ -2899,13 +2900,14 @@ class FacebookService {
                     : { type: 'past', days: Math.abs(diffDays) };
             }
 
-            // 3. Get viewed property by name (for personalized link tracking)
-            let viewedProperty = null;
+            // 3. Get viewed properties by name (for personalized link tracking)
+            let viewedProperties = [];
+            let viewedProperty = null; // Keep for backward compatibility/timeline
 
             // First get the participant name from the conversation
             const { data: convData } = await getSupabase()
                 .from('facebook_conversations')
-                .select('participant_name')
+                .select('participant_name, ai_analysis, ai_notes')
                 .eq('conversation_id', conversationId)
                 .single();
 
@@ -2913,27 +2915,31 @@ class FacebookService {
                 console.log(`[INSIGHTS] Looking for property views for name: "${convData.participant_name}"`);
 
                 // Find stats in property_views matching the visitor name (case-insensitive)
-                const { data: viewData, error: viewError } = await getSupabase()
+                const { data: viewsData, error: viewError } = await getSupabase()
                     .from('property_views')
                     .select('*, properties(title, price, images, address, id)')
                     .ilike('visitor_name', convData.participant_name)
                     .order('created_at', { ascending: false })
-                    .limit(1)
-                    .single();
+                    .limit(5);
 
-                if (viewError && viewError.code !== 'PGRST116') {
-                    console.log('[INSIGHTS] Error finding view:', viewError.message);
+                if (viewError) {
+                    console.log('[INSIGHTS] Error finding views:', viewError.message);
                 }
 
-                if (viewData && viewData.properties) {
-                    viewedProperty = {
-                        id: viewData.property_id,
-                        title: viewData.properties.title,
-                        price: viewData.properties.price,
-                        image: viewData.properties.images?.[0] || null,
-                        address: viewData.properties.address,
-                        viewedAt: viewData.created_at
-                    };
+                if (viewsData && viewsData.length > 0) {
+                    viewedProperties = viewsData.map(v => ({
+                        id: v.property_id,
+                        title: v.properties.title,
+                        price: v.properties.price,
+                        image: v.properties.images?.[0] || null,
+                        address: v.properties.address,
+                        viewedAt: v.created_at,
+                        viewedGallery: v.gallery_viewed || false, // Assuming these columns exist or default
+                        checkedPrice: true // properties usually have price
+                    }));
+
+                    // Set most recent for backward compatibility
+                    viewedProperty = viewedProperties[0];
                 }
             }
 
@@ -2962,6 +2968,7 @@ class FacebookService {
 
                 // Viewed Property (from tracking)
                 viewedProperty,
+                viewedProperties,
 
                 // AI Analysis (from DB)
                 aiAnalysis: convData.ai_analysis ? JSON.parse(convData.ai_analysis) : null,

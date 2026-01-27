@@ -75,22 +75,24 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
 
     const lastAnalyzedCountRef = useRef(0);
 
-    // Auto-analyze conversation every 3 messages
+    // Auto-analyze conversation:
+    // 1. On selection if no analysis exists
+    // 2. Every 3 messages
     useEffect(() => {
         if (selectedConversation && messages.length > 0) {
-            // Only analyze if message count is a multiple of 3 AND we haven't analyzed this count yet
-            if (messages.length % 3 === 0 && messages.length !== lastAnalyzedCountRef.current) {
-                console.log(`[Auto-AI] Message count ${messages.length} (multiple of 3). Triggering analysis...`);
+            const hasAnalysis = aiAnalysis || conversationInsights?.aiAnalysis;
+            const thresholdMessages = messages.length % 3 === 0;
+            const isNewCount = messages.length !== lastAnalyzedCountRef.current;
+
+            if ((!hasAnalysis && isNewCount) || (thresholdMessages && isNewCount)) {
+                console.log(`[Auto-AI] Triggering analysis (Count: ${messages.length}, HasAnalysis: ${!!hasAnalysis})`);
                 lastAnalyzedCountRef.current = messages.length;
                 analyzeCurrentConversation();
             }
-        } else {
-            // Reset when conversation changes/clears
-            if (lastAnalyzedCountRef.current !== 0) {
-                lastAnalyzedCountRef.current = 0;
-            }
+        } else if (!selectedConversation) {
+            lastAnalyzedCountRef.current = 0;
         }
-    }, [messages.length, selectedConversation?.conversation_id]); // Depend on length and ID to avoid excessive runs
+    }, [messages.length, selectedConversation?.conversation_id, !!aiAnalysis, !!conversationInsights?.aiAnalysis]);
 
     const [messageText, setMessageText] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -2407,7 +2409,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             )}
 
                             {/* Conversations Summary (AI) */}
-                            {selectedConversation.ai_summary && (
+                            {(selectedConversation.ai_summary || conversationInsights?.aiNotes || aiAnalysis?.notes) && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
                                         🤖 AI Summary
@@ -2419,7 +2421,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                         padding: '1rem'
                                     }}>
                                         <p style={{ fontSize: '0.85rem', lineHeight: '1.5', margin: 0, color: 'var(--text-primary)' }}>
-                                            {selectedConversation.ai_summary}
+                                            {conversationInsights?.aiNotes || aiAnalysis?.notes || selectedConversation.ai_summary}
                                         </p>
                                     </div>
                                 </div>
@@ -2631,38 +2633,30 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                             </div>
                                         )}
 
-                                        {/* Properties Viewed (Mock) */}
+                                        {/* Properties Viewed (Real Data) */}
                                         <div style={{ marginBottom: '1.5rem' }}>
                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <span>🏠 Recently Viewed Properties</span>
-                                                <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', background: 'var(--primary-alpha)', borderRadius: '4px', color: 'var(--primary)' }}>New</span>
+                                                {conversationInsights?.viewedProperties?.length > 0 && (
+                                                    <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', background: 'var(--primary-alpha)', borderRadius: '4px', color: 'var(--primary)' }}>
+                                                        {conversationInsights.viewedProperties.length}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                {/* Simulated Mock Data based on conversation ID to vary content */}
-                                                {(selectedConversation.conversation_id.charCodeAt(0) % 2 === 0) ? (
-                                                    <>
-                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Modern 3-Bedroom Villa</div>
+                                                {conversationInsights?.viewedProperties?.length > 0 ? (
+                                                    conversationInsights.viewedProperties.map((prop, idx) => (
+                                                        <div key={idx} style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>{prop.title}</div>
                                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                                <span>Viewed Gallery</span>
-                                                                <span>2h ago</span>
+                                                                <span>{prop.viewedGallery ? 'Viewed Gallery' : 'Viewed Details'}</span>
+                                                                <span>{new Date(prop.viewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                             </div>
                                                         </div>
-                                                        <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Downtown Condo Unit</div>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                                <span>Checked Price</span>
-                                                                <span>1d ago</span>
-                                                            </div>
-                                                        </div>
-                                                    </>
+                                                    ))
                                                 ) : (
-                                                    <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                                        <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.25rem' }}>Luxury Penthouse</div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                            <span>Scheduled Visit</span>
-                                                            <span>5h ago</span>
-                                                        </div>
+                                                    <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
+                                                        No tracked property views yet
                                                     </div>
                                                 )}
                                             </div>
