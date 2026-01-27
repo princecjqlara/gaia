@@ -23,7 +23,7 @@ const DEFAULT_BRANDING = {
     stats: []
 };
 
-const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId, initialProperty = null, onPropertySelect }) => {
+const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId, initialProperty = null, onPropertySelect, visitorName }) => {
     const branding = { ...DEFAULT_BRANDING, ...propBranding };
     const [selectedProperty, setSelectedPropertyState] = useState(initialProperty);
 
@@ -54,17 +54,19 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                         property_id: selectedProperty.id,
                         property_title: selectedProperty.title,
                         viewer_id: session?.user?.id || null, // Null for anonymous
+                        visitor_name: visitorName || null, // Track specific visitor from URL
                         view_duration: 0,
-                        viewed_at: new Date().toISOString()
+                        viewed_at: new Date().toISOString(),
+                        source: visitorName ? 'custom_link' : 'website'
                     });
-                    console.log('Logged view for', selectedProperty.title);
+                    console.log('Logged view for', selectedProperty.title, visitorName ? `by ${visitorName}` : '');
                 } catch (err) {
                     console.error('Error logging view:', err);
                 }
             };
             logView();
         }
-    }, [selectedProperty]);
+    }, [selectedProperty, visitorName]);
 
     // Helper to get suggested properties
     const getSuggestedProperties = () => {

@@ -9,28 +9,50 @@ const PublicPropertiesContainer = ({ onClose }) => {
     const [loading, setLoading] = useState(true);
     const [initialPropertyId, setInitialPropertyId] = useState(null);
     const [teamId, setTeamId] = useState(null);
+    const [visitorName, setVisitorName] = useState(null);
 
     useEffect(() => {
-        // Parse URL for team ID and property ID
+        // Parse URL for team ID, visitor name, and property ID
         const path = window.location.pathname;
+
+        // Match /u/:visitorName/property/:id
+        const trackPropMatch = path.match(/^\/u\/([^/]+)\/property\/([a-zA-Z0-9-]+)$/);
+        // Match /u/:visitorName/properties
+        const trackPropsMatch = path.match(/^\/u\/([^/]+)\/properties$/);
 
         // Match /:teamId/property/:id
         const teamPropMatch = path.match(/^\/([a-zA-Z0-9-]+)\/property\/([a-zA-Z0-9-]+)$/);
         // Match /:teamId/properties
         const teamPropsMatch = path.match(/^\/([a-zA-Z0-9-]+)\/properties$/);
-        // Match /property/:id (no team)
+
+        // Match /property/:id (no team/visitor)
         const propMatch = path.match(/^\/property\/([a-zA-Z0-9-]+)$/);
 
-        if (teamPropMatch) {
+        // NOTE: Regex for teamId conflict with 'u'. 
+        // We handle 'u' routes first explicitly.
+        // Also teamPropMatch regex above matches /u/... if teamId='u'. 
+        // Using explicit /u/ prefix helps.
+
+        if (trackPropMatch) {
+            setVisitorName(decodeURIComponent(trackPropMatch[1]));
+            setInitialPropertyId(trackPropMatch[2]);
+        } else if (trackPropsMatch) {
+            setVisitorName(decodeURIComponent(trackPropsMatch[1]));
+        } else if (teamPropMatch && teamPropMatch[1] !== 'u') { // Avoid matching /u/ as teamId
             setTeamId(teamPropMatch[1]);
             setInitialPropertyId(teamPropMatch[2]);
-        } else if (teamPropsMatch) {
+        } else if (teamPropsMatch && teamPropsMatch[1] !== 'u') {
             setTeamId(teamPropsMatch[1]);
         } else if (propMatch) {
             setInitialPropertyId(propMatch[1]);
         }
 
-        loadData(teamPropMatch ? teamPropMatch[1] : (teamPropsMatch ? teamPropsMatch[1] : null));
+        // Determine team ID to load
+        const idToLoad = (teamPropMatch && teamPropMatch[1] !== 'u') ? teamPropMatch[1]
+            : (teamPropsMatch && teamPropsMatch[1] !== 'u') ? teamPropsMatch[1]
+                : null;
+
+        loadData(idToLoad);
     }, []);
 
     const loadData = async (currentTeamId) => {
@@ -39,9 +61,6 @@ const PublicPropertiesContainer = ({ onClose }) => {
             const supabase = getSupabaseClient();
 
             // 1. Load Properties
-            // If we have teamId, we *could* filter, but since we don't know if properties have team_id column,
-            // we'll fetch all for now and rely on client side or simply show all.
-            // Ideally: .eq('team_id', currentTeamId) if column exists.
             let query = supabase
                 .from('properties')
                 .select('*')
@@ -118,17 +137,26 @@ const PublicPropertiesContainer = ({ onClose }) => {
                 if (onClose) onClose();
             }}
             initialProperty={initialSelected}
+            visitorName={visitorName} // Pass visitor name for tracking
             onPropertySelect={(property) => {
                 // Update URL when property is selected
-                if (property) {
-                    const newPath = teamId
+                let newPath = '';
+                if (visitorName) {
+                    const encodedName = encodeURIComponent(visitorName);
+                    newPath = property
+                        ? `/u/${encodedName}/property/${property.id}`
+                        : `/u/${encodedName}/properties`;
+                } else if (teamId) {
+                    newPath = property
                         ? `/${teamId}/property/${property.id}`
-                        : `/property/${property.id}`;
-                    window.history.pushState({}, '', newPath);
+                        : `/${teamId}/properties`;
                 } else {
-                    const newPath = teamId
-                        ? `/${teamId}/properties`
+                    newPath = property
+                        ? `/property/${property.id}`
                         : `/properties`;
+                }
+
+                if (newPath) {
                     window.history.pushState({}, '', newPath);
                 }
             }}
