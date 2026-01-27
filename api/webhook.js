@@ -509,9 +509,10 @@ Knowledge base: ${config.knowledge_base || 'We are a digital marketing agency.'}
 /**
  * Facebook Webhook Handler
  * Handles verification (GET) and incoming messages (POST)
+ * Also handles property click notifications
  */
 export default async function handler(req, res) {
-    console.log('[WEBHOOK] v2.0 - AI Auto-Response Enabled');
+    console.log('[WEBHOOK] v2.1 - AI Auto-Response + Property Click Tracking');
 
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -542,10 +543,18 @@ export default async function handler(req, res) {
             }
         }
 
-        // Handle POST - Incoming Messages
+        // Handle POST
         if (req.method === 'POST') {
             const body = req.body;
 
+            // ===== PROPERTY CLICK HANDLER =====
+            // Check if this is a property click notification from our frontend
+            if (body.action === 'property_click') {
+                console.log('[WEBHOOK] Property click notification received');
+                return await handlePropertyClick(req, res, body);
+            }
+
+            // ===== FACEBOOK WEBHOOK EVENTS =====
             // Only log actual message events, not delivery/read receipts
             const hasMessageEvent = body.entry?.some(e => e.messaging?.some(m => m.message));
             if (hasMessageEvent) {
@@ -596,6 +605,132 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('[WEBHOOK] Error:', error);
         return res.status(500).json({ error: error.message });
+    }
+}
+
+/**
+ * Handle property click notification
+ * Sends an immediate message to the contact when they click a property link
+ */
+async function handlePropertyClick(req, res, body) {
+    const { participantId, propertyId, propertyTitle } = body;
+
+    console.log('[PROPERTY CLICK] Processing:', { participantId, propertyId, propertyTitle });
+
+    if (!participantId || !propertyId) {
+        return res.status(400).json({ error: 'Missing participantId or propertyId' });
+    }
+
+    const db = getSupabase();
+    if (!db) {
+        return res.status(500).json({ error: 'Database not available' });
+    }
+
+    try {
+        // 1. Find the conversation for this participant
+        const { data: conversation, error: convError } = await db
+            .from('facebook_conversations')
+            .select('conversation_id, page_id, participant_name')
+            .eq('participant_id', participantId)
+            .single();
+
+        if (convError || !conversation) {
+            console.log('[PROPERTY CLICK] Conversation not found for participant:', participantId);
+            // Still log the view even if we can't send a message
+            await logPropertyView(db, propertyId, propertyTitle, participantId, null);
+            return res.status(200).json({ success: true, messageSent: false, reason: 'Conversation not found' });
+        }
+
+        console.log('[PROPERTY CLICK] Found conversation:', conversation.conversation_id);
+
+        // 2. Get the page access token
+        const { data: page, error: pageError } = await db
+            .from('facebook_pages')
+            .select('page_access_token, page_name')
+            .eq('page_id', conversation.page_id)
+            .single();
+
+        if (pageError || !page?.page_access_token || page.page_access_token === 'pending') {
+            console.log('[PROPERTY CLICK] No valid page access token');
+            await logPropertyView(db, propertyId, propertyTitle, participantId, conversation.participant_name);
+            return res.status(200).json({ success: true, messageSent: false, reason: 'No page access token' });
+        }
+
+        // 3. Log the property view
+        await logPropertyView(db, propertyId, propertyTitle, participantId, conversation.participant_name);
+
+        // 4. Send immediate message to the contact
+        const messageText = `👋 I noticed you're checking out "${propertyTitle}"! Great choice! 🏠\n\nIf you have any questions about this property or would like to schedule a viewing, just let me know. I'm here to help! 😊`;
+
+        console.log('[PROPERTY CLICK] Sending message to:', participantId);
+
+        const response = await fetch(
+            `https://graph.facebook.com/v21.0/${conversation.page_id}/messages`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    recipient: { id: participantId },
+                    message: { text: messageText },
+                    messaging_type: 'MESSAGE_TAG',
+                    tag: 'ACCOUNT_UPDATE'
+                })
+            }
+        );
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+            console.error('[PROPERTY CLICK] Failed to send message:', responseData.error?.message);
+            return res.status(200).json({
+                success: true,
+                messageSent: false,
+                viewLogged: true,
+                error: responseData.error?.message
+            });
+        }
+
+        console.log('[PROPERTY CLICK] ✅ Message sent successfully!');
+
+        // 5. Log this as an AI action
+        await db.from('ai_action_log').insert({
+            conversation_id: conversation.conversation_id,
+            action_type: 'property_click_message',
+            details: {
+                property_id: propertyId,
+                property_title: propertyTitle,
+                message_sent: true
+            }
+        }).catch(() => { }); // Ignore if table doesn't exist
+
+        return res.status(200).json({
+            success: true,
+            messageSent: true,
+            viewLogged: true
+        });
+
+    } catch (error) {
+        console.error('[PROPERTY CLICK] Error:', error);
+        return res.status(500).json({ error: error.message });
+    }
+}
+
+/**
+ * Helper: Log property view to database
+ */
+async function logPropertyView(db, propertyId, propertyTitle, participantId, visitorName) {
+    try {
+        await db.from('property_views').insert({
+            property_id: propertyId,
+            property_title: propertyTitle,
+            participant_id: participantId,
+            visitor_name: visitorName,
+            source: 'fb_messenger',
+            viewed_at: new Date().toISOString()
+        });
+        console.log('[PROPERTY CLICK] ✅ View logged to database');
+    } catch (err) {
+        console.error('[PROPERTY CLICK] Failed to log view:', err.message);
     }
 }
 

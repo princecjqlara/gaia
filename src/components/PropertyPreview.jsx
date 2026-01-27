@@ -49,7 +49,38 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                     console.log('[VIEW TRACKING] Visitor Name:', visitorName);
                     console.log('[VIEW TRACKING] Property ID:', selectedProperty.id);
 
-                    // Ensure Supabase is initialized for public pages
+                    // For Messenger contacts (have participantId), use webhook to send immediate message
+                    if (participantId) {
+                        console.log('[VIEW TRACKING] Calling webhook for immediate message...');
+                        try {
+                            const webhookUrl = `${window.location.origin}/api/webhook`;
+                            const response = await fetch(webhookUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    action: 'property_click',
+                                    participantId,
+                                    propertyId: selectedProperty.id,
+                                    propertyTitle: selectedProperty.title
+                                })
+                            });
+
+                            const result = await response.json();
+                            console.log('[VIEW TRACKING] Webhook result:', result);
+
+                            if (result.messageSent) {
+                                console.log('[VIEW TRACKING] ✅ Message sent to contact!');
+                            }
+                            if (result.viewLogged) {
+                                console.log('[VIEW TRACKING] ✅ View logged via webhook');
+                            }
+                            return; // Done - webhook handled everything
+                        } catch (webhookError) {
+                            console.warn('[VIEW TRACKING] Webhook failed, falling back to local:', webhookError.message);
+                        }
+                    }
+
+                    // Fallback: Log directly to Supabase (for non-Messenger traffic or webhook failures)
                     initSupabase();
                     const supabase = getSupabaseClient();
 
@@ -58,19 +89,9 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                         return;
                     }
 
-                    // Get session if available (optional for anonymous tracking)
-                    let userId = null;
-                    try {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        userId = session?.user?.id || null;
-                    } catch (e) {
-                        // Ignore auth errors for anonymous users
-                    }
-
                     const insertData = {
                         property_id: selectedProperty.id,
                         property_title: selectedProperty.title,
-                        viewer_id: userId,
                         visitor_name: visitorName || null,
                         participant_id: participantId || null,
                         view_duration: 0,
@@ -78,12 +99,12 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                         source: participantId ? 'fb_messenger' : (visitorName ? 'custom_link' : 'website')
                     };
 
-                    console.log('[VIEW TRACKING] Insert data:', JSON.stringify(insertData));
+                    console.log('[VIEW TRACKING] Direct insert:', JSON.stringify(insertData));
 
                     const { data, error } = await supabase.from('property_views').insert(insertData).select();
 
                     if (error) {
-                        console.error('[VIEW TRACKING] ❌ Error logging view:', error.message, error.code, error.details);
+                        console.error('[VIEW TRACKING] ❌ Error logging view:', error.message, error.code);
                     } else {
                         console.log('[VIEW TRACKING] ✅ Successfully logged view!', data);
                     }
