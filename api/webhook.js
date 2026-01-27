@@ -663,17 +663,17 @@ async function handlePropertyClick(req, res, body) {
         const messageText = `👋 I noticed you're checking out "${propertyTitle}"! Great choice! 🏠\n\nIf you have any questions about this property or would like to schedule a viewing, just let me know. I'm here to help! 😊`;
 
         console.log('[PROPERTY CLICK] Sending message to:', participantId);
+        console.log('[PROPERTY CLICK] Using page_id:', conversation.page_id);
 
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${conversation.page_id}/messages`,
+            `https://graph.facebook.com/v21.0/me/messages?access_token=${page.page_access_token}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     recipient: { id: participantId },
                     message: { text: messageText },
-                    messaging_type: 'MESSAGE_TAG',
-                    tag: 'ACCOUNT_UPDATE'
+                    messaging_type: 'RESPONSE'
                 })
             }
         );
