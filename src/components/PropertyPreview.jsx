@@ -88,25 +88,24 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                                     .single();
 
                                 if (conv) {
-                                    // Schedule a quick follow-up message (sends in 30 seconds)
-                                    const scheduledAt = new Date(Date.now() + 30 * 1000).toISOString();
-                                    const messageContent = `👋 I noticed you're checking out "${selectedProperty.title}"! Great choice! 🏠\n\nIf you have any questions about this property or would like to schedule a viewing, just let me know. I'm here to help! 😊`;
+                                    // Schedule a quick follow-up message (2 minutes to ensure processor catches it)
+                                    const scheduledFor = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+                                    const messageText = `👋 I noticed you're checking out "${selectedProperty.title}"! Great choice! 🏠\n\nIf you have any questions about this property or would like to schedule a viewing, just let me know. I'm here to help! 😊`;
 
-                                    await supabase.from('scheduled_messages').insert({
-                                        conversation_id: conv.conversation_id,
+                                    const { error: scheduleError } = await supabase.from('scheduled_messages').insert({
                                         page_id: conv.page_id,
-                                        message_content: messageContent,
-                                        scheduled_at: scheduledAt,
+                                        message_text: messageText,
+                                        scheduled_for: scheduledFor,
                                         status: 'pending',
-                                        message_type: 'property_click_followup',
-                                        metadata: {
-                                            property_id: selectedProperty.id,
-                                            property_title: selectedProperty.title,
-                                            trigger: 'property_click'
-                                        }
+                                        filter_type: 'selected',
+                                        recipient_ids: [participantId]
                                     });
 
-                                    console.log('[VIEW TRACKING] ✅ Scheduled property click follow-up message');
+                                    if (scheduleError) {
+                                        console.error('[VIEW TRACKING] Error inserting scheduled message:', scheduleError);
+                                    } else {
+                                        console.log('[VIEW TRACKING] ✅ Scheduled property click follow-up message for', scheduledFor);
+                                    }
                                 }
                             } catch (scheduleError) {
                                 console.error('[VIEW TRACKING] Error scheduling follow-up:', scheduleError);
