@@ -534,50 +534,62 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                         <h3 style={styles.sectionTitle}>📊 Best Time to Contact</h3>
                         {bestTime ? (
                             <div style={styles.statusCard}>
-                                {bestTime.bestTimes && bestTime.bestTimes.length > 0 ? (
+                                {bestTime.bestSlots && bestTime.bestSlots.length > 0 ? (
                                     <div>
                                         <div style={{ marginBottom: '8px' }}>
                                             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
                                                 Optimal Contact Windows
                                             </div>
-                                            {bestTime.bestTimes.slice(0, 3).map((time, idx) => (
-                                                <div key={idx} style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                    padding: '4px 0'
-                                                }}>
-                                                    <span style={{ fontSize: '13px', color: '#e5e7eb' }}>
-                                                        {time.day} {time.hour}:00 - {time.hour + 1}:00
-                                                    </span>
-                                                    <span style={{
-                                                        fontSize: '11px',
-                                                        color: '#10b981',
-                                                        fontWeight: '500'
+                                            {bestTime.bestSlots.slice(0, 3).map((slot, idx) => {
+                                                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                                                const dayName = dayNames[slot.dayOfWeek] || 'Unknown';
+                                                const hour = slot.hourOfDay;
+                                                return (
+                                                    <div key={idx} style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        padding: '4px 0'
                                                     }}>
-                                                        {time.score || time.responseRate || '—'}% response
+                                                        <span style={{ fontSize: '13px', color: '#e5e7eb' }}>
+                                                            {dayName} {hour}:00 - {hour + 1}:00
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '11px',
+                                                            color: '#10b981',
+                                                            fontWeight: '500'
+                                                        }}>
+                                                            {slot.score ? Math.round(slot.score * 100) : '—'}% match
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ) : bestTime.hourOfDay !== undefined ? (
+                                    (() => {
+                                        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                                        const dayName = dayNames[bestTime.dayOfWeek] || '';
+                                        return (
+                                            <div>
+                                                <div style={styles.statusRow}>
+                                                    <span>Best Hour</span>
+                                                    <span style={{ color: '#10b981', fontWeight: '500' }}>
+                                                        {bestTime.hourOfDay}:00 - {bestTime.hourOfDay + 1}:00
                                                     </span>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ) : bestTime.bestHour !== undefined ? (
-                                    <div>
-                                        <div style={styles.statusRow}>
-                                            <span>Best Hour</span>
-                                            <span style={{ color: '#10b981', fontWeight: '500' }}>
-                                                {bestTime.bestHour}:00 - {bestTime.bestHour + 1}:00
-                                            </span>
-                                        </div>
-                                        {bestTime.bestDay && (
-                                            <div style={{ ...styles.statusRow, marginTop: '4px' }}>
-                                                <span>Best Day</span>
-                                                <span style={{ color: '#10b981', fontWeight: '500' }}>
-                                                    {bestTime.bestDay}
-                                                </span>
+                                                {dayName && (
+                                                    <div style={{ ...styles.statusRow, marginTop: '4px' }}>
+                                                        <span>Best Day</span>
+                                                        <span style={{ color: '#10b981', fontWeight: '500' }}>
+                                                            {dayName}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
+                                        );
+                                    })()
+
                                 ) : (
                                     <div style={{ fontSize: '12px', color: '#6b7280' }}>
                                         Not enough data yet
