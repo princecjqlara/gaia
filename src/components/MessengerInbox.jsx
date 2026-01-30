@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useFacebookMessenger } from "../hooks/useFacebookMessenger";
+import useFacebookMessenger from "../hooks/useFacebookMessenger";
 import { facebookService } from "../services/facebookService";
 import WarningDashboard from "./WarningDashboard";
 import AIControlPanel from "./AIControlPanel";
