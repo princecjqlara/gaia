@@ -45,14 +45,14 @@ const AIAssistantWidget = ({ currentUser }) => {
                 { data: conversations },
                 { data: bookings },
                 { data: users },
-                { data: packages },
+                { data: properties },
                 { data: events }
             ] = await Promise.all([
                 supabase.from('clients').select('*').limit(100),
                 supabase.from('facebook_conversations').select('*').limit(100),
                 supabase.from('bookings').select('*').limit(100),
                 supabase.from('users').select('id, name, email, role').limit(50),
-                supabase.from('packages').select('*').limit(50),
+                supabase.from('properties').select('*').limit(50),
                 supabase.from('events').select('*').limit(100)
             ]);
 
@@ -61,14 +61,14 @@ const AIAssistantWidget = ({ currentUser }) => {
                 conversations: conversations || [],
                 bookings: bookings || [],
                 users: users || [],
-                packages: packages || [],
+                properties: properties || [],
                 events: events || [],
                 summary: {
                     totalClients: clients?.length || 0,
                     totalConversations: conversations?.length || 0,
                     totalBookings: bookings?.length || 0,
                     totalUsers: users?.length || 0,
-                    totalPackages: packages?.length || 0,
+                    totalProperties: properties?.length || 0,
                     totalEvents: events?.length || 0
                 },
                 propertyViews: [

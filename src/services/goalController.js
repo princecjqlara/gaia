@@ -453,8 +453,8 @@ export function suggestNextGoal(messages, conversation) {
     // Check for purchase intent
     if (recentText.includes('price') || recentText.includes('cost') ||
         recentText.includes('buy') || recentText.includes('purchase') ||
-        recentText.includes('package') || recentText.includes('plan')) {
-        return { goalType: 'close_sale', reason: 'Lead asking about pricing or purchasing' };
+        recentText.includes('property') || recentText.includes('viewing')) {
+        return { goalType: 'close_sale', reason: 'Lead asking about pricing or property viewing' };
     }
 
     // Check for information seeking

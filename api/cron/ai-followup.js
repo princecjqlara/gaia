@@ -196,11 +196,13 @@ export default async function handler(req, res) {
                 lead_status,
                 pipeline_stage,
                 intuition_followup_disabled,
+                best_time_scheduling_disabled,
                 meeting_scheduled
             `)
             .neq('ai_enabled', false) // Include null (default enabled) and true
             .neq('human_takeover', true) // Include null and false
             .neq('intuition_followup_disabled', true) // Skip if intuition follow-ups disabled
+            .neq('best_time_scheduling_disabled', true) // Skip if best time scheduling disabled
             .neq('meeting_scheduled', true) // Skip if meeting already scheduled/mentioned
             // SKIP booked/converted customers - they don't need follow-ups
             .not('lead_status', 'in', '(appointment_booked,converted)')

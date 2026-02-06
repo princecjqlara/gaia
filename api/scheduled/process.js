@@ -282,11 +282,13 @@ export default async function handler(req, res) {
                         lead_status,
                         pipeline_stage,
                         intuition_followup_disabled,
+                        best_time_scheduling_disabled,
                         meeting_scheduled
                     `)
                     .neq('ai_enabled', false)
                     .neq('human_takeover', true)
                     .neq('intuition_followup_disabled', true)
+                    .neq('best_time_scheduling_disabled', true)
                     .neq('meeting_scheduled', true)
                     .not('lead_status', 'in', '(appointment_booked,converted)')
                     .neq('pipeline_stage', 'booked')
@@ -388,7 +390,7 @@ export default async function handler(req, res) {
                         // Get conversation details and check if AI is enabled
                         const { data: conversation } = await supabase
                             .from('facebook_conversations')
-                            .select('participant_id, participant_name, ai_enabled, lead_status, pipeline_stage, human_takeover, intuition_followup_disabled')
+                            .select('participant_id, participant_name, ai_enabled, lead_status, pipeline_stage, human_takeover, intuition_followup_disabled, best_time_scheduling_disabled')
                             .eq('conversation_id', followup.conversation_id)
                             .single();
 
@@ -408,6 +410,16 @@ export default async function handler(req, res) {
                             await supabase
                                 .from('ai_followup_schedule')
                                 .update({ status: 'cancelled', error_message: 'Intuition follow-ups disabled by user' })
+                                .eq('id', followup.id);
+                            continue;
+                        }
+
+                        // Check if best time scheduling is disabled (for best_time type follow-ups)
+                        if (followup.follow_up_type === 'best_time' && conversation?.best_time_scheduling_disabled === true) {
+                            console.log(`[AI FOLLOWUP] Best time scheduling disabled for ${followup.conversation_id} - cancelling`);
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({ status: 'cancelled', error_message: 'Best time scheduling disabled by user' })
                                 .eq('id', followup.id);
                             continue;
                         }

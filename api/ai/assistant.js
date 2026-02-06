@@ -45,7 +45,7 @@ SUMMARY:
 - Total Conversations: ${context?.summary?.totalConversations || 0}
 - Total Bookings: ${context?.summary?.totalBookings || 0}
 - Total Team Members: ${context?.summary?.totalUsers || 0}
-- Total Packages: ${context?.summary?.totalPackages || 0}
+- Total Properties: ${context?.summary?.totalProperties || 0}
 - Total Events: ${context?.summary?.totalEvents || 0}
 
 RECENT CLIENTS (up to 10):
@@ -114,8 +114,8 @@ function processQuery(message, context) {
         if (q.includes('user') || q.includes('team') || q.includes('member')) {
             return `You have **${context.summary.totalUsers}** team members.`;
         }
-        if (q.includes('package')) {
-            return `You have **${context.summary.totalPackages}** packages configured.`;
+        if (q.includes('property') || q.includes('properties')) {
+            return `You have **${context.summary.totalProperties || 0}** properties listed.`;
         }
         if (q.includes('event')) {
             return `You have **${context.summary.totalEvents}** events scheduled.`;
@@ -127,7 +127,7 @@ function processQuery(message, context) {
 • **${context.summary.totalConversations}** conversations  
 • **${context.summary.totalBookings}** bookings
 • **${context.summary.totalUsers}** team members
-• **${context.summary.totalPackages}** packages
+• **${context.summary.totalProperties || 0}** properties
 • **${context.summary.totalEvents}** events`;
     }
 

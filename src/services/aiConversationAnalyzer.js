@@ -160,7 +160,7 @@ export const qualifyLead = async (messages) => {
 Analyze the conversation and determine lead quality.
 
 Score as:
-- HOT: Ready to buy, mentioned budget, asked about pricing/packages, urgency
+- HOT: Ready to buy, mentioned budget, asked about pricing/properties, urgency
 - WARM: Interested, asking questions, but no buying signals yet
 - COLD: Just browsing, not responsive, unclear intent
 
@@ -310,7 +310,7 @@ export const autoLabelConversation = async (messages, existingTags = [], labelin
 
     // Default rules if admin hasn't set any
     const defaultRules = `
-QUALIFIED: Customer mentions budget, asks about pricing/packages, shows buying intent
+QUALIFIED: Customer mentions budget, asks about pricing/properties, shows buying intent
 UNQUALIFIED: Customer explicitly says not interested, wrong fit, or no budget
 HOT_LEAD: Customer wants to book immediately, mentions urgency, ready to proceed
 FOLLOW_UP_NEEDED: Customer requested callback, said "later", or asked to be contacted again
