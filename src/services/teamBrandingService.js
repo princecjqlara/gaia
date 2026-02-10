@@ -94,25 +94,43 @@ export async function updateTeamBranding(teamId, branding) {
  */
 export async function uploadBrandingImage(file, type = 'logo') {
     try {
+        const signResponse = await fetch(`/api/cloudinary-sign?folder=branding/${type}`);
+        const signData = await signResponse.json().catch(() => ({}));
+
+        if (!signResponse.ok) {
+            const errorMessage = signData.error || 'Signed upload not available';
+            throw new Error(errorMessage);
+        }
+
+        if (!signData.signature || !signData.timestamp || !signData.apiKey || !signData.cloudName) {
+            throw new Error('Signed upload response incomplete');
+        }
+
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('upload_preset', 'gaia_branding');
-        formData.append('folder', `branding/${type}`);
+        formData.append('api_key', signData.apiKey);
+        formData.append('timestamp', signData.timestamp);
+        formData.append('signature', signData.signature);
+        if (signData.folder) formData.append('folder', signData.folder);
+        formData.append('resource_type', 'auto');
 
-        const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'du47531ib';
         const response = await fetch(
-            `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+            `https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`,
             {
                 method: 'POST',
                 body: formData
             }
         );
 
+        const data = await response.json();
+
         if (!response.ok) {
-            throw new Error('Failed to upload image');
+            console.error('Cloudinary error:', data);
+            const errorMessage = data.error?.message || `Upload failed: ${response.status}`;
+            throw new Error(errorMessage);
         }
 
-        const data = await response.json();
+        console.log('Upload successful:', data.secure_url);
         return { url: data.secure_url, error: null };
     } catch (error) {
         console.error('Error uploading branding image:', error);

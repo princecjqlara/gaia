@@ -16,16 +16,20 @@ import LoginModal from "./components/LoginModal";
 import LandingPage from "./components/LandingPage";
 import ToastContainer from "./components/ToastContainer";
 import MeetingRoom from "./components/MeetingRoom";
-import MessengerInbox from "./components/MessengerInbox";
+import MessengerInboxSimple from "./components/MessengerInboxSimple";
 import AIAssistantWidget from "./components/AIAssistantWidget";
 import BookingPage from "./components/BookingPage";
 import TeamOnlinePanel from "./components/TeamOnlinePanel";
-import DeadlineAlerts from "./components/DeadlineAlerts";
+import EvaluationModal from "./components/EvaluationModal";
+import EvaluationQuestionsModal from "./components/EvaluationQuestionsModal";
+
 import UnassignedClientsPanel from "./components/UnassignedClientsPanel";
 import ContactsWithPhonePanel from "./components/ContactsWithPhonePanel";
 import PropertyManagement from "./components/PropertyManagement";
 import OrganizerDashboard from "./components/OrganizerDashboard";
 import PublicPropertiesContainer from "./components/PublicPropertiesContainer";
+import PropertyShowcaseDemo from "./pages/PropertyShowcaseDemo";
+import TeamProfilePage from "./components/TeamProfilePage";
 import { useSupabase } from "./hooks/useSupabase";
 import { useScheduledMessageProcessor } from "./hooks/useScheduledMessageProcessor";
 import { useClockInOut } from "./hooks/useClockInOut";
@@ -56,23 +60,26 @@ function App() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showMeetingRoom, setShowMeetingRoom] = useState(false);
   const [showTeamOnlinePanel, setShowTeamOnlinePanel] = useState(false);
+  const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+  const [showEvaluationQuestionsModal, setShowEvaluationQuestionsModal] = useState(false);
   const [meetingRoomSlug, setMeetingRoomSlug] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [currentClientId, setCurrentClientId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPhase, setFilterPhase] = useState("");
-  const [filterPackage, setFilterPackage] = useState("");
-  const [filterPayment, setFilterPayment] = useState("");
   const [filterAssignedTo, setFilterAssignedTo] = useState("");
   const [viewMode, setViewMode] = useState(() => {
     const settings = JSON.parse(localStorage.getItem("gaia_settings") || "{}");
     return settings.viewMode || "kanban";
   }); // 'kanban' or 'table'
 
-  // Check for /room/:slug or /book/:pageId URL on load
-  const [showBookingPage, setShowBookingPage] = useState(false);
-  const [showPublicProperties, setShowPublicProperties] = useState(false);
+    // Check for /room/:slug or /book/:pageId URL on load
+    const [showBookingPage, setShowBookingPage] = useState(false);
+    const [showPublicProperties, setShowPublicProperties] = useState(false);
+    const [showPropertyDemo, setShowPropertyDemo] = useState(false);
+    const [showTeamProfile, setShowTeamProfile] = useState(false);
+    const [profileTeamId, setProfileTeamId] = useState(null);
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -93,19 +100,46 @@ function App() {
       return;
     }
 
+    // Property Demo route
+    const isPropertyDemo = path === "/demo/property-showcase";
+    if (isPropertyDemo) {
+      setShowPropertyDemo(true);
+      return;
+    }
+
+    // Team Profile Route - Instagram style profile page
+    // Only match if path has content after / (e.g., /team-id but not /)
+    const teamProfileMatch = path.match(/^\/([a-zA-Z0-9-]{3,})$/);
+    if (teamProfileMatch && 
+        teamProfileMatch[1] !== 'room' && 
+        teamProfileMatch[1] !== 'book' && 
+        teamProfileMatch[1] !== 'booking' && 
+        teamProfileMatch[1] !== 'properties' && 
+        teamProfileMatch[1] !== 'demo' && 
+        teamProfileMatch[1] !== 'u' &&
+        teamProfileMatch[1] !== 'api') {
+      setProfileTeamId(teamProfileMatch[1]);
+      setShowTeamProfile(true);
+      return;
+    }
+
     // Public Property Routes
     const propertyMatch = path.match(/^\/property\/([a-zA-Z0-9-]+)$/);
     const trackingPropertyMatch = path.match(
       /^\/u\/[^/]+\/property\/([a-zA-Z0-9-]+)$/,
     ); // Matches /u/:visitorName/property/:id
     const trackingListMatch = path.match(/^\/u\/[^/]+\/properties$/); // Matches /u/:visitorName/properties
+    const teamPropertyMatch = path.match(/^\/([a-zA-Z0-9-]+)\/property\/([a-zA-Z0-9-]+)$/); // Matches /:teamId/property/:id
+    const teamListMatch = path.match(/^\/([a-zA-Z0-9-]+)\/properties$/); // Matches /:teamId/properties
     const isPropertiesPath = path === "/properties";
 
     if (
       propertyMatch ||
       isPropertiesPath ||
       trackingPropertyMatch ||
-      trackingListMatch
+      trackingListMatch ||
+      teamPropertyMatch ||
+      teamListMatch
     ) {
       setShowPublicProperties(true);
       return;
@@ -118,12 +152,24 @@ function App() {
       const matchBook = newPath.match(/^\/book\/([a-zA-Z0-9]+)$/);
       const isBookingPath =
         newPath === "/booking" || newPath.startsWith("/booking");
+      const isPropertyDemo = newPath === "/demo/property-showcase";
+      const matchTeamProfile = newPath.match(/^\/([a-zA-Z0-9-]{3,})$/);
+      const isTeamProfile = matchTeamProfile && 
+        matchTeamProfile[1] !== 'room' && 
+        matchTeamProfile[1] !== 'book' && 
+        matchTeamProfile[1] !== 'booking' && 
+        matchTeamProfile[1] !== 'properties' && 
+        matchTeamProfile[1] !== 'demo' && 
+        matchTeamProfile[1] !== 'u' &&
+        matchTeamProfile[1] !== 'api';
 
       const matchProp = newPath.match(/^\/property\/([a-zA-Z0-9-]+)$/);
       const matchTrackProp = newPath.match(
         /^\/u\/[^/]+\/property\/([a-zA-Z0-9-]+)$/,
       );
       const matchTrackList = newPath.match(/^\/u\/[^/]+\/properties$/);
+      const matchTeamProp = newPath.match(/^\/([a-zA-Z0-9-]+)\/property\/([a-zA-Z0-9-]+)$/);
+      const matchTeamList = newPath.match(/^\/([a-zA-Z0-9-]+)\/properties$/);
       const isPropPath = newPath === "/properties";
 
       if (matchRoom) {
@@ -131,21 +177,42 @@ function App() {
         setShowMeetingRoom(true);
         setShowBookingPage(false);
         setShowPublicProperties(false);
+        setShowPropertyDemo(false);
       } else if (matchBook || isBookingPath) {
         setShowBookingPage(true);
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
         setShowPublicProperties(false);
-      } else if (matchProp || isPropPath || matchTrackProp || matchTrackList) {
+        setShowPropertyDemo(false);
+      } else if (isPropertyDemo) {
+        setShowPropertyDemo(true);
+        setShowBookingPage(false);
+        setShowMeetingRoom(false);
+        setMeetingRoomSlug(null);
+        setShowPublicProperties(false);
+        setShowTeamProfile(false);
+      } else if (isTeamProfile) {
+        setProfileTeamId(matchTeamProfile[1]);
+        setShowTeamProfile(true);
+        setShowPropertyDemo(false);
+        setShowBookingPage(false);
+        setShowMeetingRoom(false);
+        setMeetingRoomSlug(null);
+        setShowPublicProperties(false);
+      } else if (matchProp || isPropPath || matchTrackProp || matchTrackList || matchTeamProp || matchTeamList) {
+        setShowTeamProfile(false);
         setShowPublicProperties(true);
         setShowBookingPage(false);
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
+        setShowPropertyDemo(false);
       } else {
         setShowMeetingRoom(false);
         setMeetingRoomSlug(null);
         setShowBookingPage(false);
         setShowPublicProperties(false);
+        setShowPropertyDemo(false);
+        setShowTeamProfile(false);
       }
     };
     window.addEventListener("popstate", handlePopState);
@@ -274,8 +341,6 @@ function App() {
     {
       searchTerm,
       filterPhase,
-      filterPackage,
-      filterPayment,
     },
     currentUser,
     updateClient,
@@ -340,6 +405,19 @@ function App() {
       setCurrentUserName(getUserName());
     }
   }, [isOnlineMode, currentUserProfile, getUserName]);
+
+  // Listen for custom events to open modals
+  useEffect(() => {
+    const handleOpenEvaluationQuestions = () => {
+      setShowEvaluationQuestionsModal(true);
+    };
+
+    window.addEventListener('open-evaluation-questions', handleOpenEvaluationQuestions);
+
+    return () => {
+      window.removeEventListener('open-evaluation-questions', handleOpenEvaluationQuestions);
+    };
+  }, []);
 
   // Add keyboard shortcut to refresh profile (Ctrl+Shift+R or Cmd+Shift+R)
   useEffect(() => {
@@ -514,22 +592,57 @@ function App() {
     }
   };
 
+  const handleOpenEvaluation = (clientId) => {
+    setCurrentClientId(clientId);
+    setShowEvaluationModal(true);
+  };
+
+  const handleEvaluationComplete = async (evaluationData) => {
+    try {
+      const wasMoved = evaluationData.phase === 'evaluated';
+      if (isOnlineMode) {
+        const updated = await updateClientInSupabase(currentClientId, evaluationData);
+        if (updated) {
+          await updateClient(currentClientId, updated);
+        } else {
+          await updateClient(currentClientId, evaluationData);
+        }
+      } else {
+        await updateClient(currentClientId, evaluationData);
+      }
+      if (wasMoved) {
+        showToast(`Evaluation completed! Client moved to Evaluated stage (${evaluationData.evaluationScore}%).`, "success");
+      } else {
+        showToast(`Evaluation completed (${evaluationData.evaluationScore}%). Score below threshold - client remains in current stage.`, "warning");
+      }
+      setShowEvaluationModal(false);
+      setCurrentClientId(null);
+    } catch (error) {
+      console.error("Error completing evaluation:", error);
+      showToast("Error completing evaluation", "error");
+    }
+  };
+
   // Only show main app UI when logged in
   const isLoggedIn = !!currentUser;
   const isOrganizer = role === "organizer";
 
+  const appContainerStyle = showTeamProfile || showPublicProperties || showPropertyDemo
+    ? { maxWidth: 'none', padding: 0 }
+    : undefined;
+
   return (
-    <div className="app-container">
-      {/* Show Organizer Dashboard for organizers */}
-      {isLoggedIn && isOrganizer && (
+    <div className="app-container" style={appContainerStyle}>
+      {/* Show Organizer Dashboard for organizers (but not when viewing public pages) */}
+      {isLoggedIn && isOrganizer && !showTeamProfile && !showPublicProperties && (
         <OrganizerDashboard
           onLogout={handleLogout}
           onThemeToggle={handleToggleTheme}
         />
       )}
 
-      {/* Show regular CRM for admins and users */}
-      {isLoggedIn && !isOrganizer && (
+      {/* Show regular CRM for admins and users (but not when viewing public pages) */}
+      {isLoggedIn && !isOrganizer && !showTeamProfile && !showPublicProperties && (
         <>
           <Header
             role={role}
@@ -658,13 +771,7 @@ function App() {
                   flexWrap: "wrap",
                 }}
               >
-                <div style={{ flex: 1, minWidth: "300px" }}>
-                  <DeadlineAlerts
-                    clients={clients}
-                    onViewClient={handleOpenViewModal}
-                    onEditClient={handleOpenEditModal}
-                  />
-                </div>
+
                 <div style={{ flex: 1, minWidth: "300px" }}>
                   <UnassignedClientsPanel
                     clients={clients}
@@ -691,10 +798,6 @@ function App() {
                 onSearchChange={setSearchTerm}
                 filterPhase={filterPhase}
                 onPhaseFilterChange={setFilterPhase}
-                filterPackage={filterPackage}
-                onPackageFilterChange={setFilterPackage}
-                filterPayment={filterPayment}
-                onPaymentFilterChange={setFilterPayment}
                 filterAssignedTo={filterAssignedTo}
                 onAssignedToFilterChange={setFilterAssignedTo}
                 users={allUsers}
@@ -713,11 +816,9 @@ function App() {
 
               <PhasesContainer
                 clients={clients}
-                filters={{
+                 filters={{
                   searchTerm,
                   filterPhase,
-                  filterPackage,
-                  filterPayment,
                   filterAssignedTo,
                 }}
                 viewMode={viewMode}
@@ -730,28 +831,30 @@ function App() {
                     console.error("Error moving client to phase:", error);
                   }
                 }}
+                onEvaluate={handleOpenEvaluation}
+                onManageQuestions={() => setShowEvaluationQuestionsModal(true)}
               />
             </>
           )}
 
           {/* Messenger Tab Content */}
           {activeMainTab === "messenger" && (
-            <div style={{ padding: "0 1.5rem" }}>
-              {/* Contacts with Phone Numbers Panel */}
-              <div style={{ marginBottom: "1rem" }}>
-                <ContactsWithPhonePanel
-                  onViewContact={(conversationId) => {
-                    // Could navigate to the conversation in MessengerInbox
-                    console.log("View contact:", conversationId);
-                  }}
+              <div style={{ padding: "0 1.5rem" }}>
+                {/* Contacts with Phone Numbers Panel */}
+                <div style={{ marginBottom: "1rem" }}>
+                  <ContactsWithPhonePanel
+                    onViewContact={(conversationId) => {
+                      // Could navigate to the conversation in MessengerInbox
+                      console.log("View contact:", conversationId);
+                    }}
+                  />
+                </div>
+                <MessengerInboxSimple
+                  clients={clients}
+                  users={allUsers}
+                  currentUserId={currentUser?.id}
                 />
               </div>
-              <MessengerInbox
-                clients={clients}
-                users={allUsers}
-                currentUserId={currentUser?.id}
-              />
-            </div>
           )}
 
           {/* Properties Tab Content */}
@@ -800,6 +903,10 @@ function App() {
               onViewCommunication={() => {
                 setShowCommunicationLog(true);
               }}
+              onEvaluate={() => {
+                handleOpenEvaluation(currentClientId);
+              }}
+              onManageQuestions={() => setShowEvaluationQuestionsModal(true)}
             />
           )}
 
@@ -868,7 +975,7 @@ function App() {
               isOpen={showCalendar}
               onClose={() => setShowCalendar(false)}
               currentUserId={currentUser?.id}
-              currentUserName={currentUserProfile?.name || userName}
+              currentUserName={currentUserProfile?.name || currentUserName}
               users={allUsers}
               onStartVideoCall={(meeting) => {
                 // Get room slug from meeting or room
@@ -892,9 +999,30 @@ function App() {
               }}
             />
           )}
+
         </>
       )}
 
+      {/* Evaluation Modal */}
+      {showEvaluationModal && (
+        <EvaluationModal
+          isOpen={showEvaluationModal}
+          onClose={() => {
+            setShowEvaluationModal(false);
+            setCurrentClientId(null);
+          }}
+          client={getClient(currentClientId)}
+          onEvaluationComplete={handleEvaluationComplete}
+        />
+      )}
+
+      {/* Evaluation Questions Modal */}
+      {showEvaluationQuestionsModal && (
+        <EvaluationQuestionsModal
+          isOpen={showEvaluationQuestionsModal}
+          onClose={() => setShowEvaluationQuestionsModal(false)}
+        />
+      )}
       {/* Meeting room - ALWAYS renders first for anyone with /room/:slug */}
       {showMeetingRoom && meetingRoomSlug && (
         <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
@@ -930,11 +1058,27 @@ function App() {
         />
       )}
 
-      {/* Landing page - shown when not logged in AND not in meeting AND not booking AND not viewing properties */}
+      {/* Property Showcase Demo Page */}
+      {showPropertyDemo && <PropertyShowcaseDemo />}
+
+      {/* Team Profile Page - Instagram Style */}
+      {showTeamProfile && profileTeamId && (
+        <TeamProfilePage
+          teamId={profileTeamId}
+          onClose={() => {
+            setShowTeamProfile(false);
+            window.history.pushState({}, "", "/");
+          }}
+        />
+      )}
+
+      {/* Landing page - shown when not logged in AND not in meeting AND not booking AND not viewing properties AND not demo AND not team profile */}
       {!isLoggedIn &&
         !showMeetingRoom &&
         !showBookingPage &&
-        !showPublicProperties && (
+        !showPublicProperties &&
+        !showPropertyDemo &&
+        !showTeamProfile && (
           <LandingPage
             onLogin={() => {
               setIsSignUpMode(false);
@@ -1085,7 +1229,7 @@ function App() {
       )}
 
       {/* AI Assistant Widget - Admin Only */}
-      {isLoggedIn && <AIAssistantWidget currentUser={currentUser} />}
+      {isLoggedIn && !showTeamProfile && !showPublicProperties && <AIAssistantWidget currentUser={currentUser} />}
 
       <ToastContainer />
     </div>

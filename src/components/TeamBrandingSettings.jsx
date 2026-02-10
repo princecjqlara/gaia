@@ -22,13 +22,15 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         website_url: '',
         address: '',
         bio: '',
-        stats: []
+        stats: [],
+        schedule_meeting_url: ''
     });
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [uploadingHero, setUploadingHero] = useState(false);
+    const [activePreviewTab, setActivePreviewTab] = useState('edit');
 
     const logoInputRef = useRef(null);
     const heroInputRef = useRef(null);
@@ -61,10 +63,23 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Validate file
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('File too large. Max size is 5MB', 'error');
+            return;
+        }
+
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            showToast('Invalid file type. Use JPG, PNG, GIF, or WebP', 'error');
+            return;
+        }
+
         setUploadingLogo(true);
         const { url, error } = await uploadBrandingImage(file, 'logo');
         if (error) {
-            showToast('Failed to upload logo', 'error');
+            showToast('Upload failed: ' + (error.message || 'Unknown error'), 'error');
+            console.error('Logo upload error:', error);
         } else {
             setBranding(prev => ({ ...prev, logo_url: url }));
             showToast('Logo uploaded!', 'success');
@@ -124,13 +139,345 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         );
     }
 
+    // Sample highlights for preview
+    const sampleHighlights = [
+        { id: 1, name: 'Services', image: branding.logo_url || 'https://via.placeholder.com/64' },
+        { id: 2, name: 'Portfolio', image: branding.hero_image_url || 'https://via.placeholder.com/64' },
+        { id: 3, name: 'Contact', image: 'https://via.placeholder.com/64' },
+    ];
+
+    // Sample grid items for preview
+    const sampleGridItems = [
+        { id: 1, image: 'https://images.unsplash.com/photo-1600596542815-27bfef402399?w=300' },
+        { id: 2, image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=300' },
+        { id: 3, image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=300' },
+        { id: 4, image: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=300' },
+        { id: 5, image: 'https://images.unsplash.com/photo-1600573472592-401b489a3cdc?w=300' },
+        { id: 6, image: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=300' },
+    ];
+
     return (
         <div className="branding-settings-modal">
             <div className="modal-header">
-                <h2>🎨 Team Branding Settings</h2>
+                <h2>🎨 Company Profile Editor</h2>
                 <button className="close-btn" onClick={onClose}>×</button>
             </div>
 
+            {/* Tabs */}
+            <div style={{
+                display: 'flex',
+                borderBottom: '1px solid var(--border-color, #333)',
+                background: 'var(--bg-secondary, #1e1e2e)'
+            }}>
+                <button
+                    onClick={() => setActivePreviewTab('edit')}
+                    style={{
+                        flex: 1,
+                        padding: '12px 20px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: activePreviewTab === 'edit' ? '2px solid #6366f1' : '2px solid transparent',
+                        color: activePreviewTab === 'edit' ? '#6366f1' : 'var(--text-secondary, #888)',
+                        cursor: 'pointer',
+                        fontWeight: activePreviewTab === 'edit' ? '600' : '400'
+                    }}
+                >
+                    ✏️ Edit Profile
+                </button>
+                <button
+                    onClick={() => setActivePreviewTab('preview')}
+                    style={{
+                        flex: 1,
+                        padding: '12px 20px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: activePreviewTab === 'preview' ? '2px solid #6366f1' : '2px solid transparent',
+                        color: activePreviewTab === 'preview' ? '#6366f1' : 'var(--text-secondary, #888)',
+                        cursor: 'pointer',
+                        fontWeight: activePreviewTab === 'preview' ? '600' : '400'
+                    }}
+                >
+                    👁️ Live Preview
+                </button>
+            </div>
+
+            {activePreviewTab === 'preview' ? (
+                /* Instagram-Style Preview */
+                <div style={{
+                    maxHeight: '70vh',
+                    overflowY: 'auto',
+                    background: '#fff',
+                    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                }}>
+                    {/* Header */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 16px',
+                        borderBottom: '1px solid #dbdbdb',
+                        background: '#fff'
+                    }}>
+                        <div style={{ fontSize: '20px', cursor: 'pointer' }}>⌘</div>
+                        <div style={{
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}>
+                            {(branding.team_display_name || 'yourcompany').toLowerCase().replace(/\s+/g, '.')}
+                            <span style={{
+                                width: '16px',
+                                height: '16px',
+                                background: '#3897f0',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '9px',
+                                color: '#fff'
+                            }}>✓</span>
+                        </div>
+                        <div style={{ fontSize: '20px', cursor: 'pointer' }}>☰</div>
+                    </div>
+
+                    {/* Profile Section */}
+                    <div style={{ padding: '16px' }}>
+                        {/* Profile Header */}
+                        <div style={{ display: 'flex', marginBottom: '20px' }}>
+                            {/* Profile Picture */}
+                            <div style={{
+                                width: '77px',
+                                height: '77px',
+                                borderRadius: '50%',
+                                padding: '3px',
+                                background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                                marginRight: '28px',
+                                flexShrink: 0
+                            }}>
+                                <div style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: '50%',
+                                    border: '2px solid #fff',
+                                    overflow: 'hidden'
+                                }}>
+                                    <img
+                                        src={branding.logo_url || 'https://via.placeholder.com/77/10b981/fff?text=G'}
+                                        alt="Logo"
+                                        style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Stats */}
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '30px',
+                                flex: 1
+                            }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '16px', fontWeight: '600', color: '#262626' }}>0</div>
+                                    <div style={{ fontSize: '13px', color: '#8e8e8e' }}>properties</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Profile Info */}
+                        <div style={{ marginBottom: '16px' }}>
+                            <div style={{
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                color: '#262626',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}>
+                                {branding.team_display_name || 'Your Company Name'}
+                                <span style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    background: '#3897f0',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '8px',
+                                    color: '#fff'
+                                }}>✓</span>
+                            </div>
+                            <div style={{
+                                fontSize: '14px',
+                                lineHeight: '1.5',
+                                color: '#262626',
+                                marginTop: '4px',
+                                whiteSpace: 'pre-line'
+                            }}>
+                                {branding.bio || '🏠 Find Your Dream Home\n📍 Serving Metro Manila\n💼 Premium Real Estate Services'}
+                            </div>
+                            {branding.website_url && (
+                                <div style={{
+                                    fontSize: '14px',
+                                    color: '#00376b',
+                                    marginTop: '4px',
+                                    fontWeight: '600'
+                                }}>
+                                    {branding.website_url.replace(/^https?:\/\//, '')}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div style={{
+                            display: 'flex',
+                            gap: '8px',
+                            marginBottom: '20px'
+                        }}>
+                            <button style={{
+                                flex: 1,
+                                padding: '7px 16px',
+                                background: '#0095f6',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontWeight: '600'
+                            }}>
+                                Schedule a Meeting
+                            </button>
+                            <button style={{
+                                flex: 1,
+                                padding: '7px 16px',
+                                background: '#efefef',
+                                color: '#000',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontWeight: '600'
+                            }}>
+                                Inquire
+                            </button>
+                            <button style={{
+                                padding: '7px 12px',
+                                background: '#efefef',
+                                color: '#000',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontWeight: '600'
+                            }}>
+                                Contact
+                            </button>
+                        </div>
+
+                        {/* Highlights */}
+                        <div style={{
+                            display: 'flex',
+                            gap: '16px',
+                            overflowX: 'auto',
+                            paddingBottom: '8px',
+                            marginBottom: '16px'
+                        }}>
+                            {sampleHighlights.map(highlight => (
+                                <div key={highlight.id} style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    cursor: 'pointer',
+                                    flexShrink: 0
+                                }}>
+                                    <div style={{
+                                        width: '64px',
+                                        height: '64px',
+                                        borderRadius: '50%',
+                                        padding: '2px',
+                                        background: '#dbdbdb'
+                                    }}>
+                                        <div style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            borderRadius: '50%',
+                                            border: '2px solid #fff',
+                                            overflow: 'hidden'
+                                        }}>
+                                            <img
+                                                src={highlight.image}
+                                                alt={highlight.name}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'cover'
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '12px',
+                                        color: '#262626',
+                                        maxWidth: '64px',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {highlight.name}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Section Label */}
+                        <div style={{
+                            padding: '12px 0',
+                            borderTop: '1px solid #dbdbdb',
+                            textAlign: 'center'
+                        }}>
+                            <span style={{
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                color: '#262626'
+                            }}>
+                                Properties
+                            </span>
+                        </div>
+
+                        {/* Content Grid */}
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, 1fr)',
+                            gap: '3px',
+                            marginTop: '4px'
+                        }}>
+                            {sampleGridItems.map(item => (
+                                <div
+                                    key={item.id}
+                                    style={{
+                                        aspectRatio: '1',
+                                        background: '#f0f0f0',
+                                        overflow: 'hidden'
+                                    }}
+                                >
+                                    <img
+                                        src={item.image}
+                                        alt="Property"
+                                        style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover'
+                                        }}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            ) : (
             <div className="modal-body">
                 {/* Logo Section */}
                 <div className="settings-section">
@@ -388,8 +735,19 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                             placeholder="123 Main Street, City, Country"
                         />
                     </div>
+
+                    <div className="form-group">
+                        <label>Schedule Meeting URL (Calendly, Google Calendar, etc.)</label>
+                        <input
+                            type="url"
+                            value={branding.schedule_meeting_url || ''}
+                            onChange={(e) => handleChange('schedule_meeting_url', e.target.value)}
+                            placeholder="https://calendly.com/yourname"
+                        />
+                    </div>
                 </div>
             </div>
+            )}
 
             <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={onClose}>

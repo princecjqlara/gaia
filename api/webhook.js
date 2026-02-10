@@ -721,6 +721,20 @@ export default async function handler(req, res) {
         return await handlePropertyClick(req, res, body);
       }
 
+      // ===== SEND PROPERTY SHOWCASE HANDLER =====
+      // Check if this is a request to send property showcase button
+      if (body.action === "send_property_showcase") {
+        console.log("[WEBHOOK] Send property showcase request received");
+        return await handleSendPropertyShowcase(req, res, body);
+      }
+
+      // ===== INQUIRY CLICK HANDLER =====
+      // Sends an immediate chatbot message when user clicks Inquire
+      if (body.action === "inquiry_click") {
+        console.log("[WEBHOOK] Inquiry click received");
+        return await handleInquiryClick(req, res, body);
+      }
+
       // ===== FACEBOOK WEBHOOK EVENTS =====
       // Only log actual message events, not delivery/read receipts
       const hasMessageEvent = body.entry?.some((e) =>
@@ -948,6 +962,285 @@ async function logPropertyView(
     console.log("[PROPERTY CLICK] ✅ View logged to database");
   } catch (err) {
     console.error("[PROPERTY CLICK] Failed to log view:", err.message);
+  }
+}
+
+/**
+ * Handle send property showcase button
+ * Sends a button to the contact that opens the immersive property showcase
+ */
+async function handleSendPropertyShowcase(req, res, body) {
+  const { participantId, propertyId, propertyTitle, propertyImage, propertyPrice, teamId } = body;
+
+  console.log("[PROPERTY SHOWCASE] Sending button:", {
+    participantId,
+    propertyId,
+    propertyTitle,
+    teamId,
+  });
+
+  if (!participantId || !propertyId) {
+    return res
+      .status(400)
+      .json({ error: "Missing participantId or propertyId" });
+  }
+
+  const db = getSupabase();
+  if (!db) {
+    return res.status(500).json({ error: "Database not available" });
+  }
+
+  try {
+    // 1. Find the conversation for this participant
+    const { data: conversation, error: convError } = await db
+      .from("facebook_conversations")
+      .select("conversation_id, page_id, participant_name")
+      .eq("participant_id", participantId)
+      .single();
+
+    if (convError || !conversation) {
+      console.log(
+        "[PROPERTY SHOWCASE] Conversation not found for participant:",
+        participantId,
+      );
+      return res.status(200).json({
+        success: false,
+        error: "Conversation not found",
+      });
+    }
+
+    console.log(
+      "[PROPERTY SHOWCASE] Found conversation:",
+      conversation.conversation_id,
+    );
+
+    // 2. Get the page access token
+    const { data: page, error: pageError } = await db
+      .from("facebook_pages")
+      .select("page_access_token, page_name")
+      .eq("page_id", conversation.page_id)
+      .single();
+
+    if (
+      pageError ||
+      !page?.page_access_token ||
+      page.page_access_token === "pending"
+    ) {
+      console.log("[PROPERTY SHOWCASE] No valid page access token");
+      return res.status(200).json({
+        success: false,
+        error: "No page access token",
+      });
+    }
+
+    // 3. Build the showcase URL with mode=showcase
+    const baseUrl = process.env.APP_URL || process.env.VITE_APP_URL || req.headers.origin || "https://gaia-app.com";
+    const showcaseUrl = `${baseUrl}/property/${propertyId}?mode=showcase&pid=${participantId}`;
+
+    console.log("[PROPERTY SHOWCASE] Showcase URL:", showcaseUrl);
+
+    // 4. Send the button template to the contact
+    const messagePayload = {
+      recipient: { id: participantId },
+      message: {
+        attachment: {
+          type: "template",
+          payload: {
+            template_type: "generic",
+            elements: [
+              {
+                title: propertyTitle || "View Property",
+                subtitle: propertyPrice ? `₱ ${parseFloat(propertyPrice).toLocaleString()}` : "Tap to view property details",
+                image_url: propertyImage || "https://images.unsplash.com/photo-1600596542815-27bfef402399?q=80&w=2070",
+                buttons: [
+                  {
+                    type: "web_url",
+                    url: showcaseUrl,
+                    title: "🏠 View Property",
+                    webview_height_ratio: "full",
+                    messenger_extensions: true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      messaging_type: "RESPONSE",
+    };
+
+    console.log("[PROPERTY SHOWCASE] Sending button to:", participantId);
+
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/me/messages?access_token=${page.page_access_token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(messagePayload),
+      },
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "[PROPERTY SHOWCASE] Failed to send button:",
+        responseData.error?.message,
+      );
+      return res.status(200).json({
+        success: false,
+        error: responseData.error?.message,
+      });
+    }
+
+    console.log("[PROPERTY SHOWCASE] ✅ Button sent successfully!");
+
+    // 5. Log this action
+    try {
+      await db.from("ai_action_log").insert({
+        conversation_id: conversation.conversation_id,
+        action_type: "property_showcase_sent",
+        details: {
+          property_id: propertyId,
+          property_title: propertyTitle,
+          showcase_url: showcaseUrl,
+        },
+      });
+    } catch (e) {
+      // Ignore if table doesn't exist
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Property showcase button sent",
+    });
+  } catch (error) {
+    console.error("[PROPERTY SHOWCASE] Error:", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Handle inquiry click
+ * Sends an immediate chatbot message to the contact when they click Inquire
+ */
+async function handleInquiryClick(req, res, body) {
+  const { participantId, propertyId, propertyTitle, scheduleUrl } = body;
+
+  console.log("[INQUIRY CLICK] Processing:", {
+    participantId,
+    propertyId,
+    propertyTitle,
+  });
+
+  if (!participantId || !propertyId) {
+    return res
+      .status(400)
+      .json({ error: "Missing participantId or propertyId" });
+  }
+
+  const db = getSupabase();
+  if (!db) {
+    return res.status(500).json({ error: "Database not available" });
+  }
+
+  try {
+    // 1. Find the conversation for this participant
+    const { data: conversation, error: convError } = await db
+      .from("facebook_conversations")
+      .select("conversation_id, page_id, participant_name")
+      .eq("participant_id", participantId)
+      .single();
+
+    if (convError || !conversation) {
+      console.log(
+        "[INQUIRY CLICK] Conversation not found for participant:",
+        participantId,
+      );
+      return res.status(200).json({
+        success: true,
+        messageSent: false,
+        reason: "Conversation not found",
+      });
+    }
+
+    // 2. Get the page access token
+    const { data: page, error: pageError } = await db
+      .from("facebook_pages")
+      .select("page_access_token, page_name")
+      .eq("page_id", conversation.page_id)
+      .single();
+
+    if (
+      pageError ||
+      !page?.page_access_token ||
+      page.page_access_token === "pending"
+    ) {
+      console.log("[INQUIRY CLICK] No valid page access token");
+      return res.status(200).json({
+        success: true,
+        messageSent: false,
+        reason: "No page access token",
+      });
+    }
+
+    // 3. Send immediate message to the contact
+    const title = propertyTitle || "this property";
+    const lines = [
+      `Thanks for your inquiry about "${title}"! 🏠`,
+      "Would you like to schedule a viewing or ask any questions?",
+    ];
+    if (scheduleUrl) {
+      lines.push(`Schedule here: ${scheduleUrl}`);
+    }
+    const messageText = lines.join("\n\n");
+
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/me/messages?access_token=${page.page_access_token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: { id: participantId },
+          message: { text: messageText },
+          messaging_type: "RESPONSE",
+        }),
+      },
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "[INQUIRY CLICK] Failed to send message:",
+        responseData.error?.message,
+      );
+      return res.status(200).json({
+        success: true,
+        messageSent: false,
+        error: responseData.error?.message,
+      });
+    }
+
+    // 4. Log this as an AI action (optional)
+    try {
+      await db.from("ai_action_log").insert({
+        conversation_id: conversation.conversation_id,
+        action_type: "inquiry_click_message",
+        details: {
+          property_id: propertyId,
+          property_title: propertyTitle,
+          message_sent: true,
+        },
+      });
+    } catch (err) {
+      console.warn("[INQUIRY CLICK] Failed to log AI action:", err?.message);
+    }
+
+    return res.status(200).json({ success: true, messageSent: true });
+  } catch (error) {
+    console.error("[INQUIRY CLICK] Error:", error);
+    return res.status(500).json({ error: error.message });
   }
 }
 

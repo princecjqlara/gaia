@@ -5,10 +5,13 @@ import TeamBrandingSettings from './TeamBrandingSettings';
 import { getTeamBranding } from '../services/teamBrandingService';
 
 
+import PropertyMediaShowcase from './PropertyMediaShowcase';
+
 const PropertyManagement = ({ teamId, organizationId }) => {
     const [view, setView] = useState('list'); // 'list' or 'form'
     const [showPreview, setShowPreview] = useState(false);
     const [showBrandingSettings, setShowBrandingSettings] = useState(false);
+    const [previewProperty, setPreviewProperty] = useState(null);
     const [branding, setBranding] = useState(null);
     const [properties, setProperties] = useState([]);
     const [editingId, setEditingId] = useState(null);
@@ -87,6 +90,10 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         images: [], // Array of strings (urls)
         videos: [], // Array of strings (urls)
 
+        // Primary media (first in showcase)
+        primaryMediaUrl: '',
+        primaryMediaType: '',
+
         // Personalization
         is_featured: false,
         label: '' // e.g. "Price Drop", "Just Listed"
@@ -122,7 +129,9 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 monthlyAmortization: p.monthly_amortization,
                 paymentTerms: p.payment_terms,
                 is_featured: p.is_featured,
-                createdAt: p.created_at
+                createdAt: p.created_at,
+                primaryMediaUrl: p.primary_media_url,
+                primaryMediaType: p.primary_media_type
             }));
 
             setProperties(mappedProperties);
@@ -197,6 +206,8 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 payment_terms: formData.paymentTerms,
                 images: formData.images,
                 videos: formData.videos,
+                primary_media_url: formData.primaryMediaUrl || null,
+                primary_media_type: formData.primaryMediaType || null,
                 is_featured: formData.is_featured,
                 created_at: editingId ? undefined : new Date().toISOString(),
                 updated_at: new Date().toISOString()
@@ -227,7 +238,12 @@ const PropertyManagement = ({ teamId, organizationId }) => {
     };
 
     const handleEdit = (property) => {
-        setFormData(property);
+        setFormData({
+            ...initialFormState,
+            ...property,
+            primaryMediaUrl: property.primaryMediaUrl || property.primary_media_url || '',
+            primaryMediaType: property.primaryMediaType || property.primary_media_type || ''
+        });
         setEditingId(property.id);
         setView('form');
     };
@@ -255,57 +271,102 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        // Use Cloudinary for upload
-        const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || localStorage.getItem('cloudinary_cloud_name') || prompt('Enter Cloudinary Cloud Name:');
-        const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || localStorage.getItem('cloudinary_upload_preset') || prompt('Enter Cloudinary Upload Preset (Unsigned):');
-
-        if (!cloudName || !uploadPreset) {
-            if (cloudName) localStorage.setItem('cloudinary_cloud_name', cloudName);
-            if (uploadPreset) localStorage.setItem('cloudinary_upload_preset', uploadPreset);
-            return alert('Cloudinary configuration missing. Please check your .env file or provide credentials.');
-        } else {
-            localStorage.setItem('cloudinary_cloud_name', cloudName);
-            localStorage.setItem('cloudinary_upload_preset', uploadPreset);
-        }
+        // Use signed uploads (no preset required)
 
         setLoading(true);
         const newImages = [];
         const newVideos = [];
 
         try {
-            for (const file of files) {
+            const getSignedUpload = async () => {
+                const response = await fetch('/api/cloudinary-sign?folder=properties');
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.error || 'Signed upload not available');
+                }
+                if (!data.signature || !data.timestamp || !data.apiKey || !data.cloudName) {
+                    throw new Error('Signed upload response incomplete');
+                }
+                return data;
+            };
+
+            const uploadFileSigned = async (file, signed) => {
                 const isVideo = file.type.startsWith('video/');
                 const data = new FormData();
                 data.append('file', file);
-                data.append('upload_preset', uploadPreset);
-                data.append('resource_type', 'auto'); // Let Cloudinary detect
+                data.append('api_key', signed.apiKey);
+                data.append('timestamp', signed.timestamp);
+                data.append('signature', signed.signature);
+                if (signed.folder) data.append('folder', signed.folder);
+                data.append('resource_type', 'auto');
 
                 const res = await fetch(
-                    `https://api.cloudinary.com/v1_1/${cloudName}/${isVideo ? 'video' : 'image'}/upload`,
+                    `https://api.cloudinary.com/v1_1/${signed.cloudName}/${isVideo ? 'video' : 'image'}/upload`,
                     {
                         method: 'POST',
                         body: data,
                     }
                 );
                 const fileData = await res.json();
-                if (fileData.secure_url) {
-                    if (isVideo) {
-                        newVideos.push(fileData.secure_url);
-                        // Also try to get a thumbnail if possible, but for now just URL
+
+                return {
+                    secureUrl: fileData.secure_url || null,
+                    isVideo,
+                    errorMessage: fileData?.error?.message || (!res.ok ? 'Upload failed' : null)
+                };
+            };
+
+            for (const file of files) {
+                let result = null;
+                try {
+                    const signed = await getSignedUpload();
+                    result = await uploadFileSigned(file, signed);
+                } catch (err) {
+                    result = {
+                        secureUrl: null,
+                        isVideo: file.type.startsWith('video/'),
+                        errorMessage: err?.message || 'Signed upload not available'
+                    };
+                }
+
+                if (result.secureUrl) {
+                    if (result.isVideo) {
+                        newVideos.push(result.secureUrl);
                     } else {
-                        newImages.push(fileData.secure_url);
+                        newImages.push(result.secureUrl);
                     }
                 } else {
-                    console.error('Upload error', fileData);
-                    alert(`Upload failed: ${fileData.error?.message || 'Unknown error'}`);
+                    const message = result.errorMessage || 'Unknown error';
+                    console.error('Upload error', message);
+                    alert(`Upload failed: ${message}. Ensure /api/cloudinary-sign is reachable and Cloudinary API keys are set.`);
                 }
             }
 
-            setFormData(prev => ({
-                ...prev,
-                images: [...prev.images, ...newImages],
-                videos: [...(prev.videos || []), ...newVideos]
-            }));
+            setFormData(prev => {
+                const nextImages = [...prev.images, ...newImages];
+                const nextVideos = [...(prev.videos || []), ...newVideos];
+
+                let nextPrimaryUrl = prev.primaryMediaUrl;
+                let nextPrimaryType = prev.primaryMediaType;
+
+                if (!nextPrimaryUrl) {
+                    if (nextImages.length > 0) {
+                        nextPrimaryUrl = nextImages[0];
+                        nextPrimaryType = 'image';
+                    } else if (nextVideos.length > 0) {
+                        nextPrimaryUrl = nextVideos[0];
+                        nextPrimaryType = 'video';
+                    }
+                }
+
+                return {
+                    ...prev,
+                    images: nextImages,
+                    videos: nextVideos,
+                    primaryMediaUrl: nextPrimaryUrl,
+                    primaryMediaType: nextPrimaryType
+                };
+            });
         } catch (err) {
             console.error('Error uploading media:', err);
             alert('Failed to upload media');
@@ -315,17 +376,61 @@ const PropertyManagement = ({ teamId, organizationId }) => {
     };
 
     const removeImage = (index) => {
-        setFormData(prev => ({
-            ...prev,
-            images: prev.images.filter((_, i) => i !== index)
-        }));
+        setFormData(prev => {
+            const removedUrl = prev.images[index];
+            const nextImages = prev.images.filter((_, i) => i !== index);
+            let nextPrimaryUrl = prev.primaryMediaUrl;
+            let nextPrimaryType = prev.primaryMediaType;
+
+            if (removedUrl && removedUrl === prev.primaryMediaUrl) {
+                if (nextImages.length > 0) {
+                    nextPrimaryUrl = nextImages[0];
+                    nextPrimaryType = 'image';
+                } else if ((prev.videos || []).length > 0) {
+                    nextPrimaryUrl = prev.videos[0];
+                    nextPrimaryType = 'video';
+                } else {
+                    nextPrimaryUrl = '';
+                    nextPrimaryType = '';
+                }
+            }
+
+            return {
+                ...prev,
+                images: nextImages,
+                primaryMediaUrl: nextPrimaryUrl,
+                primaryMediaType: nextPrimaryType
+            };
+        });
     };
 
     const removeVideo = (index) => {
-        setFormData(prev => ({
-            ...prev,
-            videos: prev.videos.filter((_, i) => i !== index)
-        }));
+        setFormData(prev => {
+            const removedUrl = (prev.videos || [])[index];
+            const nextVideos = (prev.videos || []).filter((_, i) => i !== index);
+            let nextPrimaryUrl = prev.primaryMediaUrl;
+            let nextPrimaryType = prev.primaryMediaType;
+
+            if (removedUrl && removedUrl === prev.primaryMediaUrl) {
+                if (nextVideos.length > 0) {
+                    nextPrimaryUrl = nextVideos[0];
+                    nextPrimaryType = 'video';
+                } else if (prev.images.length > 0) {
+                    nextPrimaryUrl = prev.images[0];
+                    nextPrimaryType = 'image';
+                } else {
+                    nextPrimaryUrl = '';
+                    nextPrimaryType = '';
+                }
+            }
+
+            return {
+                ...prev,
+                videos: nextVideos,
+                primaryMediaUrl: nextPrimaryUrl,
+                primaryMediaType: nextPrimaryType
+            };
+        });
     };
 
     const generateMockData = async () => {
@@ -460,7 +565,20 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                             📊 Analytics
                         </button>
                         <button
-                            onClick={() => setShowPreview(true)}
+                            onClick={() => {
+                                // Open the team's Instagram-style profile page in a new tab
+                                if (!teamId) {
+                                    alert('Error: Team ID not found. Please refresh the page.');
+                                    return;
+                                }
+                                const profileUrl = `${window.location.origin}/${teamId}`;
+                                console.log('Opening profile URL:', profileUrl);
+                                const newWindow = window.open(profileUrl, '_blank');
+                                if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+                                    // Popup blocked, try same tab
+                                    window.location.href = profileUrl;
+                                }
+                            }}
                             style={{
                                 background: '#111827',
                                 color: 'white',
@@ -590,7 +708,9 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                 <div style={{
                                     height: '200px',
                                     background: '#f3f4f6',
-                                    backgroundImage: property.images[0] ? `url(${property.images[0]})` : 'none',
+                                    backgroundImage: (property.primaryMediaUrl || property.primary_media_url || property.images[0])
+                                        ? `url(${property.primaryMediaUrl || property.primary_media_url || property.images[0]})`
+                                        : 'none',
                                     backgroundSize: 'cover',
                                     backgroundPosition: 'center',
                                     display: 'flex',
@@ -598,7 +718,37 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                     justifyContent: 'center',
                                     position: 'relative'
                                 }}>
-                                    {!property.images[0] && <span style={{ fontSize: '2rem' }}>🏠</span>}
+                                {!property.images[0] && <span style={{ fontSize: '2rem' }}>🏠</span>}
+                                    {/* Preview Button */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPreviewProperty(property);
+                                        }}
+                                        title="Preview Property"
+                                        style={{
+                                            position: 'absolute',
+                                            top: '0.5rem',
+                                            left: '0.5rem',
+                                            background: 'rgba(16, 185, 129, 0.9)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '50%',
+                                            width: '32px',
+                                            height: '32px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            opacity: 0.9,
+                                            transition: 'opacity 0.2s',
+                                            zIndex: 2
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.9'}
+                                    >
+                                        👁️
+                                    </button>
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -1040,6 +1190,21 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                 {formData.images.map((url, idx) => (
                                     <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden' }}>
                                         <img src={url} alt={`Upload ${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        {formData.primaryMediaUrl === url && (
+                                            <span style={{
+                                                position: 'absolute',
+                                                left: '6px',
+                                                top: '6px',
+                                                background: 'rgba(16,185,129,0.9)',
+                                                color: '#fff',
+                                                fontSize: '10px',
+                                                fontWeight: '700',
+                                                padding: '2px 6px',
+                                                borderRadius: '999px'
+                                            }}>
+                                                First
+                                            </span>
+                                        )}
                                         <button
                                             onClick={() => removeImage(idx)}
                                             style={{
@@ -1052,6 +1217,28 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                             }}
                                         >
                                             ✕
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({
+                                                ...prev,
+                                                primaryMediaUrl: url,
+                                                primaryMediaType: 'image'
+                                            }))}
+                                            style={{
+                                                position: 'absolute',
+                                                left: '4px',
+                                                bottom: '4px',
+                                                background: 'rgba(0,0,0,0.6)',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: '999px',
+                                                padding: '4px 6px',
+                                                fontSize: '10px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Set first
                                         </button>
                                     </div>
                                 ))}
@@ -1082,6 +1269,21 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                 {formData.videos && formData.videos.map((url, idx) => (
                                     <div key={idx} style={{ position: 'relative', background: '#000', borderRadius: '8px', overflow: 'hidden', aspectRatio: '16/9' }}>
                                         <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        {formData.primaryMediaUrl === url && (
+                                            <span style={{
+                                                position: 'absolute',
+                                                left: '6px',
+                                                top: '6px',
+                                                background: 'rgba(16,185,129,0.9)',
+                                                color: '#fff',
+                                                fontSize: '10px',
+                                                fontWeight: '700',
+                                                padding: '2px 6px',
+                                                borderRadius: '999px'
+                                            }}>
+                                                First
+                                            </span>
+                                        )}
                                         <button
                                             onClick={() => removeVideo(idx)}
                                             style={{
@@ -1094,6 +1296,28 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                                             }}
                                         >
                                             ×
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({
+                                                ...prev,
+                                                primaryMediaUrl: url,
+                                                primaryMediaType: 'video'
+                                            }))}
+                                            style={{
+                                                position: 'absolute',
+                                                left: '4px',
+                                                bottom: '4px',
+                                                background: 'rgba(0,0,0,0.6)',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: '999px',
+                                                padding: '4px 6px',
+                                                fontSize: '10px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Set first
                                         </button>
                                         <div style={{
                                             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none'
@@ -1188,6 +1412,18 @@ const PropertyManagement = ({ teamId, organizationId }) => {
 
                 </div>
             </div>
+
+            {/* Single Property Preview Modal */}
+            {previewProperty && (
+                <PropertyMediaShowcase
+                    properties={[previewProperty]}
+                    branding={branding}
+                    initialPropertyIndex={0}
+                    onClose={() => setPreviewProperty(null)}
+                    teamId={teamId}
+                    organizationId={organizationId}
+                />
+            )}
         </div>
     );
 };
