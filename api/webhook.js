@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -735,6 +736,12 @@ export default async function handler(req, res) {
         return await handleInquiryClick(req, res, body);
       }
 
+      // ===== CLOUDINARY SIGN HANDLER =====
+      // Returns a signed upload payload (no preset required)
+      if (body.action === "cloudinary_sign") {
+        return await handleCloudinarySign(req, res, body);
+      }
+
       // ===== FACEBOOK WEBHOOK EVENTS =====
       // Only log actual message events, not delivery/read receipts
       const hasMessageEvent = body.entry?.some((e) =>
@@ -1118,6 +1125,47 @@ async function handleSendPropertyShowcase(req, res, body) {
     console.error("[PROPERTY SHOWCASE] Error:", error);
     return res.status(500).json({ error: error.message });
   }
+}
+
+/**
+ * Handle Cloudinary signed upload request
+ */
+async function handleCloudinarySign(req, res, body) {
+  const { folder } = body || {};
+
+  const cloudName =
+    process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const apiKey =
+    process.env.CLOUDINARY_API_KEY || process.env.VITE_CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    return res.status(500).json({
+      error: "Cloudinary not configured",
+    });
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const params = { timestamp };
+  if (folder) params.folder = String(folder);
+
+  const toSign = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+
+  const signature = crypto
+    .createHash("sha1")
+    .update(toSign + apiSecret)
+    .digest("hex");
+
+  return res.status(200).json({
+    signature,
+    timestamp,
+    apiKey,
+    cloudName,
+    folder: folder ? String(folder) : null,
+  });
 }
 
 /**

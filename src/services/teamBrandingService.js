@@ -94,7 +94,14 @@ export async function updateTeamBranding(teamId, branding) {
  */
 export async function uploadBrandingImage(file, type = 'logo') {
     try {
-        const signResponse = await fetch(`/api/cloudinary-sign?folder=branding/${type}`);
+        const signResponse = await fetch('/api/webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'cloudinary_sign',
+                folder: `branding/${type}`
+            })
+        });
         const signData = await signResponse.json().catch(() => ({}));
 
         if (!signResponse.ok) {

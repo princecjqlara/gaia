@@ -279,7 +279,14 @@ const PropertyManagement = ({ teamId, organizationId }) => {
 
         try {
             const getSignedUpload = async () => {
-                const response = await fetch('/api/cloudinary-sign?folder=properties');
+                const response = await fetch('/api/webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'cloudinary_sign',
+                        folder: 'properties'
+                    })
+                });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     throw new Error(data.error || 'Signed upload not available');
@@ -338,7 +345,7 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 } else {
                     const message = result.errorMessage || 'Unknown error';
                     console.error('Upload error', message);
-                    alert(`Upload failed: ${message}. Ensure /api/cloudinary-sign is reachable and Cloudinary API keys are set.`);
+                    alert(`Upload failed: ${message}. Ensure /api/webhook is reachable and Cloudinary API keys are set.`);
                 }
             }
 
