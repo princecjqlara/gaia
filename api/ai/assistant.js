@@ -21,14 +21,54 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Message is required' });
         }
 
+        // Sanitize context - remove any image fields to prevent API errors
+        const sanitizedContext = context ? {
+            summary: context.summary,
+            clients: (context.clients || []).map(c => ({
+                id: c.id,
+                client_name: c.client_name || c.clientName,
+                clientName: c.clientName,
+                business_name: c.business_name || c.businessName,
+                businessName: c.businessName,
+                email: c.email,
+                phone: c.phone,
+                status: c.status,
+                pipeline_status: c.pipeline_status || c.pipelineStatus,
+                pipelineStatus: c.pipelineStatus,
+                niche: c.niche
+            })),
+            conversations: (context.conversations || []).map(c => ({
+                id: c.id,
+                participant_name: c.participant_name,
+                last_message_text: c.last_message_text,
+                unread_count: c.unread_count
+            })),
+            users: context.users,
+            properties: (context.properties || []).map(p => ({
+                id: p.id,
+                title: p.title,
+                type: p.type,
+                status: p.status,
+                address: p.address,
+                price: p.price,
+                bedrooms: p.bedrooms,
+                bathrooms: p.bathrooms,
+                floorArea: p.floor_area,
+                lotArea: p.lot_area,
+                description: p.description
+            })),
+            bookings: context.bookings,
+            events: context.events
+        } : null;
+
         // Try to use OpenAI if available
         if (process.env.OPENAI_API_KEY) {
-            const aiResponse = await callOpenAI(message, context, conversationHistory);
+            const aiResponse = await callOpenAI(message, sanitizedContext, conversationHistory);
             return res.status(200).json({ response: aiResponse, actionPerformed: false });
         }
 
         // Fallback to local processing
-        const response = processQuery(message, context);
+        const response = processQuery(message, sanitizedContext);
         return res.status(200).json({ response, actionPerformed: false });
 
     } catch (error) {

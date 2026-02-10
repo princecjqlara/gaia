@@ -1629,6 +1629,16 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       return;
     }
 
+    // Get available properties from database for AI context
+    const { data: properties } = await db
+      .from("properties")
+      .select("*")
+      .eq("status", "For Sale")
+      .order("created_at", { ascending: false })
+      .limit(15);
+
+    console.log("[WEBHOOK] Loaded", properties?.length || 0, "properties for AI context");
+
     // Get recent messages - increased to 30 for better context retention
     const { data: messages } = await db
       .from("facebook_messages")
@@ -1834,15 +1844,64 @@ ${faqContent}
 
     // Add bot rules with stronger emphasis
     if (config.bot_rules_dos) {
-      aiPrompt += `
+        aiPrompt += `
 ## ✅ STRICT RULES - DO's (YOU MUST FOLLOW THESE)
 ${config.bot_rules_dos}
 `;
     }
     if (config.bot_rules_donts) {
-      aiPrompt += `
+        aiPrompt += `
 ## ❌ STRICT RULES - DON'Ts (NEVER DO THESE)
 ${config.bot_rules_donts}
+`;
+    }
+
+    // Add properties information to AI context
+    if (properties && properties.length > 0) {
+        const propertyList = properties.map((p, idx) => {
+            return `Property ${idx + 1} (ID: ${p.id}):
+🏠 Title: ${p.title}
+📍 Location: ${p.address}
+💰 Price: ₱${parseInt(p.price || 0).toLocaleString()}
+🛏️ Bedrooms: ${p.bedrooms || 'N/A'}
+🚿 Bathrooms: ${p.bathrooms || 'N/A'}
+📐 Floor Area: ${p.floor_area || 'N/A'} sqm
+📝 Description: ${(p.description || '').substring(0, 200)}...
+${p.images && p.images.length > 0 ? `🖼️ Image: ${p.images[0]}` : ''}
+---`;
+        }).join('\n');
+
+        aiPrompt += `
+## 🏠 AVAILABLE PROPERTIES (YOU CAN RECOMMEND THESE)
+Use this information to suggest properties to customers. When they ask about properties, you can:
+1. Recommend properties based on their preferences (budget, location, bedrooms, etc.)
+2. Send property cards using the format below
+
+${propertyList}
+
+## 🔹 HOW TO SEND PROPERTY CARDS
+When you want to show a property to the customer, use this EXACT format at the start of your response:
+
+SEND_PROPERTY_CARD: [property_id here]
+
+Examples:
+- "SEND_PROPERTY_CARD: ${properties[0]?.id}"
+- "SEND_PROPERTY_CARD: ${properties[1]?.id}"
+
+The system will automatically format it as a beautiful property card with images in Messenger.
+ALWAYS use the exact property ID from the list above.
+
+Rules for recommending properties:
+- Ask about their budget first
+- Ask about their preferred location
+- Ask about how many bedrooms they need
+- Match properties to their criteria
+- Only send up to 3 properties at once (don't overwhelm them)
+`;
+    } else {
+        aiPrompt += `
+## 🏠 AVAILABLE PROPERTIES
+No properties are currently listed for sale.
 `;
     }
 
@@ -1971,12 +2030,12 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
     // Use vision models if images are present, otherwise text models
     let MODELS;
     if (hasImages) {
-      // Vision-capable models on NVIDIA API
+      // Vision-capable models on NVIDIA API - prioritized by stability
       MODELS = [
+        "meta/llama-3.2-11b-vision-instruct", // Llama 3.2 Vision - most reliable
         "nvidia/vila", // NVIDIA VILA vision model
         "liuhaotian/llava-v1.6-mistral-7b", // LLaVA vision model
         "adept/fuyu-8b", // Fuyu vision model
-        "meta/llama-3.2-11b-vision-instruct", // Llama 3.2 Vision
       ];
       console.log("[WEBHOOK] Using VISION models for image analysis");
     } else {
@@ -1996,7 +2055,7 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
 
     for (const model of MODELS) {
       try {
-        console.log(`[WEBHOOK] Trying model: ${model}`);
+        console.log(`[WEBHOOK] Trying model: ${model}, hasImages: ${hasImages}`);
         const aiResponse = await fetch(
           "https://integrate.api.nvidia.com/v1/chat/completions",
           {
@@ -2019,6 +2078,15 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
           console.log(
             `[WEBHOOK] Model ${model} failed: ${errorText.substring(0, 100)}`,
           );
+
+          // Special handling for vision model failures with images
+          if (hasImages && (errorText.includes("does not support") || errorText.includes("image input") || errorText.includes("vision"))) {
+            console.log("[WEBHOOK] Vision model failed, falling back to text-only without images");
+            // Remove images and try text-only models
+            hasImages = false;
+            break;
+          }
+
           lastError = errorText;
           continue; // Try next model
         }
@@ -2032,8 +2100,87 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
         }
       } catch (err) {
         console.log(`[WEBHOOK] Model ${model} error: ${err.message}`);
+
+        // Special handling for vision model errors with images
+        if (hasImages && (err.message.includes("vision") || err.message.includes("image"))) {
+          console.log("[WEBHOOK] Vision model error, falling back to text-only without images");
+          hasImages = false;
+          break;
+        }
+
         lastError = err.message;
         continue;
+      }
+    }
+
+    // If we fell back from vision to text-only, rebuild aiMessages without images
+    if (hasImages === false && (lastError?.includes("vision") || lastError?.includes("image"))) {
+      console.log("[WEBHOOK] Rebuilding messages for text-only model (removing images)");
+      aiMessages = [{ role: "system", content: aiPrompt }];
+      for (const msg of recentMessages) {
+        if (msg.message_text && msg.message_text.trim().length > 0) {
+          aiMessages.push({
+            role: msg.is_from_page ? "assistant" : "user",
+            content: msg.message_text,
+          });
+        } else if (msg.attachments && msg.attachments.length > 0) {
+          // Add a note that there was an attachment we can't process
+          aiMessages.push({
+            role: msg.is_from_page ? "assistant" : "user",
+            content: "[Image or attachment - text extracted from image if available]",
+          });
+        }
+      }
+
+      // Retry with text-only models
+      MODELS = [
+        "meta/llama-3.1-405b-instruct",
+        "meta/llama-3.1-70b-instruct",
+        "mistralai/mixtral-8x22b-instruct-v0.1",
+        "mistralai/mistral-7b-instruct-v0.3",
+        "google/gemma-2-27b-it",
+        "microsoft/phi-3-medium-128k-instruct",
+      ];
+
+      for (const model of MODELS) {
+        try {
+          console.log(`[WEBHOOK] Retrying (text-only): ${model}`);
+          const aiResponse = await fetch(
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${NVIDIA_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: model,
+                messages: aiMessages,
+                temperature: 0.7,
+                max_tokens: 400,
+              }),
+            },
+          );
+
+          if (!aiResponse.ok) {
+            const errorText = await aiResponse.text();
+            console.log(`[WEBHOOK] Model ${model} failed: ${errorText.substring(0, 100)}`);
+            lastError = errorText;
+            continue;
+          }
+
+          const aiData = await aiResponse.json();
+          aiReply = aiData.choices?.[0]?.message?.content;
+
+          if (aiReply) {
+            console.log(`[WEBHOOK] Success with text-only model: ${model}`);
+            break;
+          }
+        } catch (err) {
+          console.log(`[WEBHOOK] Model ${model} error: ${err.message}`);
+          lastError = err.message;
+          continue;
+        }
       }
     }
 
@@ -2608,12 +2755,50 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
 
     console.log(`[WEBHOOK] Sending ${messageParts.length} message part(s)`);
 
+    // Process SEND_PROPERTY_CARD markers - convert to property card attachments
+    const processedMessages = [];
+    for (const part of messageParts) {
+      // Check for SEND_PROPERTY_CARD marker
+      const propertyCardMatch = part.match(/^SEND_PROPERTY_CARD:\s*([a-zA-Z0-9\-]+)/i);
+
+      if (propertyCardMatch) {
+        const propertyId = propertyCardMatch[1];
+        console.log("[WEBHOOK] Property card requested:", propertyId);
+
+        // Find the property in our loaded data
+        const property = properties?.find(p => p.id === propertyId);
+
+        if (property) {
+          // Add property as attachment
+          processedMessages.push({
+            type: "property_card",
+            property: property
+          });
+          console.log("[WEBHOOK] ✓ Added property card:", property.title);
+        } else {
+          console.log("[WEBHOOK] ✗ Property not found:", propertyId);
+          // Skip or could send error message
+        }
+      } else {
+        // Regular text message, remove the marker if AI included it
+        const cleanedText = part.replace(/^SEND_PROPERTY_CARD:\s*[a-zA-Z0-9\-]+\s*/i, "").trim();
+        if (cleanedText.length > 0) {
+          processedMessages.push({
+            type: "text",
+            content: cleanedText
+          });
+        }
+      }
+    }
+
+    console.log(`[WEBHOOK] After property card processing: ${processedMessages.length} total messages`);
+
     // Send each part via Facebook
     const participantId =
       conversation?.participant_id || conversationId.replace("t_", "");
 
-    for (let i = 0; i < messageParts.length; i++) {
-      const part = messageParts[i];
+    for (let i = 0; i < processedMessages.length; i++) {
+      const part = processedMessages[i];
 
       // Add delay between messages for natural chat feel
       if (i > 0) {
@@ -2621,19 +2806,67 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
       }
 
       console.log(
-        `[WEBHOOK] Sending part ${i + 1}/${messageParts.length}: "${part.substring(0, 50)}..."`,
+        `[WEBHOOK] Sending part ${i + 1}/${processedMessages.length}: ${part.type === "property_card" ? "Property Card" : part.content.substring(0, 50)}`,
       );
+
+      // Prepare message body based on type
+      let messageBody;
+      if (part.type === "property_card") {
+        // Send property card as generic template
+        const prop = part.property;
+        const propertyUrl = `${process.env.APP_URL || window?.location?.origin || ""}/property/${prop.id}?pid=${participantId}`;
+
+        messageBody = {
+          recipient: { id: participantId },
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "generic",
+                elements: [
+                  {
+                    title: prop.title,
+                    image_url: prop.images && prop.images.length > 0 ? prop.images[0] : null,
+                    subtitle: `₱${parseInt(prop.price || 0).toLocaleString()} • ${prop.bedrooms || 'N/A'} bed • ${prop.bathrooms || 'N/A'} bath`,
+                    default_action: {
+                      type: "web_url",
+                      url: propertyUrl,
+                      webview_height_ratio: "tall"
+                    },
+                    buttons: [
+                      {
+                        type: "web_url",
+                        url: propertyUrl,
+                        title: "View Details"
+                      },
+                      {
+                        type: "postback",
+                        title: "I'm Interested",
+                        payload: `INQUIRY_PROPERTY_${prop.id}`
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          messaging_type: "RESPONSE"
+        };
+      } else {
+        // Regular text message
+        messageBody = {
+          recipient: { id: participantId },
+          message: { text: part.content },
+          messaging_type: "RESPONSE"
+        };
+      }
 
       const sendResponse = await fetch(
         `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            recipient: { id: participantId },
-            message: { text: part },
-            messaging_type: "RESPONSE",
-          }),
+          body: JSON.stringify(messageBody),
         },
       );
 
@@ -2867,6 +3100,109 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
 }
 
 /**
+ * Handle booking quick reply from AI messages
+ */
+async function handleBookingQuickReply(pageId, senderId, timestamp) {
+  const db = getSupabase();
+  if (!db) return;
+
+  try {
+    console.log(`[WEBHOOK] 📅 Booking button clicked by ${senderId}`);
+
+    // Get booking URL from config
+    const { data: settings } = await db
+      .from("settings")
+      .select("value")
+      .eq("key", "ai_chatbot_config")
+      .single();
+
+    const bookingUrl = settings?.value?.booking_url;
+    if (!bookingUrl) {
+      console.log("[WEBHOOK] No booking URL configured");
+      return;
+    }
+
+    // Get page access token
+    const { data: page } = await db
+      .from("facebook_pages")
+      .select("page_access_token, page_name")
+      .eq("page_id", pageId)
+      .single();
+
+    if (!page?.page_access_token) {
+      console.log("[WEBHOOK] No page access token found");
+      return;
+    }
+
+    // Get or create conversation
+    const { data: existingConv } = await db
+      .from("facebook_conversations")
+      .select("conversation_id, participant_name")
+      .eq("participant_id", senderId)
+      .eq("page_id", pageId)
+      .single();
+
+    const conversationId = existingConv?.conversation_id || `t_${senderId}`;
+
+    // Send booking link message
+    const message = `📅 Great! Here's your booking link:\n\n${bookingUrl}\n\nClick to schedule your consultation.`;
+
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: { id: senderId },
+          message: { text: message },
+          messaging_type: "RESPONSE"
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error("[WEBHOOK] Failed to send booking link:", error);
+      throw new Error(error.error?.message || "Failed to send booking link");
+    }
+
+    const result = await response.json();
+    console.log(`[WEBHOOK] ✅ Booking link sent: ${result.message_id}`);
+
+    // Save the booking link message
+    await db.from("facebook_messages").upsert(
+      {
+        message_id: result.message_id,
+        conversation_id: conversationId,
+        sender_id: pageId,
+        message_text: message,
+        timestamp: new Date(timestamp).toISOString(),
+        is_from_page: true,
+        is_read: true,
+        sent_source: "app"
+      },
+      { onConflict: "message_id" }
+    );
+
+    // Update pipeline stage to indicate booking interest
+    await db
+      .from("facebook_conversations")
+      .update({
+        pipeline_stage: "booked",
+        lead_status: "appointment_booked",
+        last_message_text: message,
+        last_message_time: new Date(timestamp).toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("conversation_id", conversationId);
+
+    console.log(`[WEBHOOK] ✅ Updated conversation ${conversationId} to 'booked' stage`);
+  } catch (error) {
+    console.error("[WEBHOOK] handleBookingQuickReply error:", error.message);
+  }
+}
+
+/**
  * Handle Facebook Postback events (Ice Breakers, Get Started buttons, persistent menu)
  * These happen when a user clicks a button instead of typing a message
  */
@@ -2892,6 +3228,12 @@ async function handlePostbackEvent(pageId, event) {
     console.log(
       `[WEBHOOK] Postback from ${senderId}: "${title}" (payload: ${payload})`,
     );
+
+    // Handle BOOK_MEETING quick reply
+    if (payload === "BOOK_MEETING") {
+      await handleBookingQuickReply(pageId, senderId, timestamp);
+      return;
+    }
 
     // Check for referral data in the postback (ad clicks include this)
     const referral = postback.referral;
