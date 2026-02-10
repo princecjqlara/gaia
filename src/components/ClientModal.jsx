@@ -19,24 +19,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
     adsExpense: 0,
     notes: '',
     tags: '',
-    package: 'basic',
-    customPackage: null,
-    customPrice: 0,
-    customVideos: 0,
-    customMainVideos: 0,
-    customPhotos: 0,
-    customMeetingMins: 0,
-    customCAPI: false,
-    customAdvancedCAPI: false,
-    customDailyAds: false,
-    customUnlimitedSetup: false,
-    customLookalike: false,
-    customPriority: false,
-    customFeatures: '',
-    paymentStatus: 'unpaid',
-    paymentSchedule: 'monthly',
-    monthsWithClient: 0,
-    startDate: '',
     phase: 'booked',
     autoSwitch: false,
     autoSwitchDays: 7,
@@ -143,7 +125,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         adsExpense: client.adsExpense || 0,
         notes: client.notes || '',
         tags: (client.tags || []).join(', '),
-        package: client.package || 'basic',
+
         customPackage: client.customPackage || null,
         customPrice: customPkg.price || 0,
         customVideos: customPkg.videos || 0,
@@ -157,8 +139,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         customLookalike: customPkg.lookalike || false,
         customPriority: customPkg.priority || false,
         customFeatures: customPkg.customFeatures || '',
-        paymentStatus: client.paymentStatus || 'unpaid',
-        paymentSchedule: client.paymentSchedule || 'monthly',
+
         monthsWithClient: client.monthsWithClient || 0,
         startDate: client.startDate || '',
         phase: client.phase || 'booked',
@@ -282,25 +263,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
 
     const tags = formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [];
 
-    // Build custom package if selected
-    let customPackage = null;
-    if (formData.package === 'custom') {
-      customPackage = {
-        price: formData.customPrice || 0,
-        videos: formData.customVideos || 0,
-        mainVideos: formData.customMainVideos || 0,
-        photos: formData.customPhotos || 0,
-        weeklyMeeting: formData.customMeetingMins || 0,
-        capi: formData.customCAPI || false,
-        advancedCapi: formData.customAdvancedCAPI || false,
-        dailyAds: formData.customDailyAds || false,
-        unlimitedSetup: formData.customUnlimitedSetup || false,
-        lookalike: formData.customLookalike || false,
-        priority: formData.customPriority || false,
-        customFeatures: formData.customFeatures || ''
-      };
-    }
-
     try {
       await onSave({
         clientName: formData.clientName,
@@ -312,12 +274,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         notes: formData.notes,
         notesMedia: notesMedia,
         tags,
-        package: formData.package,
-        customPackage,
-        paymentStatus: formData.paymentStatus,
-        paymentSchedule: formData.paymentSchedule,
-        monthsWithClient: formData.monthsWithClient || 0,
-        startDate: formData.startDate,
         phase: formData.phase,
         autoSwitch: formData.autoSwitch || false,
         autoSwitchDays: formData.autoSwitchDays || 7,
@@ -350,12 +306,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
             <div className="tabs">
               <button type="button" className={`tab ${activeTab === 'basic' ? 'active' : ''}`} onClick={() => setActiveTab('basic')}>
                 📝 Basic Info
-              </button>
-              <button type="button" className={`tab ${activeTab === 'package' ? 'active' : ''}`} onClick={() => setActiveTab('package')}>
-                📦 Package
-              </button>
-              <button type="button" className={`tab ${activeTab === 'payment' ? 'active' : ''}`} onClick={() => setActiveTab('payment')}>
-                💳 Payment
               </button>
               <button type="button" className={`tab ${activeTab === 'schedule' ? 'active' : ''}`} onClick={() => setActiveTab('schedule')}>
                 Schedule
@@ -588,277 +538,9 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
               </div>
             )}
 
-            {activeTab === 'package' && (() => {
-              const packages = getPackages();
-              return (
-                <div className={`tab-content ${activeTab === 'package' ? 'active' : ''}`}>
-                  <div className="form-group">
-                    <label className="form-label">Select Package *</label>
-                    <div className="package-selector">
-                      {['basic', 'star', 'fire', 'crown', 'custom'].map(pkg => {
-                        const pkgInfo = packages[pkg];
-                        const displayPrice = pkg === 'custom' ? 'Custom' : formatPrice(pkgInfo.price || 0);
-                        return (
-                          <label
-                            key={pkg}
-                            className={`package-option ${formData.package === pkg ? 'selected' : ''}`}
-                            onClick={() => setFormData({ ...formData, package: pkg })}
-                          >
-                            <input
-                              type="radio"
-                              name="package"
-                              value={pkg}
-                              checked={formData.package === pkg}
-                              onChange={() => setFormData({ ...formData, package: pkg })}
-                            />
-                            <div className="package-emoji">{pkgInfo.emoji || '📦'}</div>
-                            <div className="package-price">{displayPrice}</div>
-                            <div className="package-name">{pkgInfo.name || pkg}</div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
 
-                  {formData.package === 'custom' && (
-                    <div className="custom-package-fields" style={{ marginTop: 'var(--space-lg)' }}>
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label className="form-label">Custom Price (₱)</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={formData.customPrice || ''}
-                            onChange={(e) => setFormData({ ...formData, customPrice: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">15-sec Videos</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={formData.customVideos || ''}
-                            onChange={(e) => setFormData({ ...formData, customVideos: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                            min="0"
-                          />
-                        </div>
-                      </div>
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label className="form-label">Main Videos</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={formData.customMainVideos || ''}
-                            onChange={(e) => setFormData({ ...formData, customMainVideos: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                            min="0"
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Photos</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={formData.customPhotos || ''}
-                            onChange={(e) => setFormData({ ...formData, customPhotos: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                            min="0"
-                          />
-                        </div>
-                      </div>
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label className="form-label">Weekly 1-on-1 (mins)</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={formData.customMeetingMins || ''}
-                            onChange={(e) => setFormData({ ...formData, customMeetingMins: parseInt(e.target.value) || 0 })}
-                            placeholder="0"
-                            min="0"
-                          />
-                        </div>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={formData.customCAPI || false}
-                            onChange={(e) => setFormData({ ...formData, customCAPI: e.target.checked })}
-                          /> CAPI
-                        </label>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={formData.customAdvancedCAPI || false}
-                            onChange={(e) => setFormData({ ...formData, customAdvancedCAPI: e.target.checked })}
-                          /> Advanced CAPI
-                        </label>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={formData.customDailyAds || false}
-                            onChange={(e) => setFormData({ ...formData, customDailyAds: e.target.checked })}
-                          /> Daily Ads Monitoring
-                        </label>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={formData.customUnlimitedSetup || false}
-                            onChange={(e) => setFormData({ ...formData, customUnlimitedSetup: e.target.checked })}
-                          /> Unlimited Ad Setup
-                        </label>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={formData.customLookalike || false}
-                            onChange={(e) => setFormData({ ...formData, customLookalike: e.target.checked })}
-                          /> Lookalike Audiences
-                        </label>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={formData.customPriority || false}
-                            onChange={(e) => setFormData({ ...formData, customPriority: e.target.checked })}
-                          /> Priority Handling
-                        </label>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Custom Features</label>
-                        <textarea
-                          className="form-textarea"
-                          value={formData.customFeatures || ''}
-                          onChange={(e) => setFormData({ ...formData, customFeatures: e.target.value })}
-                          placeholder="List any additional custom features..."
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
 
-            {activeTab === 'payment' && (
-              <div className={`tab-content ${activeTab === 'payment' ? 'active' : ''}`}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Payment Status</label>
-                    <select
-                      className="form-select"
-                      value={formData.paymentStatus}
-                      onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value })}
-                    >
-                      <option value="unpaid">Unpaid</option>
-                      <option value="paid">Paid</option>
-                      <option value="partial">Partial Payment</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Payment Schedule</label>
-                    <select
-                      className="form-select"
-                      value={formData.paymentSchedule}
-                      onChange={(e) => setFormData({ ...formData, paymentSchedule: e.target.value })}
-                    >
-                      <option value="monthly">Monthly</option>
-                      <option value="biweekly">Bi-Weekly</option>
-                      <option value="onetime">One-Time</option>
-                    </select>
-                  </div>
-                </div>
-                {/* Ads expense moved to admin settings */}
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Months with Client</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={formData.monthsWithClient}
-                      onChange={(e) => setFormData({ ...formData, monthsWithClient: parseInt(e.target.value) || 0 })}
-                      min="0"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Start Date</label>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="form-group" style={{ marginTop: 'var(--space-lg)' }}>
-                  <label className="form-label" style={{ fontSize: '1rem', fontWeight: '600', marginBottom: 'var(--space-md)' }}>
-                    Subscription Usage (Items Used)
-                  </label>
-                  <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: 'var(--space-md)', display: 'block' }}>
-                    Track how many items the client has already used from their subscription
-                  </small>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">15-sec Videos Used</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.videosUsed}
-                        onChange={(e) => setFormData({ ...formData, videosUsed: parseInt(e.target.value) || 0 })}
-                        min="0"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Main Videos Used</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.mainVideosUsed}
-                        onChange={(e) => setFormData({ ...formData, mainVideosUsed: parseInt(e.target.value) || 0 })}
-                        min="0"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Photos Used</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.photosUsed}
-                        onChange={(e) => setFormData({ ...formData, photosUsed: parseInt(e.target.value) || 0 })}
-                        min="0"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Meeting Minutes Used</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.meetingMinutesUsed}
-                        onChange={(e) => setFormData({ ...formData, meetingMinutesUsed: parseInt(e.target.value) || 0 })}
-                        min="0"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+
 
             {activeTab === 'schedule' && (
               <div className={`tab-content ${activeTab === 'schedule' ? 'active' : ''}`}>

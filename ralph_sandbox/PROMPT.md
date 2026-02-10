@@ -1,0 +1,1 @@
+your goal is sto test and make all features workiing in both front and back end als check for logic, system, architecture, framewroks, linting and build erros and fix them

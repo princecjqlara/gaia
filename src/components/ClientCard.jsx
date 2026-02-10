@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getPackageInfo, formatPrice } from '../utils/clients';
 
 // Helper to get payment date indicator
 const getPaymentDateIndicator = (client) => {
@@ -31,81 +30,13 @@ const isNewClient = (client) => {
   return diffDays <= 3;
 };
 
-// Check if client has been in current stage too long
-const getStageWarning = (client, warningSettings) => {
-  if (!client.phase) return null;
 
-  // Use stageEnteredAt if available, otherwise fall back to createdAt or updated_at
-  const stageDate = client.stageEnteredAt || client.phaseChangedAt || client.createdAt || client.created_at;
-  if (!stageDate) return null;
 
-  const stageWarningDays = warningSettings?.stage_warning_days || {};
-  const thresholdDays = stageWarningDays[client.phase];
+const ClientCard = ({ client, onView, onEdit, onEvaluate, onManageQuestions }) => {
 
-  if (!thresholdDays || thresholdDays <= 0) return null;
-
-  const enteredAt = new Date(stageDate);
-  const now = new Date();
-  const daysInStage = Math.floor((now - enteredAt) / (1000 * 60 * 60 * 24));
-
-  if (daysInStage >= thresholdDays) {
-    const overdueDays = daysInStage - thresholdDays;
-    return {
-      daysInStage,
-      thresholdDays,
-      overdueDays,
-      color: warningSettings?.warning_color || '#f59e0b',
-      dangerColor: warningSettings?.danger_color || '#ef4444',
-      isDanger: overdueDays > thresholdDays // Double the threshold = danger
-    };
-  }
-
-  return null;
-};
-
-const ClientCard = ({ client, onView, onEdit }) => {
-  const [warningSettings, setWarningSettings] = useState({
-    stage_warning_days: {
-      'booked': 3,
-      'follow-up': 2,
-      'preparing': 7,
-      'testing': 30,
-      'running': 0
-    },
-    warning_color: '#f59e0b',
-    danger_color: '#ef4444'
-  });
-
-  // Load warning settings from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('warning_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setWarningSettings(prev => ({
-          ...prev,
-          ...parsed,
-          stage_warning_days: {
-            ...prev.stage_warning_days,
-            ...(parsed.stage_warning_days || {})
-          }
-        }));
-      }
-    } catch (e) {
-      console.log('Could not load warning settings');
-    }
-  }, []);
-
-  const pkg = getPackageInfo(client);
   const priority = client.priority || 1;
   const paymentIndicator = getPaymentDateIndicator(client);
   const isNew = isNewClient(client);
-  const stageWarning = getStageWarning(client, warningSettings);
-
-  const paymentClass = client.paymentStatus === 'paid' ? 'payment-paid' :
-    client.paymentStatus === 'partial' ? 'payment-partial' : 'payment-unpaid';
-  const paymentIcon = client.paymentStatus === 'paid' ? '✅' :
-    client.paymentStatus === 'partial' ? '⚠️' : '❌';
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', client.id);
@@ -127,28 +58,14 @@ const ClientCard = ({ client, onView, onEdit }) => {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       style={{
-        cursor: 'grab',
-        borderLeft: stageWarning ? `4px solid ${stageWarning.isDanger ? stageWarning.dangerColor : stageWarning.color}` : undefined,
-        background: stageWarning ? `${stageWarning.isDanger ? stageWarning.dangerColor : stageWarning.color}10` : undefined
+        cursor: 'grab'
       }}
-      title={stageWarning ? `${stageWarning.daysInStage} days in this stage (threshold: ${stageWarning.thresholdDays} days)` : "Drag to move between phases"}
+      title="Drag to move between phases"
     >
       <div className="client-priority">{priority}</div>
 
       {/* Badges row */}
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-        {stageWarning && (
-          <span style={{
-            fontSize: '0.6rem',
-            padding: '0.1rem 0.4rem',
-            borderRadius: '4px',
-            background: stageWarning.isDanger ? `${stageWarning.dangerColor}20` : `${stageWarning.color}20`,
-            color: stageWarning.isDanger ? stageWarning.dangerColor : stageWarning.color,
-            fontWeight: '600'
-          }}>
-            ⏰ {stageWarning.daysInStage}d IN STAGE
-          </span>
-        )}
         {isNew && (
           <span style={{
             fontSize: '0.6rem',
@@ -160,19 +77,7 @@ const ClientCard = ({ client, onView, onEdit }) => {
           }}>
             ✨ NEW
           </span>
-        )}
-        {paymentIndicator && (
-          <span style={{
-            fontSize: '0.6rem',
-            padding: '0.1rem 0.4rem',
-            borderRadius: '4px',
-            background: paymentIndicator.bg,
-            color: paymentIndicator.color,
-            fontWeight: '600'
-          }}>
-            {paymentIndicator.text}
-          </span>
-        )}
+         )}
       </div>
 
       <div className="client-header">
@@ -180,16 +85,8 @@ const ClientCard = ({ client, onView, onEdit }) => {
           <div className="client-name">{client.clientName}</div>
           <div className="client-business">{client.businessName}</div>
         </div>
-        <span className={`client-package package-${client.package}`}>
-          {pkg.emoji} {formatPrice(pkg.price)}
-        </span>
       </div>
       <div className="client-meta">
-        <span className={paymentClass}>{paymentIcon} {client.paymentStatus}</span>
-        <span>📅 {client.paymentSchedule}</span>
-        {client.monthsWithClient > 0 && (
-          <span>⏱️ {client.monthsWithClient}mo</span>
-        )}
         {(client.assignedUser || client.assignedTo) && (
           <span>👤 {client.assignedUser?.name || client.assignedUser?.email || client.assignedTo}</span>
         )}
@@ -232,6 +129,28 @@ const ClientCard = ({ client, onView, onEdit }) => {
         >
           ✏️ Edit
         </button>
+        {client.phase !== 'evaluated' && onEvaluate && (
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={onEvaluate}
+            draggable="false"
+            onDragStart={(e) => e.preventDefault()}
+            title="Start AI Evaluation"
+          >
+            🤖 Evaluate
+          </button>
+        )}
+        {onManageQuestions && (
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={onManageQuestions}
+            draggable="false"
+            onDragStart={(e) => e.preventDefault()}
+            title="Manage Evaluation Questions"
+          >
+            📝 Questions
+          </button>
+        )}
       </div>
     </div>
   );

@@ -740,6 +740,85 @@ class FacebookService {
     }
 
     /**
+     * Send a message with quick replies
+     * @param {string} pageId - Facebook Page ID
+     * @param {string} recipientId - Recipient PSID
+     * @param {string} messageText - The message text
+     * @param {Array} quickReplies - Array of quick reply objects with content_type, title, payload
+     * @param {string} conversationId - Optional conversation ID for tracking
+     */
+    async sendMessageWithQuickReplies(pageId, recipientId, messageText, quickReplies = [], conversationId = null) {
+        try {
+            const pages = await this.getConnectedPages();
+            const page = pages.find(p => p.page_id === pageId);
+            if (!page) throw new Error('Page not found');
+
+            const { data: conv } = await getSupabase()
+                .from('facebook_conversations')
+                .select('conversation_id, last_message_time')
+                .eq('participant_id', recipientId)
+                .eq('page_id', pageId)
+                .single();
+
+            let useMessageTag = false;
+            if (conv?.last_message_time) {
+                const hoursSinceLastActivity = (Date.now() - new Date(conv.last_message_time).getTime()) / (1000 * 60 * 60);
+                useMessageTag = hoursSinceLastActivity > 24;
+            }
+
+            const requestBody = {
+                recipient: { id: recipientId },
+                message: {
+                    text: messageText,
+                    quick_replies: quickReplies
+                }
+            };
+
+            if (useMessageTag) {
+                requestBody.messaging_type = 'MESSAGE_TAG';
+                requestBody.tag = 'ACCOUNT_UPDATE';
+            }
+
+            const response = await fetch(
+                `${GRAPH_API_BASE}/${pageId}/messages?access_token=${page.page_access_token}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                }
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Failed to send message with quick replies');
+            }
+
+            const result = await response.json();
+
+            if (result.message_id) {
+                const targetConvId = conv?.conversation_id || conversationId || `t_${recipientId}`;
+                await getSupabase()
+                    .from('facebook_messages')
+                    .upsert({
+                        message_id: result.message_id,
+                        conversation_id: targetConvId,
+                        sender_id: pageId,
+                        message_text: messageText,
+                        is_from_page: true,
+                        sent_source: 'app',
+                        timestamp: new Date().toISOString(),
+                        is_read: true
+                    }, { onConflict: 'message_id' });
+            }
+
+            return result;
+        } catch (error) {
+            console.error('Error sending message with quick replies:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Send a message via Facebook Graph API
      * Automatically uses ACCOUNT_UPDATE tag when outside 24-hour messaging window
      */

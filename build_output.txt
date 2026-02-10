@@ -1,0 +1,33 @@
+
+> gaia@1.0.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 138 modules transformed.
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) C:/Users/Cj Lara/Downloads/Gaia/node_modules/@supabase/supabase-js/dist/index.mjs is dynamically imported by C:/Users/Cj Lara/Downloads/Gaia/src/components/AdminSettingsModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/AdminSettingsModal.jsx but also statically imported by C:/Users/Cj Lara/Downloads/Gaia/src/services/supabase.js, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) C:/Users/Cj Lara/Downloads/Gaia/src/services/supabase.js is dynamically imported by C:/Users/Cj Lara/Downloads/Gaia/src/components/AdminSettingsModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/AdminSettingsModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/CalendarView.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/CalendarView.jsx but also statically imported by C:/Users/Cj Lara/Downloads/Gaia/src/components/AIAssistantWidget.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/AIChatbotSettings.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/AIControlPanel.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/AttendanceDashboard.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/BestTimesOverview.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/CalendarView.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/ClientModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/CommunicationLog.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/ContactsWithPhonePanel.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/EmployeeSalaryManagement.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/MeetingRoom.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/NotificationsPanel.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/PropertyManagement.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/PropertyPreview.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/PublicPropertiesContainer.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/SalaryTrackingModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/TagManagementModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/TagSelector.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/TeamOnlinePanel.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/TeamPerformanceModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useClockInOut.js, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useNotifications.js, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useOrganization.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/usePhases.js, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useScheduledMessageProcessor.js, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useSupabase.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/autoAssignService.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/facebookService.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/followUpScheduler.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/goalController.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/leadService.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/notificationService.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/organizationService.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/safetyLayer.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/teamBrandingService.js, C:/Users/Cj Lara/Downloads/Gaia/src/services/teamService.js, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) C:/Users/Cj Lara/Downloads/Gaia/src/services/facebookService.js is dynamically imported by C:/Users/Cj Lara/Downloads/Gaia/src/App.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/App.jsx but also statically imported by C:/Users/Cj Lara/Downloads/Gaia/src/components/AdminSettingsModal.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/components/MessengerInbox.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useFacebookMessenger.js, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) C:/Users/Cj Lara/Downloads/Gaia/src/services/aiService.js is dynamically imported by C:/Users/Cj Lara/Downloads/Gaia/src/services/aiConversationAnalyzer.js but also statically imported by C:/Users/Cj Lara/Downloads/Gaia/src/components/MeetingRoom.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/services/aiConversationAnalyzer.js, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) C:/Users/Cj Lara/Downloads/Gaia/src/services/aiConversationAnalyzer.js is dynamically imported by C:/Users/Cj Lara/Downloads/Gaia/src/services/facebookService.js but also statically imported by C:/Users/Cj Lara/Downloads/Gaia/src/components/MessengerInbox.jsx, C:/Users/Cj Lara/Downloads/Gaia/src/hooks/useFacebookMessenger.js, dynamic import will not move module into another chunk.
+[39m
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  0.88 kB[22m[1m[22m[2m │ gzip:   0.49 kB[22m
+[2mdist/[22m[35massets/index-N7oz6tYA.css  [39m[1m[2m 24.57 kB[22m[1m[22m[2m │ gzip:   5.26 kB[22m
+[2mdist/[22m[36massets/index-C9tB5RVV.js   [39m[1m[33m937.80 kB[39m[22m[2m │ gzip: 232.90 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 2.04s[39m

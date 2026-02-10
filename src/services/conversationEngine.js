@@ -81,7 +81,7 @@ export async function generateResponse(conversationId, options = {}) {
         const activeGoal = await getActiveGoal(conversationId);
 
         // Build the system prompt
-        let systemPrompt = buildSystemPrompt(conversation, activeGoal, ragContext);
+        let systemPrompt = await buildSystemPrompt(conversation, activeGoal, ragContext);
 
         // Apply goal shaping
         if (activeGoal) {
@@ -171,18 +171,38 @@ export async function generateResponse(conversationId, options = {}) {
 }
 
 /**
- * Build the system prompt for the AI
+ * Get admin config from database or localStorage
  */
-function buildSystemPrompt(conversation, activeGoal, ragContext) {
-    // Get admin-configured settings from localStorage (client-side) or fallback
-    let adminConfig = {};
+async function getAdminConfig() {
     try {
         if (typeof window !== 'undefined' && window.localStorage) {
-            adminConfig = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+            const localConfig = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+            if (Object.keys(localConfig).length > 0) {
+                return localConfig;
+            }
+        }
+
+        const db = getSupabase();
+        const { data, error } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'ai_chatbot_config')
+            .single();
+
+        if (!error && data?.value) {
+            return data.value;
         }
     } catch (e) {
         console.warn('[ENGINE] Could not read admin config:', e);
     }
+    return {};
+}
+
+/**
+ * Build the system prompt for the AI
+ */
+async function buildSystemPrompt(conversation, activeGoal, ragContext) {
+    const adminConfig = await getAdminConfig();
 
     // Use admin-configured system prompt or default
     const defaultPrompt = `You are a friendly and professional AI sales assistant. 
@@ -200,6 +220,10 @@ ${prompt}
 - Platform: Facebook Messenger
 - Page: ${conversation.page?.page_name || 'Business Page'}
 - Contact Name: ${conversation.participant_name || 'Unknown'}
+
+## Booking Priority:
+If the customer is not yet booked or converted, always suggest booking a meeting.
+
 `;
 
     // Add admin-configured knowledge base
@@ -281,11 +305,29 @@ ${adminConfig.custom_goals}
 `;
     }
 
-    // Add booking info
+    // Add booking info - make it prominent as it's a key requirement
     if (adminConfig.booking_url) {
         prompt += `
-## Booking:
-When ready to book a meeting, share this link: ${adminConfig.booking_url}
+## IMPORTANT - Booking Requirement:
+You MUST always encourage customers to book a consultation, especially if they are:
+- New contacts (not yet evaluated)
+- Currently in evaluation stage
+- Showing interest but haven't booked yet
+
+A booking button will automatically appear with your message. Just guide them to click it.
+When they click the button, they will be able to book at: ${adminConfig.booking_url}
+
+Booking URL: ${adminConfig.booking_url}
+`;
+    }
+
+    // Add pipeline stage context
+    if (conversation.pipeline_stage) {
+        prompt += `
+## Customer Pipeline Stage: ${conversation.pipeline_stage}
+${conversation.pipeline_stage === 'booked' || conversation.pipeline_stage === 'converted' 
+    ? 'Customer has already booked/converted. Focus on providing excellent service.'
+    : 'Customer has NOT booked yet - prioritize booking a meeting!'}
 `;
     }
 
@@ -623,10 +665,10 @@ export async function sendAIMessage(conversationId, pageId, options = {}) {
             throw new Error('Page access token not found');
         }
 
-        // Get conversation for participant ID
+        // Get conversation for participant ID and pipeline stage
         const { data: conv } = await db
             .from('facebook_conversations')
-            .select('participant_id')
+            .select('participant_id, pipeline_stage')
             .eq('conversation_id', conversationId)
             .single();
 
@@ -634,41 +676,77 @@ export async function sendAIMessage(conversationId, pageId, options = {}) {
             throw new Error('Participant ID not found');
         }
 
-        const sentMessages = [];
-
-        // Send each message with delays for split messages
-        for (let i = 0; i < result.messages.length; i++) {
-            const message = result.messages[i];
-
-            // Add delay between split messages for natural pacing
-            if (i > 0 && result.wasSplit) {
-                await new Promise(resolve => setTimeout(resolve, 1200)); // 1.2 second delay
-            }
-
-            // Send via Facebook API
-            const sendResult = await sendFacebookMessage(
-                pageId,
-                conv.participant_id,
-                message,
-                page.page_access_token
-            );
-
-            if (sendResult.success) {
-                sentMessages.push({
-                    text: message,
-                    messageId: sendResult.messageId
-                });
-            }
-        }
-
-        // Set cooldown after sending
+        // Get booking URL from config
         const { data: settings } = await db
             .from('settings')
             .select('value')
             .eq('key', 'ai_chatbot_config')
             .single();
 
-        const cooldownHours = settings?.value?.default_cooldown_hours || 4;
+        const config = settings?.value || {};
+        const bookingUrl = config.booking_url;
+
+        // Determine if we should add booking quick reply
+        const shouldAddBookingButton = bookingUrl && 
+            conv.pipeline_stage !== 'booked' && 
+            conv.pipeline_stage !== 'converted';
+
+        const sentMessages = [];
+
+        // Send each message with delays for split messages
+        for (let i = 0; i < result.messages.length; i++) {
+            const message = result.messages[i];
+            const isLastMessage = i === result.messages.length - 1;
+
+            // Add delay between split messages for natural pacing
+            if (i > 0 && result.wasSplit) {
+                await new Promise(resolve => setTimeout(resolve, 1200)); // 1.2 second delay
+            }
+
+            // Send via Facebook API with quick replies on last message (if applicable)
+            if (isLastMessage && shouldAddBookingButton) {
+                const quickReplies = [
+                    {
+                        content_type: 'text',
+                        title: '📅 Book a Meeting',
+                        payload: 'BOOK_MEETING'
+                    }
+                ];
+
+                const sendResult = await sendFacebookMessageWithQuickReplies(
+                    pageId,
+                    conv.participant_id,
+                    message,
+                    quickReplies,
+                    page.page_access_token
+                );
+
+                if (sendResult.success) {
+                    sentMessages.push({
+                        text: message,
+                        messageId: sendResult.messageId,
+                        hasBookingButton: true
+                    });
+                }
+            } else {
+                const sendResult = await sendFacebookMessage(
+                    pageId,
+                    conv.participant_id,
+                    message,
+                    page.page_access_token
+                );
+
+                if (sendResult.success) {
+                    sentMessages.push({
+                        text: message,
+                        messageId: sendResult.messageId
+                    });
+                }
+            }
+        }
+
+        // Set cooldown after sending
+        const cooldownHours = config.default_cooldown_hours || 4;
         await setCooldown(conversationId, cooldownHours);
 
         // Log sent messages
@@ -679,9 +757,10 @@ export async function sendAIMessage(conversationId, pageId, options = {}) {
             data: {
                 messageCount: sentMessages.length,
                 wasSplit: result.wasSplit,
-                confidence: result.confidence
+                confidence: result.confidence,
+                hadBookingButton: shouldAddBookingButton
             },
-            explanation: `Sent ${sentMessages.length} AI message(s)`,
+            explanation: `Sent ${sentMessages.length} AI message(s)${shouldAddBookingButton ? ' with booking button' : ''}`,
             confidence: result.confidence
         });
 
@@ -694,6 +773,42 @@ export async function sendAIMessage(conversationId, pageId, options = {}) {
 
     } catch (error) {
         console.error('[ENGINE] Error sending AI message:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Send a message via Facebook Messenger API with quick replies
+ */
+async function sendFacebookMessageWithQuickReplies(pageId, recipientId, text, quickReplies, accessToken) {
+    try {
+        const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
+
+        const response = await fetch(
+            `${GRAPH_API_BASE}/${pageId}/messages?access_token=${accessToken}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    recipient: { id: recipientId },
+                    message: {
+                        text,
+                        quick_replies: quickReplies
+                    },
+                    messaging_type: 'RESPONSE'
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || 'Failed to send message with quick replies');
+        }
+
+        const result = await response.json();
+        return { success: true, messageId: result.message_id };
+    } catch (error) {
+        console.error('[ENGINE] Facebook send with quick replies error:', error);
         return { success: false, error: error.message };
     }
 }

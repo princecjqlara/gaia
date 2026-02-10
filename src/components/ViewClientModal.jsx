@@ -1,7 +1,7 @@
 import React from 'react';
 import { getPackageInfo, formatPrice } from '../utils/clients';
 
-const ViewClientModal = ({ client, onClose, onEdit, onViewCommunication }) => {
+const ViewClientModal = ({ client, onClose, onEdit, onViewCommunication, onEvaluate, onManageQuestions }) => {
   if (!client) return null;
 
   const pkg = getPackageInfo(client);
@@ -33,6 +33,18 @@ const ViewClientModal = ({ client, onClose, onEdit, onViewCommunication }) => {
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Payment Status</div>
               <div style={{ fontWeight: '500', textTransform: 'capitalize' }}>{client.paymentStatus}</div>
             </div>
+            {client.evaluationScore !== undefined && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Evaluation Score</div>
+                <div style={{
+                  fontWeight: '600',
+                  color: client.evaluationScore >= 70 ? '#22c55e' : client.evaluationScore >= 40 ? '#f59e0b' : '#ef4444',
+                  fontSize: '1.125rem'
+                }}>
+                  {client.evaluationScore}%
+                </div>
+              </div>
+            )}
             {(client.assignedUser || client.assignedTo) && (
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Assigned To</div>
@@ -185,8 +197,8 @@ const ViewClientModal = ({ client, onClose, onEdit, onViewCommunication }) => {
             </div>
           )}
         </div>
-        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <div>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
             {onViewCommunication && (
               <button
                 type="button"
@@ -195,14 +207,35 @@ const ViewClientModal = ({ client, onClose, onEdit, onViewCommunication }) => {
                   onClose();
                   onViewCommunication();
                 }}
-                style={{ marginRight: '0.5rem' }}
               >
                 💬 Communication Log
               </button>
             )}
+            {onManageQuestions && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  onManageQuestions();
+                }}
+              >
+                📝 Questions
+              </button>
+            )}
           </div>
-          <div>
-            <button type="button" className="btn btn-secondary" onClick={onClose} style={{ marginRight: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {client.phase !== 'evaluated' && onEvaluate && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  onEvaluate();
+                }}
+              >
+                🤖 AI Evaluate
+              </button>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
               Close
             </button>
             <button type="button" className="btn btn-primary" onClick={onEdit}>

@@ -1,0 +1,41 @@
+# Ralphy Configuration
+# https://github.com/michaelshimeles/ralphy
+
+# Project info
+project:
+  name: "gaia"
+  language: "JavaScript"
+  framework: "React"
+  description: "Gaia - Real Estate CRM with AI features"
+
+# AI Provider Configuration
+# User requested NVIDIA API with "gpt oss 120b" (mapping to nemotron-4-340b or similar)
+model:
+  provider: "openai" # Ralphy likely uses OpenAI client compatibility
+  base_url: "https://integrate.api.nvidia.com/v1"
+  name: "meta/llama-3.1-70b-instruct"
+  # Users must set RALPHY_API_KEY environment variable with their Nvidia Key
+
+# Commands
+commands:
+  test: ""
+  lint: ""
+  build: "npm run build"
+
+# Rules - instructions the AI MUST follow
+rules:
+  - "This is a React/Vite project using Supabase for the backend."
+  - "Components are located in src/components."
+  - "Services are located in src/services."
+  - "Hooks are located in src/hooks."
+  - "Use src/services/supabase.js for database operations."
+  - "Do not break existing functionality; verify changes manually where possible."
+  - "Follow the Ralph-style iterative development process: fix one thing, verify, then move on."
+
+# Boundaries - files/folders the AI should not modify
+boundaries:
+  never_touch:
+    - "node_modules/**"
+    - "dist/**"
+    - "*.lock"
+    - "package-lock.json"

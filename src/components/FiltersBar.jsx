@@ -5,10 +5,6 @@ const FiltersBar = ({
   onSearchChange,
   filterPhase,
   onPhaseFilterChange,
-  filterPackage,
-  onPackageFilterChange,
-  filterPayment,
-  onPaymentFilterChange,
   filterAssignedTo,
   onAssignedToFilterChange,
   users = [],
@@ -60,30 +56,7 @@ const FiltersBar = ({
         <option value="testing">🧪 Testing</option>
         <option value="running">🚀 Running</option>
       </select>
-      <select
-        className="form-select filter-select"
-        id="filterPackage"
-        value={filterPackage}
-        onChange={(e) => onPackageFilterChange(e.target.value)}
-      >
-        <option value="">All Packages</option>
-        <option value="basic">🟢 ₱1,799</option>
-        <option value="star">⭐ ₱2,999</option>
-        <option value="fire">🔥 ₱3,499</option>
-        <option value="crown">👑 ₱5,799</option>
-        <option value="custom">🎨 Custom</option>
-      </select>
-      <select
-        className="form-select filter-select"
-        id="filterPayment"
-        value={filterPayment}
-        onChange={(e) => onPaymentFilterChange(e.target.value)}
-      >
-        <option value="">All Payment Status</option>
-        <option value="paid">Paid</option>
-        <option value="unpaid">Unpaid</option>
-        <option value="partial">Partial</option>
-      </select>
+
       {onAssignedToFilterChange && (
         <select
           className="form-select filter-select"

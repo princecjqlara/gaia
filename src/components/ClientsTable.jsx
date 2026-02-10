@@ -1,91 +1,35 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { getPackageInfo, formatPrice } from '../utils/clients';
+
 
 const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClient }) => {
-  // Response deadline from settings (default 24 hours)
-  const [responseDeadlineHours, setResponseDeadlineHours] = useState(24);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('warning_settings');
-      if (saved) {
-        const settings = JSON.parse(saved);
-        if (settings.response_deadline_hours) {
-          setResponseDeadlineHours(settings.response_deadline_hours);
-        }
-      }
-    } catch (e) {
-      console.log('Could not load warning settings:', e);
-    }
-  }, []);
-
-  // Calculate deadline countdown for a client
-  const getDeadlineInfo = (client) => {
+  // Calculate simple last activity indicator for a client
+  const getLastActivityInfo = (client) => {
     const lastActivityDate = client.lastActivity ? new Date(client.lastActivity) :
       client.created_at ? new Date(client.created_at) : null;
 
     if (!lastActivityDate) {
-      return { text: '—', color: 'var(--text-muted)', priority: 0 };
+      return { text: '—', color: 'var(--text-muted)' };
     }
 
     const now = new Date();
-    const deadlineMs = responseDeadlineHours * 60 * 60 * 1000;
-    const deadline = new Date(lastActivityDate.getTime() + deadlineMs);
-    const timeLeftMs = deadline - now;
+    const hoursSinceActivity = (now - lastActivityDate) / (1000 * 60 * 60);
 
-    // Already overdue
-    if (timeLeftMs <= 0) {
-      const overdueHours = Math.abs(timeLeftMs / (1000 * 60 * 60));
-      if (overdueHours > 24) {
-        return {
-          text: `${Math.floor(overdueHours / 24)}d overdue`,
-          color: 'var(--error)',
-          priority: 3
-        };
-      }
+    if (hoursSinceActivity < 24) {
       return {
-        text: `${Math.floor(overdueHours)}h overdue`,
-        color: 'var(--error)',
-        priority: 3
+        text: `${Math.floor(hoursSinceActivity)}h ago`,
+        color: 'var(--success)'
+      };
+    } else if (hoursSinceActivity < 168) { // 7 days
+      return {
+        text: `${Math.floor(hoursSinceActivity / 24)}d ago`,
+        color: 'var(--text-muted)'
+      };
+    } else {
+      return {
+        text: `${Math.floor(hoursSinceActivity / 24)}d ago`,
+        color: 'var(--text-secondary)'
       };
     }
-
-    const hoursLeft = timeLeftMs / (1000 * 60 * 60);
-    const percentLeft = hoursLeft / responseDeadlineHours;
-
-    // Less than 10% time left - red
-    if (percentLeft < 0.1) {
-      const minsLeft = Math.floor(timeLeftMs / (1000 * 60));
-      return {
-        text: minsLeft < 60 ? `${minsLeft}m left` : `${Math.floor(hoursLeft)}h left`,
-        color: 'var(--error)',
-        priority: 2
-      };
-    }
-
-    // Less than 50% time left - yellow
-    if (percentLeft < 0.5) {
-      return {
-        text: `${Math.floor(hoursLeft)}h left`,
-        color: 'var(--warning)',
-        priority: 1
-      };
-    }
-
-    // Plenty of time - green
-    if (hoursLeft > 24) {
-      return {
-        text: `${Math.floor(hoursLeft / 24)}d ${Math.floor(hoursLeft % 24)}h`,
-        color: 'var(--success)',
-        priority: 0
-      };
-    }
-
-    return {
-      text: `${Math.floor(hoursLeft)}h left`,
-      color: 'var(--success)',
-      priority: 0
-    };
   };
 
   // Apply filters
@@ -130,20 +74,15 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
       }
     }
 
-    // Sort by deadline urgency first, then priority, then name
+    // Sort by priority, then name
     filtered.sort((a, b) => {
-      const aDeadline = getDeadlineInfo(a);
-      const bDeadline = getDeadlineInfo(b);
-      if (aDeadline.priority !== bDeadline.priority) {
-        return bDeadline.priority - aDeadline.priority;
-      }
       const priorityDiff = (a.priority || 999) - (b.priority || 999);
       if (priorityDiff !== 0) return priorityDiff;
       return (a.clientName || '').localeCompare(b.clientName || '');
     });
 
     return filtered;
-  }, [clients, filters, responseDeadlineHours]);
+  }, [clients, filters]);
 
   const getPhaseConfig = (phase) => {
     const configs = {
@@ -156,14 +95,7 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
     return configs[phase] || { emoji: '❓', title: phase, color: 'var(--text-muted)' };
   };
 
-  const getPaymentIcon = (status) => {
-    const icons = {
-      'paid': '✅',
-      'partial': '⚠️',
-      'unpaid': '❌'
-    };
-    return icons[status] || '❓';
-  };
+
 
   const handlePhaseChange = (clientId, newPhase) => {
     if (onMoveClient) {
@@ -180,27 +112,23 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
               <th style={{ width: '40px' }}>Priority</th>
               <th>Client Name</th>
               <th>Business</th>
-              <th>Package</th>
-              <th>Phase</th>
-              <th style={{ width: '100px' }}>⏰ Deadline</th>
-              <th>Payment Status</th>
-              <th>Assigned To</th>
-              <th style={{ width: '100px' }}>Actions</th>
+               <th>Phase</th>
+               <th style={{ width: '100px' }}>⏰ Last Activity</th>
+               <th>Assigned To</th>
+               <th style={{ width: '100px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredClients.length === 0 ? (
               <tr>
-                <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                 <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   No clients found matching your filters
                 </td>
               </tr>
             ) : (
-              filteredClients.map(client => {
-                const pkg = getPackageInfo(client);
+               filteredClients.map(client => {
                 const phaseConfig = getPhaseConfig(client.phase);
-                const paymentIcon = getPaymentIcon(client.paymentStatus);
-                const deadlineInfo = getDeadlineInfo(client);
+                const lastActivityInfo = getLastActivityInfo(client);
 
                 return (
                   <tr key={client.id} className="client-table-row">
@@ -222,18 +150,7 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
                       <div style={{ fontWeight: '500' }}>{client.clientName || '—'}</div>
                     </td>
                     <td>{client.businessName || '—'}</td>
-                    <td>
-                      <span className={`package-badge package-${client.package}`} style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.875rem'
-                      }}>
-                        {pkg.emoji} {formatPrice(pkg.price)}
-                      </span>
-                    </td>
+
                     <td>
                       <select
                         className="form-select"
@@ -263,26 +180,18 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
                       </select>
                     </td>
                     <td>
-                      <span style={{
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        color: deadlineInfo.color,
-                        background: `${deadlineInfo.color}20`
-                      }}>
-                        {deadlineInfo.text}
-                      </span>
+                       <span style={{
+                         padding: '0.25rem 0.5rem',
+                         borderRadius: '4px',
+                         fontSize: '0.75rem',
+                         fontWeight: '600',
+                         color: lastActivityInfo.color,
+                         background: `${lastActivityInfo.color}20`
+                       }}>
+                         {lastActivityInfo.text}
+                       </span>
                     </td>
-                    <td>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem'
-                      }}>
-                        {paymentIcon} {client.paymentStatus || 'unpaid'}
-                      </span>
-                    </td>
+
                     <td>{client.assignedUser?.name || client.assignedUser?.email || client.assignedTo || '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>

@@ -20,13 +20,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
       });
     }
 
-    if (filters.filterPackage) {
-      filtered = filtered.filter(c => c.package === filters.filterPackage);
-    }
 
-    if (filters.filterPayment) {
-      filtered = filtered.filter(c => c.paymentStatus === filters.filterPayment);
-    }
 
     // Sort by priority
     filtered.sort((a, b) => (a.priority || 999) - (b.priority || 999));
@@ -38,7 +32,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
     const client = clients.find(c => c.id === clientId);
     if (!client) return null;
 
-    const order = ['booked', 'follow-up', 'preparing'];
+    const order = ['evaluated', 'booked', 'follow-up', 'preparing'];
     const currentIndex = order.indexOf(client.phase);
     if (currentIndex < order.length - 1) {
       const nextPhase = order[currentIndex + 1];
@@ -164,6 +158,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
   const renderAllPhases = () => {
     // This will be handled by the PhasesContainer component
     return {
+      evaluated: getClientsByPhase('evaluated'),
       booked: getClientsByPhase('booked'),
       'follow-up': getClientsByPhase('follow-up'),
       preparing: getClientsByPhase('preparing')

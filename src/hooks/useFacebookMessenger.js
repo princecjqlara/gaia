@@ -43,6 +43,10 @@ export function useFacebookMessenger() {
     const [hasMoreConversations, setHasMoreConversations] = useState(false);
     const [totalConversations, setTotalConversations] = useState(0);
 
+    // Search conversations across ALL contacts (not just loaded page)
+    const [conversationSearchResults, setConversationSearchResults] = useState([]);
+    const [searchingConversations, setSearchingConversations] = useState(false);
+
     // Load connected pages
     const loadConnectedPages = useCallback(async () => {
         try {
@@ -850,10 +854,6 @@ export function useFacebookMessenger() {
             return false;
         }
     }, [selectedConversation, loadConversations]);
-
-    // Search conversations across ALL contacts (not just loaded page)
-    const [conversationSearchResults, setConversationSearchResults] = useState([]);
-    const [searchingConversations, setSearchingConversations] = useState(false);
 
     const searchConversationsAction = useCallback(async (searchTerm, pageId = null) => {
         if (!searchTerm || searchTerm.trim().length < 2) {

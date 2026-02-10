@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import useFacebookMessenger from "../hooks/useFacebookMessenger";
 import { facebookService } from "../services/facebookService";
-import WarningDashboard from "./WarningDashboard";
+
 import AIControlPanel from "./AIControlPanel";
 import AIChatbotSettings from "./AIChatbotSettings";
 import BestTimesOverview from "./BestTimesOverview";
@@ -51,15 +51,31 @@ const LEAD_STATUS_CONFIG = {
 };
 
 const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
+  console.log('MessengerInbox rendering with props:', { clients: clients?.length, users: users?.length, currentUserId });
   // Defensive defaults - prevents crashes when parent passes undefined
   const safeClients = clients ?? [];
   const safeUsers = users ?? [];
   const safeCurrentUserId = currentUserId ?? null;
 
+  // Add a simple try-catch for the hook call
+  let hookResult;
+  try {
+    hookResult = useFacebookMessenger();
+  } catch (hookError) {
+    console.error('useFacebookMessenger hook threw error:', hookError);
+    return (
+      <div style={{ padding: '2rem', color: 'var(--error)' }}>
+        <h3>Failed to initialize Messenger</h3>
+        <p>{hookError.message}</p>
+      </div>
+    );
+  }
+
   const {
     conversations,
     selectedConversation,
     messages,
+    connectedPages,
     loading,
     syncing,
     error,
@@ -109,29 +125,144 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     // Lead status
     updateLeadStatus,
     bulkUpdateLeadStatus,
-  } = useFacebookMessenger();
+  } = hookResult;
 
-  // Handle loading state
-  if (loading) {
+  const lastAnalyzedCountRef = useRef(0);
+  
+  // ALL LOCAL STATE HOOKS MUST BE DECLARED HERE, BEFORE ANY CONDITIONAL RETURNS
+  // This is critical for React hooks rules
+  
+  // Message and UI state
+  const [messageText, setMessageText] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    clientName: "",
+    businessName: "",
+    contactDetails: "",
+    pageLink: "",
+    niche: "",
+    notes: "",
+  });
+  const [editableNotes, setEditableNotes] = useState("");
+  const [showMediaUpload, setShowMediaUpload] = useState(false);
+  const [extractingDetails, setExtractingDetails] = useState(false);
+  
+  // Properties for sharing
+  const [properties, setProperties] = useState([]);
+  const [showDropUp, setShowDropUp] = useState(false);
+  const [showPropertySelector, setShowPropertySelector] = useState(false);
+  const [selectedProperties, setSelectedProperties] = useState([]);
+  
+  // Bulk messaging
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [bulkFilter, setBulkFilter] = useState("all");
+  const [bulkTagFilter, setBulkTagFilter] = useState(""); // Tag ID for filtering
+  const [bulkSending, setBulkSending] = useState(false);
+  
+  // Tags management
+  const [showTagsModal, setShowTagsModal] = useState(false);
+  const [tags, setTags] = useState([]);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#a855f7");
+  const [selectedTagFilter, setSelectedTagFilter] = useState(null);
+  
+  // Archived conversations
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedConversations, setArchivedConversations] = useState([]);
+  
+  // Feature toggles
+
+  const [showAIControlPanel, setShowAIControlPanel] = useState(false);
+  const [showAIChatbotSettings, setShowAIChatbotSettings] = useState(false);
+  const [showBestTimes, setShowBestTimes] = useState(false);
+  
+  // Filtering state
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  
+  // Selection mode
+  const [selectedConversations, setSelectedConversations] = useState(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  
+  // Saved replies
+  const [savedReplies, setSavedReplies] = useState([]);
+  const [showSavedReplies, setShowSavedReplies] = useState(false);
+  const [showCreateReply, setShowCreateReply] = useState(false);
+  const [newReplyTitle, setNewReplyTitle] = useState("");
+  const [newReplyContent, setNewReplyContent] = useState("");
+  const [newReplyShortcut, setNewReplyShortcut] = useState("");
+  
+  // Scheduling
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  
+  // Conversation tags
+  const [conversationTags, setConversationTags] = useState([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  
+  // Warning settings
+  const [warningSettings, setWarningSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem("warning_settings");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+    return {
+      stage_warning_days: {
+        booked: 3,
+        "follow-up": 2,
+        preparing: 7,
+        testing: 30,
+        running: 0,
+      },
+      warning_color: "#f59e0b",
+      danger_color: "#ef4444",
+    };
+  });
+  
+  // Mobile view
+  const [mobileView, setMobileView] = useState("list"); // 'list', 'chat', 'details'
+
+  // Handle loading state - show something even if loading takes time
+  if (loading && conversations.length === 0) {
+    console.log('MessengerInbox: Showing loading state');
     return (
       <div
         className="spinner"
         style={{
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "2rem",
+          padding: "3rem",
           fontSize: "1rem",
           color: "var(--text-secondary)",
+          minHeight: "400px",
         }}
       >
-        Loading…
+        <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>💬</div>
+        <div style={{ marginBottom: "0.5rem" }}>Loading Messenger...</div>
+        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+          {connectedPages?.length > 0 
+            ? `Connected to ${connectedPages.length} Facebook page${connectedPages.length > 1 ? 's' : ''}`
+            : "No Facebook pages connected yet"}
+        </div>
       </div>
     );
   }
 
   // Handle error state
   if (error) {
+    console.log('MessengerInbox: Showing error state:', error);
     return (
       <div
         style={{
@@ -165,7 +296,95 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     );
   }
 
-  const lastAnalyzedCountRef = useRef(0);
+  // Check if Facebook pages are connected
+  if (connectedPages && connectedPages.length === 0 && !loading) {
+    return (
+      <div
+        style={{
+          color: "var(--text-secondary)",
+          padding: "2rem",
+          background: "var(--bg-tertiary)",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid var(--border-color)",
+          maxWidth: "800px",
+          margin: "1.5rem auto",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>💬</div>
+        <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>
+          Facebook Messenger
+        </h3>
+        <p style={{ marginBottom: "1.5rem", lineHeight: "1.5" }}>
+          Connect your Facebook Page to start managing Messenger conversations.
+        </p>
+        <button
+          onClick={() => {
+            // Open Facebook connection flow
+            const facebookServiceModule = import("../services/facebookService");
+            facebookServiceModule.then(({ facebookService }) => {
+              facebookService.authorizeFacebook();
+            });
+          }}
+          style={{
+            padding: "0.75rem 1.5rem",
+            background: "var(--primary)",
+            color: "white",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: "500",
+            fontSize: "1rem",
+          }}
+        >
+          Connect Facebook Page
+        </button>
+      </div>
+    );
+  }
+
+  // If no conversations but pages are connected, show empty state
+  if (conversations && conversations.length === 0 && !loading) {
+    return (
+      <div
+        style={{
+          color: "var(--text-secondary)",
+          padding: "2rem",
+          background: "var(--bg-tertiary)",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid var(--border-color)",
+          maxWidth: "800px",
+          margin: "1.5rem auto",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📭</div>
+        <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>
+          No Conversations
+        </h3>
+        <p style={{ marginBottom: "1.5rem", lineHeight: "1.5" }}>
+          {connectedPages?.length > 0
+            ? `Connected to ${connectedPages.length} Facebook page${connectedPages.length > 1 ? 's' : ''}, but no conversations found.`
+            : "No conversations available."}
+        </p>
+        <button
+          onClick={loadConversations}
+          style={{
+            padding: "0.75rem 1.5rem",
+            background: "var(--primary)",
+            color: "white",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: "500",
+            fontSize: "1rem",
+          }}
+        >
+          Refresh Conversations
+        </button>
+      </div>
+    );
+  }
 
   // Auto-analyze conversation:
   // 1. On selection if no analysis exists
@@ -196,26 +415,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     !!conversationInsights?.aiAnalysis,
   ]);
 
-  const [messageText, setMessageText] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [transferForm, setTransferForm] = useState({
-    clientName: "",
-    businessName: "",
-    contactDetails: "",
-    pageLink: "",
-    niche: "",
-    notes: "",
-  });
-  const [editableNotes, setEditableNotes] = useState("");
-  const [showMediaUpload, setShowMediaUpload] = useState(false);
-  const [extractingDetails, setExtractingDetails] = useState(false);
-
-  // Properties for sharing
-  const [properties, setProperties] = useState([]);
-  const [showDropUp, setShowDropUp] = useState(false);
-  const [showPropertySelector, setShowPropertySelector] = useState(false);
-
+  // Properties for sharing - FETCHING ONLY (state already declared above)
   // Fetch properties on mount
   useEffect(() => {
     const fetchProperties = async () => {
@@ -229,56 +429,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     fetchProperties();
   }, []);
 
-  // New UI state
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkMessage, setBulkMessage] = useState("");
-  const [bulkFilter, setBulkFilter] = useState("all");
-  const [bulkTagFilter, setBulkTagFilter] = useState(""); // Tag ID for filtering
-  const [bulkSending, setBulkSending] = useState(false);
-  const [showTagsModal, setShowTagsModal] = useState(false);
-  const [tags, setTags] = useState([]);
-  const [newTagName, setNewTagName] = useState("");
-  const [newTagColor, setNewTagColor] = useState("#a855f7");
-  const [selectedTagFilter, setSelectedTagFilter] = useState(null);
-  const [showArchived, setShowArchived] = useState(false);
-  const [archivedConversations, setArchivedConversations] = useState([]);
-  const [showWarningDashboard, setShowWarningDashboard] = useState(false);
-  const [showAIControlPanel, setShowAIControlPanel] = useState(false);
-  const [showAIChatbotSettings, setShowAIChatbotSettings] = useState(false);
-  const [showBestTimes, setShowBestTimes] = useState(false);
 
-  // Advanced filtering state
-  const [activeFilter, setActiveFilter] = useState("all");
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-
-  // Date filter state - filter contacts by when they first messaged
-  const [filterDateFrom, setFilterDateFrom] = useState("");
-  const [filterDateTo, setFilterDateTo] = useState("");
-  const [showDateFilter, setShowDateFilter] = useState(false);
-
-  // Selection state for bulk actions
-  const [selectedConversations, setSelectedConversations] = useState(new Set());
-  const [selectMode, setSelectMode] = useState(false);
-
-  // Saved replies state
-  const [savedReplies, setSavedReplies] = useState([]);
-  const [showSavedReplies, setShowSavedReplies] = useState(false);
-  const [showCreateReply, setShowCreateReply] = useState(false);
-  const [newReplyTitle, setNewReplyTitle] = useState("");
-  const [newReplyContent, setNewReplyContent] = useState("");
-  const [newReplyShortcut, setNewReplyShortcut] = useState("");
-
-  // Scheduled messages state
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState("");
-  const [scheduledTime, setScheduledTime] = useState("");
-
-  // Conversation tags for current selection
-  const [conversationTags, setConversationTags] = useState([]);
-  const [loadingTags, setLoadingTags] = useState(false);
-
-  // Warning settings - loaded from localStorage
-  const [warningSettings, setWarningSettings] = useState(() => {
     try {
       const saved = localStorage.getItem("warning_settings");
       if (saved) {
@@ -297,71 +448,9 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
       enable_no_tag_warning: false,
       enable_proposal_stuck_warning: false,
     };
-  });
 
-  // Warning detection function
-  const getContactWarningStatus = (conv) => {
-    if (!warningSettings) return null;
 
-    const now = new Date();
-    const lastActivity = conv.last_message_time
-      ? new Date(conv.last_message_time)
-      : null;
-    const hoursSinceActivity = lastActivity
-      ? (now - lastActivity) / (1000 * 60 * 60)
-      : Infinity;
 
-    // Check various conditions
-    const hasNoTag = !conv.tags || conv.tags.length === 0;
-    const isStuckProposal =
-      conv.proposal_status === "sent" &&
-      hoursSinceActivity > warningSettings.warning_hours;
-    const isInactive = hoursSinceActivity >= warningSettings.warning_hours;
-    const isCritical = hoursSinceActivity >= warningSettings.danger_hours;
-
-    // Determine warning level based on enabled conditions
-    let shouldWarn = false;
-    let shouldCritical = false;
-
-    if (warningSettings.enable_no_activity_warning && isInactive) {
-      shouldWarn = true;
-      if (isCritical) shouldCritical = true;
-    }
-
-    if (warningSettings.enable_no_tag_warning && hasNoTag) {
-      shouldWarn = true;
-    }
-
-    if (warningSettings.enable_proposal_stuck_warning && isStuckProposal) {
-      shouldWarn = true;
-      if (isCritical) shouldCritical = true;
-    }
-
-    if (shouldCritical) {
-      return {
-        level: "danger",
-        color: warningSettings.danger_color,
-        hoursSince: Math.floor(hoursSinceActivity),
-      };
-    }
-    if (shouldWarn) {
-      return {
-        level: "warning",
-        color: warningSettings.warning_color,
-        hoursSince: Math.floor(hoursSinceActivity),
-      };
-    }
-    return null;
-  };
-
-  // Count contacts in warning state
-  const warningCount = conversations.filter((conv) =>
-    getContactWarningStatus(conv),
-  ).length;
-  const dangerCount = conversations.filter((conv) => {
-    const status = getContactWarningStatus(conv);
-    return status && status.level === "danger";
-  }).length;
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1101,8 +1190,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     return null;
   };
 
-  // Mobile view state
-  const [mobileView, setMobileView] = useState("list"); // 'list', 'chat', 'details'
+
 
   return (
     <>
@@ -1230,32 +1318,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                   {unreadCount}
                 </span>
               )}
-              {warningCount > 0 && (
-                <button
-                  onClick={() => setShowWarningDashboard(true)}
-                  style={{
-                    marginLeft: "0.5rem",
-                    background:
-                      dangerCount > 0
-                        ? warningSettings.danger_color
-                        : warningSettings.warning_color,
-                    color: "white",
-                    padding: "0.125rem 0.5rem",
-                    borderRadius: "999px",
-                    fontSize: "0.75rem",
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "transform 0.2s",
-                  }}
-                  title={`Click to view ${warningCount} contacts needing attention${dangerCount > 0 ? ` (${dangerCount} critical)` : ""}`}
-                  onMouseEnter={(e) =>
-                    (e.target.style.transform = "scale(1.05)")
-                  }
-                  onMouseLeave={(e) => (e.target.style.transform = "scale(1)")}
-                >
-                  ⚠️ {warningCount}
-                </button>
-              )}
+
             </h3>
             <div
               style={{
@@ -1712,8 +1775,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
           >
             {/* Show global search results if search is active and has results */}
             {searchTerm.length >= 2 && conversationSearchResults?.length > 0 ? (
-              conversationSearchResults.map((conv) => {
-                const warningStatus = getContactWarningStatus(conv);
+               conversationSearchResults.map((conv) => {
                 return (
                   <div
                     key={conv.id || conv.conversation_id}
@@ -1725,9 +1787,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                       padding: "0.75rem 1rem",
                       cursor: "pointer",
                       borderBottom: "1px solid var(--border-color)",
-                      borderLeft: warningStatus
-                        ? `4px solid ${warningStatus.color}`
-                        : "4px solid var(--primary)",
+                      borderLeft: "4px solid var(--primary)",
                       paddingLeft: "calc(1rem - 4px)",
                       background:
                         selectedConversation?.id === conv.id
@@ -1858,41 +1918,76 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                   "Searching..."
                 ) : searchTerm.length >= 2 ? (
                   "No contacts found matching your search."
-                ) : conversations.length === 0 ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: "1rem",
-                    }}
-                  >
-                    <p>
-                      No conversations yet. Connect a Facebook page to get
-                      started.
-                    </p>
-                    <button
-                      className="btn btn-sm btn-secondary"
-                      onClick={() => {
-                        if (
-                          confirm("Load demo data? This will enable demo mode.")
-                        ) {
-                          localStorage.setItem("gaia_demo_mode", "true");
-                          window.location.reload();
-                        }
-                      }}
-                      style={{ background: "#e5e7eb", color: "#374151" }}
-                    >
-                      📂 Load Demo Data
-                    </button>
-                  </div>
-                ) : (
-                  "No conversations match your filter."
-                )}
+                 ) : conversations.length === 0 ? (
+                   <div
+                     style={{
+                       display: "flex",
+                       flexDirection: "column",
+                       alignItems: "center",
+                       gap: "1rem",
+                       padding: "2rem",
+                       background: "var(--bg-tertiary)",
+                       borderRadius: "var(--radius-lg)",
+                       border: "2px dashed var(--border-color)",
+                       margin: "1rem",
+                       textAlign: "center",
+                     }}
+                   >
+                     <div style={{ fontSize: "3rem", opacity: 0.7 }}>💬</div>
+                     <h4 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>
+                       Messenger Inbox is Empty
+                     </h4>
+                     <p style={{ margin: 0, color: "var(--text-secondary)", maxWidth: "400px" }}>
+                       No conversations yet. Connect a Facebook page to sync messages from Facebook Messenger.
+                     </p>
+                     <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem" }}>
+                       <button
+                         className="btn btn-sm btn-primary"
+                         onClick={() => {
+                           // Open admin settings to connect Facebook
+                           if (window.parent?.setShowAdminSettings) {
+                             window.parent.setShowAdminSettings(true);
+                           } else {
+                             alert("Go to Admin Settings → Facebook Integration to connect a Facebook page");
+                           }
+                         }}
+                         style={{ padding: "0.5rem 1rem" }}
+                       >
+                         🔗 Connect Facebook Page
+                       </button>
+                       <button
+                         className="btn btn-sm btn-secondary"
+                         onClick={() => {
+                           if (
+                             confirm("Load demo data? This will enable demo mode.")
+                           ) {
+                             localStorage.setItem("gaia_demo_mode", "true");
+                             window.location.reload();
+                           }
+                         }}
+                         style={{ padding: "0.5rem 1rem", background: "#e5e7eb", color: "#374151" }}
+                       >
+                         📂 Try Demo Mode
+                       </button>
+                     </div>
+                     <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "1rem", maxWidth: "500px" }}>
+                       <p style={{ margin: 0 }}>
+                         <strong>To get started:</strong>
+                       </p>
+                       <ol style={{ margin: "0.5rem 0", paddingLeft: "1.5rem", textAlign: "left" }}>
+                         <li>Go to Admin Settings → Facebook Integration</li>
+                         <li>Connect your Facebook Business Page</li>
+                         <li>Sync conversations from Facebook</li>
+                         <li>Or use Demo Mode to test without Facebook</li>
+                       </ol>
+                     </div>
+                   </div>
+                 ) : (
+                   "No conversations match your filter."
+                 )}
               </div>
             ) : (
               filteredConversations.map((conv) => {
-                const warningStatus = getContactWarningStatus(conv);
                 return (
                   <div
                     key={conv.id}
@@ -1904,30 +1999,22 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                       padding: "0.75rem 1rem",
                       cursor: "pointer",
                       borderBottom: "1px solid var(--border-color)",
-                      borderLeft: warningStatus
-                        ? `4px solid ${warningStatus.color}`
-                        : "none",
-                      paddingLeft: warningStatus ? "calc(1rem - 4px)" : "1rem",
+                      borderLeft: "none",
+                      paddingLeft: "1rem",
                       background:
                         selectedConversation?.id === conv.id
                           ? "var(--primary-alpha)"
-                          : warningStatus
-                            ? `${warningStatus.color}15`
-                            : "transparent",
+                          : "transparent",
                       transition: "background 0.2s",
                     }}
                     onMouseEnter={(e) => {
                       if (selectedConversation?.id !== conv.id) {
-                        e.currentTarget.style.background = warningStatus
-                          ? `${warningStatus.color}25`
-                          : "var(--bg-secondary)";
+                        e.currentTarget.style.background = "var(--bg-secondary)";
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (selectedConversation?.id !== conv.id) {
-                        e.currentTarget.style.background = warningStatus
-                          ? `${warningStatus.color}15`
-                          : "transparent";
+                        e.currentTarget.style.background = "transparent";
                       }
                     }}
                   >
@@ -4476,18 +4563,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
         )}
       </div>
 
-      {/* Warning Dashboard Modal */}
-      {showWarningDashboard && (
-        <WarningDashboard
-          conversations={conversations}
-          onSelectConversation={(conv) => {
-            selectConversation(conv);
-            setMobileView("chat");
-          }}
-          onClose={() => setShowWarningDashboard(false)}
-          warningSettings={warningSettings}
-        />
-      )}
+
 
       {/* AI Control Panel Modal */}
       {showAIControlPanel && selectedConversation && (

@@ -752,24 +752,22 @@ a:hover {
    ============================================ */
 
 .client-card {
-  background: var(--bg-tertiary);
-  /* Slightly lighter than column bg */
-  border: 1px solid transparent;
-  /* Hidden border by default */
-  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(15, 15,34, 0.9), rgba(25, 25, 45, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
   padding: var(--space-lg);
   cursor: grab;
   transition: all var(--transition-base);
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(10px);
 }
 
 .client-card:hover {
-  border-color: var(--text-secondary);
-  /* Subtle highlight */
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  background: var(--bg-secondary);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-4px);
+  box-shadow: 0 12px満 24px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, rgba(20, 20, 40, 0.9), rgba(30, 30, 50, 0.9));
 }
 
 .client-card:active {

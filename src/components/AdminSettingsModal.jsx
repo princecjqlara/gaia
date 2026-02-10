@@ -1,12 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import TagManagementModal from './TagManagementModal';
-import EmployeeSalaryManagement from './EmployeeSalaryManagement';
+
 import facebookService from '../services/facebookService';
 
 const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, onTeamPerformance }) => {
   const [showTagManagement, setShowTagManagement] = useState(false);
-  const [activeMainTab, setActiveMainTab] = useState('employees'); // employees, facebook, booking
+  const [activeMainTab, setActiveMainTab] = useState('facebook'); // facebook, booking, aichatbot, stages
   const [activePageId, setActivePageId] = useState('default'); // Will be set from connected pages
+  
+  // Stages Management State
+  const [customStages, setCustomStages] = useState([]);
+  const [newStageName, setNewStageName] = useState('');
+  const [newStageEmoji, setNewStageEmoji] = useState('📌');
+  const [editingStage, setEditingStage] = useState(null);
+  const [loadingStages, setLoadingStages] = useState(false);
+  const [savingStages, setSavingStages] = useState(false);
+
+  // Evaluation threshold settings
+  const [evaluationThreshold, setEvaluationThreshold] = useState(() => {
+    try {
+      const saved = localStorage.getItem('evaluation_threshold');
+      return saved ? parseInt(saved) : 70;
+    } catch {
+      return 70;
+    }
+  });
 
   // AI Chatbot stats
   const [aiStats, setAiStats] = useState({
@@ -126,25 +144,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     ]
   });
 
-  // Contact warning settings state
-  const [warningSettings, setWarningSettings] = useState({
-    warning_hours: 24,
-    danger_hours: 48,
-    response_deadline_hours: 24, // Response deadline for unassigned contacts table
-    warning_color: '#f59e0b', // amber
-    danger_color: '#ef4444',  // red
-    enable_no_activity_warning: true,
-    enable_no_tag_warning: true,
-    enable_proposal_stuck_warning: true,
-    // Per-stage warning thresholds (days in stage before warning)
-    stage_warning_days: {
-      'booked': 3,      // Warn if in Booked for more than 3 days
-      'follow-up': 2,   // Warn if in Follow Up for more than 2 days
-      'preparing': 7,   // Warn if in Preparing for more than 7 days
-      'testing': 30,    // Warn if in Testing for more than 30 days
-      'running': 0      // No warning for Running (0 = disabled)
-    }
-  });
+
   const [prices, setPrices] = useState({
     basic: 1799,
     star: 2999,
@@ -309,17 +309,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
           console.log('Could not load booking settings:', e);
         }
 
-        // Load warning settings from localStorage
-        try {
-          const savedWarningSettings = localStorage.getItem('warning_settings');
-          if (savedWarningSettings) {
-            const parsed = JSON.parse(savedWarningSettings);
-            setWarningSettings(prev => ({ ...prev, ...parsed }));
-            console.log('Loaded warning settings from localStorage:', parsed);
-          }
-        } catch (e) {
-          console.log('Could not load warning settings:', e);
-        }
+
       } catch (error) {
         console.error('Error loading settings:', error);
         setMessage({ type: 'error', text: 'Failed to load settings' });
@@ -395,13 +385,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         // localStorage already saved above as backup
       }
 
-      // Save warning settings to localStorage
-      try {
-        localStorage.setItem('warning_settings', JSON.stringify(warningSettings));
-        console.log('Warning settings saved to localStorage:', warningSettings);
-      } catch (e) {
-        console.error('Could not save warning settings:', e);
-      }
+
 
       setMessage({ type: 'success', text: 'Settings saved successfully! Page will reload in 1 second...' });
       // Reload the page to update package prices throughout the app
@@ -415,6 +399,286 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       setSaving(false);
     }
   };
+
+  // Stages Management Functions
+  const loadCustomStages = async () => {
+    try {
+      setLoadingStages(true);
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const db = createClient(supabaseUrl, supabaseKey);
+
+      const { data, error } = await db
+        .from('custom_stages')
+        .select('*')
+        .order('order_position', { ascending: true });
+
+      if (error) throw error;
+
+      // Ensure system default stages are always present
+      const defaultSystemStages = [
+        { id: '0', stage_key: 'evaluated', display_name: 'Evaluated', emoji: '✅', color: '#22c55e', order_position: 0, is_system_default: true },
+        { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true }
+      ];
+
+      const finalStages = data || [];
+      const hasEvaluated = finalStages.some(s => s.stage_key === 'evaluated');
+      const hasBooked = finalStages.some(s => s.stage_key === 'booked');
+
+      let stagesToSave = finalStages;
+      if (!hasEvaluated || !hasBooked) {
+        // Add missing system default stages
+        const existingSystem = finalStages.filter(s => s.is_system_default);
+        const existingCustom = finalStages.filter(s => !s.is_system_default);
+        stagesToSave = [...defaultSystemStages, ...existingCustom];
+
+        // Save to localStorage
+        localStorage.setItem('custom_stages', JSON.stringify(stagesToSave));
+        console.log('Migrated: Ensured system default stages present in AdminSettings');
+      }
+
+      setCustomStages(stagesToSave);
+      localStorage.setItem('custom_stages', JSON.stringify(stagesToSave));
+    } catch (err) {
+      console.error('Error loading custom stages:', err);
+      // Fallback to localStorage or defaults
+      const localStages = localStorage.getItem('custom_stages');
+      if (localStages) {
+        const parsed = JSON.parse(localStages);
+
+        // Verify system defaults exist in localStorage too
+        const hasEvaluated = parsed.some(s => s.stage_key === 'evaluated');
+        const hasBooked = parsed.some(s => s.stage_key === 'booked');
+
+        let stagesToUse = parsed;
+        if (!hasEvaluated || !hasBooked) {
+          const defaultSystemStages = [
+            { id: '0', stage_key: 'evaluated', display_name: 'Evaluated', emoji: '✅', color: '#22c55e', order_position: 0, is_system_default: true },
+            { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true }
+          ];
+          const existingCustom = parsed.filter(s => !s.is_system_default);
+          stagesToUse = [...defaultSystemStages, ...existingCustom];
+          localStorage.setItem('custom_stages', JSON.stringify(stagesToUse));
+        }
+
+        setCustomStages(stagesToUse);
+      } else {
+        // Default stages
+        setCustomStages([
+          { id: '0', stage_key: 'evaluated', display_name: 'Evaluated', emoji: '✅', color: '#22c55e', order_position: 0, is_system_default: true },
+          { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true },
+          { id: '2', stage_key: 'follow-up', display_name: 'Follow-up', emoji: '💬', color: '#f59e0b', order_position: 2, is_system_default: false },
+          { id: '3', stage_key: 'preparing', display_name: 'Preparing', emoji: '⏳', color: '#8b5cf6', order_position: 3, is_system_default: false },
+          { id: '4', stage_key: 'testing', display_name: 'Testing', emoji: '🧪', color: '#ec4899', order_position: 4, is_system_default: false },
+          { id: '5', stage_key: 'running', display_name: 'Running', emoji: '🚀', color: '#10b981', order_position: 5, is_system_default: false }
+        ]);
+      }
+    } finally {
+      setLoadingStages(false);
+    }
+  };
+
+  // Load custom stages when component mounts or on tab change
+  useEffect(() => {
+    loadCustomStages();
+  }, []);
+
+  const addCustomStage = async () => {
+    if (!newStageName.trim()) return;
+
+    try {
+      setSavingStages(true);
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const db = createClient(supabaseUrl, supabaseKey);
+
+      const stageKey = newStageName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const maxOrder = Math.max(...customStages.map(s => s.order_position || 0), 0);
+
+      const { data, error } = await db
+        .from('custom_stages')
+        .insert({
+          stage_key: stageKey,
+          display_name: newStageName,
+          emoji: newStageEmoji,
+          color: '#3b82f6',
+          order_position: maxOrder + 1,
+          is_system_default: false
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCustomStages([...customStages, data]);
+      setNewStageName('');
+      localStorage.setItem('custom_stages', JSON.stringify([...customStages, data]));
+    } catch (err) {
+      console.error('Error adding custom stage:', err);
+      alert('Failed to add stage: ' + err.message);
+    } finally {
+      setSavingStages(false);
+    }
+  };
+
+  const deleteCustomStage = async (stageId) => {
+    const stage = customStages.find(s => s.id === stageId);
+    if (!stage) return;
+
+    if (stage.is_system_default) {
+      alert(`Cannot delete the default "${stage.display_name}" stage. You can rename it instead.`);
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete "${stage.display_name}"? Clients in this stage will need to be reassigned.`)) {
+      return;
+    }
+
+    try {
+      setSavingStages(true);
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const db = createClient(supabaseUrl, supabaseKey);
+
+      const { error } = await db
+        .from('custom_stages')
+        .delete()
+        .eq('id', stageId);
+
+      if (error) throw error;
+
+      setCustomStages(customStages.filter(s => s.id !== stageId));
+      localStorage.setItem('custom_stages', JSON.stringify(customStages.filter(s => s.id !== stageId)));
+    } catch (err) {
+      console.error('Error deleting custom stage:', err);
+      alert('Failed to delete stage: ' + err.message);
+    } finally {
+      setSavingStages(false);
+    }
+  };
+
+  const updateCustomStage = async (stageId, updates) => {
+    const stage = customStages.find(s => s.id === stageId);
+    if (!stage) {
+      alert('Stage not found');
+      return;
+    }
+
+    // Validate that we have updates to apply
+    if (!updates || !updates.display_name) {
+      alert('Error: Stage name is required');
+      return;
+    }
+
+    console.log('Updating stage:', { stageId, updates, originalStage: stage });
+
+    // Create updated stage object
+    const updatedStage = {
+      ...stage,
+      display_name: updates.display_name,
+      emoji: updates.emoji !== undefined ? updates.emoji : stage.emoji,
+      color: updates.color !== undefined ? updates.color : stage.color,
+      updated_at: new Date().toISOString()
+    };
+
+    // Check if we're in offline mode (using String IDs like '1', '2', etc.)
+    const isOfflineMode = typeof stageId === 'string' && !stageId.includes('-');
+
+    // Update local state immediately
+    const updatedStages = customStages.map(s => s.id === stageId ? updatedStage : s);
+    setCustomStages(updatedStages);
+    localStorage.setItem('custom_stages', JSON.stringify(updatedStages));
+    setEditingStage(null);
+
+    // Try to update database if not in offline mode
+    if (!isOfflineMode) {
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const db = createClient(supabaseUrl, supabaseKey);
+
+        // Check if custom_stages table exists
+        const { error: tableCheckError } = await db
+          .from('custom_stages')
+          .select('id')
+          .limit(1);
+
+        if (tableCheckError) {
+          console.log('Database table not available, saving locally only');
+          alert('✅ Stage updated locally! Changes will sync to database when available.');
+          return;
+        }
+
+        const updateData = {
+          display_name: updatedStage.display_name,
+          updated_at: updatedStage.updated_at
+        };
+
+        if (updatedStage.emoji !== stage.emoji) {
+          updateData.emoji = updatedStage.emoji;
+        }
+
+        if (updatedStage.color !== stage.color) {
+          updateData.color = updatedStage.color;
+        }
+
+        console.log('Sending update to database:', updateData);
+
+        const { data, error } = await db
+          .from('custom_stages')
+          .update(updateData)
+          .eq('id', stageId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Supabase update error:', error);
+          throw error;
+        }
+
+        console.log('Database update successful:', data);
+
+        // Update again with the database response
+        const finalStages = customStages.map(s => s.id === stageId ? data : s);
+        setCustomStages(finalStages);
+        localStorage.setItem('custom_stages', JSON.stringify(finalStages));
+      } catch (err) {
+        console.error('Error updating custom stage in database:', err);
+        // Don't show error since we already saved locally
+        localStorage.setItem('custom_stages', JSON.stringify(updatedStages));
+      }
+    } else {
+      console.log('Offline mode: saved to localStorage only');
+      alert('✅ Stage updated! (Saved locally)');
+    }
+  };
+
+  const saveAllStages = async () => {
+    try {
+      setSavingStages(true);
+      // Stages are saved individually via the add/update/delete functions
+      // This triggeres a reload of the page to apply changes
+      localStorage.setItem('custom_stages', JSON.stringify(customStages));
+      setMessage({ type: 'success', text: 'Stages saved successfully!' });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err) {
+      console.error('Error saving stages:', err);
+      setMessage({ type: 'error', text: 'Failed to save stages' });
+    } finally {
+      setSavingStages(false);
+    }
+  };
+
+  // Load custom stages on mount
+  useEffect(() => {
+    loadCustomStages();
+  }, []);
 
   if (loading) {
     return (
@@ -444,21 +708,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '2px solid var(--border)' }}>
 
 
-            <button
-              type="button"
-              onClick={() => setActiveMainTab('employees')}
-              style={{
-                padding: '0.75rem 1.5rem',
-                border: 'none',
-                background: 'transparent',
-                borderBottom: activeMainTab === 'employees' ? '2px solid var(--primary)' : '2px solid transparent',
-                color: activeMainTab === 'employees' ? 'var(--primary)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: activeMainTab === 'employees' ? '600' : '400'
-              }}
-            >
-              👥 Employees & Salary
-            </button>
+
             <button
               type="button"
               onClick={() => setActiveMainTab('facebook')}
@@ -489,21 +739,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             >
               📅 Booking Settings
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveMainTab('warnings')}
-              style={{
-                padding: '0.75rem 1.5rem',
-                border: 'none',
-                background: 'transparent',
-                borderBottom: activeMainTab === 'warnings' ? '2px solid var(--primary)' : '2px solid transparent',
-                color: activeMainTab === 'warnings' ? 'var(--primary)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: activeMainTab === 'warnings' ? '600' : '400'
-              }}
-            >
-              ⚠️ Warning Rules
-            </button>
+
             <button
               type="button"
               onClick={() => setActiveMainTab('aichatbot')}
@@ -519,15 +755,30 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             >
               🤖 AI Chatbot
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('stages')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'stages' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'stages' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'stages' ? '600' : '400'
+              }}
+            >
+              📊 Stages Management
+            </button>
           </div>
 
 
 
 
 
-          {activeMainTab === 'employees' && (
-            <EmployeeSalaryManagement />
-          )}
+
+
 
           {activeMainTab === 'facebook' && (
             <div>
@@ -639,42 +890,6 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                       </button>
                     </div>
                   )}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📊 Ad Spend Sync</h4>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                  Automatically sync ad spend from Meta Ads Manager and deduct from profit calculations.
-                </p>
-
-                <div style={{
-                  padding: '1rem',
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)'
-                }}>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    cursor: 'pointer'
-                  }}>
-                    <input
-                      type="checkbox"
-                      style={{ width: '20px', height: '20px' }}
-                      onChange={(e) => {
-                        // This would save to facebook_settings table
-                        console.log('Auto ad spend sync:', e.target.checked);
-                      }}
-                    />
-                    <div>
-                      <div style={{ fontWeight: '500' }}>Enable Auto Ad Spend Sync</div>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                        Automatically fetch daily ad spend from connected ad accounts and update client expenses
-                      </div>
-                    </div>
-                  </label>
                 </div>
               </div>
 
@@ -1181,211 +1396,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
             </div>
           )}
 
-          {activeMainTab === 'warnings' && (
-            <div>
-              <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚠️ Warning Rules Configuration</h4>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '2rem' }}>
-                Configure when contacts appear in the Warning Dashboard. These warnings help you identify contacts that need attention.
-              </p>
 
-              {/* Time Thresholds */}
-              <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
-                <h5 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>⏰ Time Thresholds</h5>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b' }}></span>
-                      Warning After (hours)
-                    </label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={(() => {
-                        try {
-                          const saved = localStorage.getItem('warning_settings');
-                          return saved ? JSON.parse(saved).warning_hours : 24;
-                        } catch { return 24; }
-                      })()}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 24;
-                        try {
-                          const saved = localStorage.getItem('warning_settings');
-                          const settings = saved ? JSON.parse(saved) : {};
-                          settings.warning_hours = val;
-                          localStorage.setItem('warning_settings', JSON.stringify(settings));
-                        } catch { }
-                      }}
-                      min="1"
-                      max="168"
-                    />
-                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                      Contacts with no activity for this many hours show as "Warning"
-                    </small>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></span>
-                      Critical After (hours)
-                    </label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={(() => {
-                        try {
-                          const saved = localStorage.getItem('warning_settings');
-                          return saved ? JSON.parse(saved).danger_hours : 48;
-                        } catch { return 48; }
-                      })()}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 48;
-                        try {
-                          const saved = localStorage.getItem('warning_settings');
-                          const settings = saved ? JSON.parse(saved) : {};
-                          settings.danger_hours = val;
-                          localStorage.setItem('warning_settings', JSON.stringify(settings));
-                        } catch { }
-                      }}
-                      min="1"
-                      max="336"
-                    />
-                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                      Contacts with no activity for this many hours show as "Critical"
-                    </small>
-                  </div>
-                </div>
-              </div>
-
-              {/* Warning Types */}
-              <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
-                <h5 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>📋 Warning Types</h5>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                  Enable or disable specific warning categories
-                </p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {[
-                    { key: 'enable_no_activity_warning', label: '⏳ No Activity Warning', desc: 'Alert when contact has no messages for defined hours' },
-                    { key: 'enable_awaiting_reply_warning', label: '💬 Awaiting Reply', desc: 'Alert when customer sent last message and is waiting for response' },
-                    { key: 'enable_unassigned_warning', label: '👤 Unassigned Contact', desc: 'Alert when contact is not assigned to any team member' },
-                    { key: 'enable_no_tag_warning', label: '🏷️ No Tags', desc: 'Alert when contact has no tags assigned' },
-                    { key: 'enable_proposal_stuck_warning', label: '📨 Stuck Proposal', desc: 'Alert when proposal was sent but no response received' },
-                  ].map(item => (
-                    <label
-                      key={item.key}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '0.75rem',
-                        padding: '0.75rem',
-                        background: 'var(--bg-tertiary)',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        border: '1px solid var(--border-color)'
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        defaultChecked={(() => {
-                          try {
-                            const saved = localStorage.getItem('warning_settings');
-                            return saved ? JSON.parse(saved)[item.key] !== false : true;
-                          } catch { return true; }
-                        })()}
-                        onChange={(e) => {
-                          try {
-                            const saved = localStorage.getItem('warning_settings');
-                            const settings = saved ? JSON.parse(saved) : {};
-                            settings[item.key] = e.target.checked;
-                            localStorage.setItem('warning_settings', JSON.stringify(settings));
-                          } catch { }
-                        }}
-                        style={{ width: '18px', height: '18px', marginTop: '2px', flexShrink: 0 }}
-                      />
-                      <div>
-                        <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>{item.label}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.desc}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Colors */}
-              <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
-                <h5 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>🎨 Warning Colors</h5>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Warning Color</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input
-                        type="color"
-                        defaultValue={(() => {
-                          try {
-                            const saved = localStorage.getItem('warning_settings');
-                            return saved ? JSON.parse(saved).warning_color : '#f59e0b';
-                          } catch { return '#f59e0b'; }
-                        })()}
-                        onChange={(e) => {
-                          try {
-                            const saved = localStorage.getItem('warning_settings');
-                            const settings = saved ? JSON.parse(saved) : {};
-                            settings.warning_color = e.target.value;
-                            localStorage.setItem('warning_settings', JSON.stringify(settings));
-                          } catch { }
-                        }}
-                        style={{ width: '40px', height: '40px', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                      />
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Amber (default)</span>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Critical Color</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input
-                        type="color"
-                        defaultValue={(() => {
-                          try {
-                            const saved = localStorage.getItem('warning_settings');
-                            return saved ? JSON.parse(saved).danger_color : '#ef4444';
-                          } catch { return '#ef4444'; }
-                        })()}
-                        onChange={(e) => {
-                          try {
-                            const saved = localStorage.getItem('warning_settings');
-                            const settings = saved ? JSON.parse(saved) : {};
-                            settings.danger_color = e.target.value;
-                            localStorage.setItem('warning_settings', JSON.stringify(settings));
-                          } catch { }
-                        }}
-                        style={{ width: '40px', height: '40px', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                      />
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Red (default)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{
-                padding: '1rem',
-                background: 'rgba(50, 150, 250, 0.1)',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid rgba(50, 150, 250, 0.3)'
-              }}>
-                <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--info)' }}>
-                  💡 How it works
-                </div>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  Click the <strong>⚠️ warning badge</strong> in the Messenger tab to open the Warning Dashboard.
-                  It shows all contacts organized by category (Critical, Warning, Awaiting Reply, Unassigned, No Tags).
-                  Changes are saved automatically.
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* AI Chatbot Tab */}
           {activeMainTab === 'aichatbot' && (
@@ -2519,6 +2530,382 @@ REFERRAL: Customer was referred by someone`}
                   Regular users can <strong>pause/resume AI</strong> for individual contacts and <strong>view scheduled follow-ups</strong>
                   using the 🤖 button in each conversation. Only admins can modify these global settings.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {activeMainTab === 'stages' && (
+            <div>
+              <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📊 Stages Management</h4>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                Customize the stages in your sales pipeline. The first stage (default) cannot be deleted but can be renamed.
+              </p>
+
+              {/* Database Migration Notice */}
+              {customStages.length > 0 && typeof customStages[0].id === 'string' && !customStages[0].id.includes('-') && (
+                <div style={{
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                    <div style={{ fontSize: '1.25rem' }}>⚠️</div>
+                    <div>
+                      <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'var(--warning)' }}>
+                        Database Setup Recommended
+                      </div>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
+                        You can still add, edit, and rename stages, and changes are saved locally. For full database persistence, run the migration script in Supabase SQL Editor. See <code>database/stages_management.sql</code> or <code>STAGES_MANAGEMENT.md</code> for instructions.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Evaluated Stage Configuration */}
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1.5rem',
+                background: 'rgba(34, 197, 94, 0.1)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(34, 197, 94, 0.3)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>✅</span>
+                    <div>
+                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                        Evaluated Stage
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                        Configure evaluation questions and threshold for auto-stage transition
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('open-evaluation-questions'));
+                    }}
+                  >
+                    📝 Manage Questions
+                  </button>
+                </div>
+
+                {/* Auto-move Threshold Slider */}
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  background: 'var(--bg-secondary)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(34, 197, 94, 0.2)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <label style={{ fontWeight: '500', color: 'var(--text-primary)' }}>
+                      Minimum Score to Auto-Move to Evaluated Stage
+                    </label>
+                    <span style={{
+                      fontWeight: '700',
+                      fontSize: '1.25rem',
+                      color: evaluationThreshold >= 70 ? '#22c55e' : evaluationThreshold >= 40 ? '#f59e0b' : '#ef4444'
+                    }}>
+                      {evaluationThreshold}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={evaluationThreshold}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      setEvaluationThreshold(value);
+                      localStorage.setItem('evaluation_threshold', value);
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '8px',
+                      borderRadius: '4px',
+                      background: `linear-gradient(to right, #ef4444 0%, #f59e0b 40%, #22c55e 70%, #22c55e 100%)`,
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                    When a client's evaluation score meets or exceeds this threshold, they automatically move to the Evaluated stage.
+                  </div>
+                </div>
+              </div>
+
+
+ {/* Add New Stage */}
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1.5rem',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-color)'
+              }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>Add New Stage</h5>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    placeholder="Stage name (e.g., 'Negotiation')"
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
+                    style={{
+                      padding: '0.75rem',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      flex: 1,
+                      minWidth: '200px'
+                    }}
+                  />
+                  <select
+                    value={newStageEmoji}
+                    onChange={(e) => setNewStageEmoji(e.target.value)}
+                    style={{
+                      padding: '0.75rem',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  >
+                    <option value="📌">📌 Pin</option>
+                    <option value="📋">📋 Clipboard</option>
+                    <option value="📝">📝 Note</option>
+                    <option value="✅">✅ Check</option>
+                    <option value="⭐">⭐ Star</option>
+                    <option value="🎯">🎯 Target</option>
+                    <option value="💼">💼 Briefcase</option>
+                    <option value="🤝">🤝 Handshake</option>
+                    <option value="💰">💰 Money</option>
+                    <option value="⚡">⚡ Lightning</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={addCustomStage}
+                    disabled={savingStages || !newStageName.trim()}
+                  >
+                    {savingStages ? 'Adding...' : 'Add Stage'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Stages List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {loadingStages ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    Loading stages...
+                  </div>
+                ) : customStages.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No stages configured. Add your first stage above.
+                  </div>
+                ) : (
+                  customStages.map((stage, index) => (
+                    <div
+                      key={stage.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        padding: '1rem 1.25rem',
+                        background: index === 0 ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-tertiary)',
+                        borderRadius: 'var(--radius-lg)',
+                        border: '1px solid',
+                        borderColor: index === 0 ? 'rgba(59, 130, 246, 0.5)' : 'var(--border-color)',
+                        position: 'relative'
+                      }}
+                    >
+                      {/* Drag handle visual */}
+                      <div style={{
+                        fontSize: '1.5rem',
+                        width: '40px',
+                        textAlign: 'center',
+                        cursor: 'grab',
+                        color: 'var(--text-muted)',
+                        userSelect: 'none'
+                      }}>
+                        ☰
+                      </div>
+
+                      {/* Stage Order Badge */}
+                      <div style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '50%',
+                        background: stage.color,
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '600',
+                        fontSize: '0.875rem',
+                        flexShrink: 0
+                      }}>
+                        {stage.order_position}
+                      </div>
+
+                      {/* Stage Emoji */}
+                      <div style={{
+                        fontSize: '1.75rem',
+                        width: '40px',
+                        textAlign: 'center'
+                      }}>
+                        {editingStage?.id === stage.id ? (
+                          <input
+                            type="text"
+                            value={editingStage.emoji || stage.emoji}
+                            onChange={(e) => setEditingStage({ ...editingStage, emoji: e.target.value })}
+                            style={{
+                              width: '50px',
+                              padding: '0.25rem',
+                              fontSize: '1.25rem',
+                              textAlign: 'center',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '4px',
+                              background: 'var(--bg-primary)'
+                            }}
+                          />
+                        ) : (
+                          stage.emoji
+                        )}
+                      </div>
+
+                      {/* Stage Name */}
+                      {editingStage?.id === stage.id ? (
+                        <input
+                          type="text"
+                          value={editingStage.display_name || stage.display_name}
+                          onChange={(e) => setEditingStage({ ...editingStage, display_name: e.target.value })}
+                          style={{
+                            flex: 1,
+                            padding: '0.5rem 0.75rem',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '4px',
+                            background: 'var(--bg-primary)',
+                            color: 'var(--text-primary)',
+                            fontSize: '1rem',
+                            fontWeight: '500'
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          flex: 1,
+                          fontSize: '1rem',
+                          fontWeight: '500',
+                          color: 'var(--text-primary)'
+                        }}>
+                          {stage.display_name}
+                          {index === 0 && (
+                            <span style={{
+                              marginLeft: '0.5rem',
+                              fontSize: '0.75rem',
+                              padding: '0.25rem 0.5rem',
+                              background: 'rgba(59, 130, 246, 0.2)',
+                              color: 'var(--primary)',
+                              borderRadius: '4px',
+                              fontWeight: '600'
+                            }}>
+                              DEFAULT
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Stage Key Display */}
+                      <div style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'monospace',
+                        padding: '0.25rem 0.5rem',
+                        background: 'var(--bg-primary)',
+                        borderRadius: '4px'
+                      }}>
+                        {stage.stage_key}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {editingStage?.id === stage.id ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-success"
+                              onClick={() => updateCustomStage(stage.id, editingStage)}
+                              style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
+                            >
+                              ✅
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => setEditingStage(null)}
+                              style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
+                            >
+                              ✕
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => setEditingStage({ ...stage })}
+                              title="Edit stage"
+                              style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
+                            >
+                              ✏️
+                            </button>
+                            {!stage.is_system_default && (
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={() => deleteCustomStage(stage.id)}
+                                title="Delete stage"
+                                disabled={savingStages}
+                                style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Save and Reload Notice */}
+              <div style={{
+                marginTop: '2rem',
+                padding: '1rem',
+                background: 'rgba(245, 158, 11, 0.1)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(245, 158, 11, 0.3)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                  <div style={{ fontSize: '1.25rem' }}>💡</div>
+                  <div>
+                    <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'var(--warning)' }}>
+                      Stage changes take effect after reload
+                    </div>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
+                      After adding, editing, or deleting stages, click "Save Settings" below to apply changes.
+                      The page will automatically reload to update all views.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

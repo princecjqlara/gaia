@@ -4,13 +4,17 @@ import ClientCard from './ClientCard';
 const ITEMS_PER_PAGE = 10;
 
 const phaseConfig = {
+  evaluated: { emoji: '✅', title: 'EVALUATED' },
   booked: { emoji: '📅', title: 'BOOKED' },
   'follow-up': { emoji: '📞', title: 'FOLLOW UP' },
   preparing: { emoji: '⏳', title: 'PREPARING' }
 };
 
-const PhaseColumn = ({ phase, clients, onViewClient, onEditClient, onMoveClient }) => {
-  const config = phaseConfig[phase] || { emoji: '', title: phase.toUpperCase() };
+const PhaseColumn = ({ phase, stageConfig, clients, onViewClient, onEditClient, onMoveClient, onEvaluate, onManageQuestions }) => {
+  // Use provided stageConfig or fallback to default phaseConfig
+  const config = (stageConfig && stageConfig.display_name)
+    ? { emoji: stageConfig.emoji, title: stageConfig.display_name.toUpperCase() }
+    : phaseConfig[phase] || { emoji: '', title: phase.toUpperCase() };
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -94,7 +98,7 @@ const PhaseColumn = ({ phase, clients, onViewClient, onEditClient, onMoveClient 
         transition: 'border-color 0.2s ease'
       }}
     >
-      <div className="phase-header">
+      <div className="phase-header" style={{ borderBottomColor: stageConfig?.color || '' }}>
         <div className="phase-title">
           <span>{config.emoji}</span> {config.title}
         </div>
@@ -139,6 +143,8 @@ const PhaseColumn = ({ phase, clients, onViewClient, onEditClient, onMoveClient 
               client={client}
               onView={() => onViewClient(client.id)}
               onEdit={() => onEditClient(client.id)}
+              onEvaluate={() => onEvaluate && onEvaluate(client.id)}
+              onManageQuestions={() => onManageQuestions && onManageQuestions()}
             />
           ))
         )}
