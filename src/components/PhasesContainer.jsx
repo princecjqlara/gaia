@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PhaseColumn from './PhaseColumn';
 import ClientsTable from './ClientsTable';
 
-const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveClient, viewMode = 'kanban', onEvaluate, onManageQuestions }) => {
+const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveClient, onUpdateClient, viewMode = 'kanban', onEvaluate, onManageQuestions }) => {
   const [phases, setPhases] = useState(['evaluated', 'booked', 'follow-up', 'preparing']);
   const [stageConfig, setStageConfig] = useState({});
 
@@ -186,6 +186,7 @@ const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveC
           onViewClient={onViewClient}
           onEditClient={onEditClient}
           onMoveClient={onMoveClient}
+          onUpdateClient={onUpdateClient}
         />
       </section>
     );
@@ -209,4 +210,3 @@ const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveC
 };
 
 export default PhasesContainer;
-

@@ -311,6 +311,25 @@ const PropertyMediaShowcase = ({
                     />
                 )}
 
+                {/* Bottom vignette */}
+                <div
+                    aria-hidden="true"
+                    style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: showDetails
+                            ? 'clamp(520px, 90vh, 900px)'
+                            : 'clamp(420px, 78vh, 720px)',
+                        background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.12) 18%, rgba(0,0,0,0.32) 36%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.78) 72%, rgba(0,0,0,0.9) 85%, rgba(0,0,0,1) 100%)',
+                        pointerEvents: 'none',
+                        zIndex: 14,
+                        transform: 'translateY(8px)',
+                        filter: 'blur(6px)'
+                    }}
+                />
+
                 {/* Media indicator dots */}
                 {currentMedia.length > 1 && (
                     <div style={{

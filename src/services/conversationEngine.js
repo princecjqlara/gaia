@@ -868,7 +868,8 @@ export async function getAIConfig() {
             auto_takeover_on_low_confidence: true,
             default_message_split_threshold: 500,
             intuition_silence_hours: 24,
-            best_time_lookback_days: 30
+            best_time_lookback_days: 30,
+            intuition_fibonacci_shift: 0
         };
     } catch (error) {
         console.error('[ENGINE] Error getting config:', error);

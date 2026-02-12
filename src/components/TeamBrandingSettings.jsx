@@ -1,4 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
+import {
+    DndContext,
+    PointerSensor,
+    closestCenter,
+    useSensor,
+    useSensors
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    rectSortingStrategy,
+    useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { getTeamBranding, updateTeamBranding, uploadBrandingImage } from '../services/teamBrandingService';
 import { showToast } from '../utils/toast';
 
@@ -10,9 +24,6 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
     const [branding, setBranding] = useState({
         logo_url: '',
         team_display_name: '',
-        tagline: 'Find Your Dream Home',
-        subtitle: 'Browse our exclusive portfolio of premium properties.',
-        hero_image_url: '',
         primary_color: '#10b981',
         contact_phone: '',
         contact_email: '',
@@ -22,18 +33,88 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         website_url: '',
         address: '',
         bio: '',
-        stats: [],
-        schedule_meeting_url: ''
+        schedule_meeting_url: '',
+        highlights: []
     });
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
-    const [uploadingHero, setUploadingHero] = useState(false);
     const [activePreviewTab, setActivePreviewTab] = useState('edit');
+    const [highlightUrlDrafts, setHighlightUrlDrafts] = useState({});
+    const [highlightUploads, setHighlightUploads] = useState({});
 
     const logoInputRef = useRef(null);
-    const heroInputRef = useRef(null);
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+    const highlightTargets = [
+        { value: 'none', label: 'None' },
+        { value: 'services', label: 'Services' },
+        { value: 'portfolio', label: 'Portfolio' },
+        { value: 'contact', label: 'Contact' },
+        { value: 'custom', label: 'Custom' }
+    ];
+
+    const createId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const inferMediaTypeFromUrl = (url = '') => {
+        const normalizedUrl = url.toLowerCase();
+        if (normalizedUrl.includes('/video/') || normalizedUrl.match(/\.(mp4|mov|webm|ogg)$/)) {
+            return 'video';
+        }
+        return 'image';
+    };
+
+    const resolveMediaType = ({ url, resourceType, fileType }) => {
+        const normalizedResource = typeof resourceType === 'string' ? resourceType.toLowerCase() : '';
+        if (normalizedResource === 'video') return 'video';
+        if (normalizedResource === 'image') return 'image';
+        if (fileType && fileType.startsWith('video/')) return 'video';
+        if (fileType && fileType.startsWith('image/')) return 'image';
+        if (url) return inferMediaTypeFromUrl(url);
+        return 'image';
+    };
+
+    const normalizeHighlightMedia = (media = [], sectionId = '') => {
+        if (!Array.isArray(media)) return [];
+
+        return media
+            .map((item, index) => {
+                if (!item) return null;
+                const rawUrl = typeof item === 'string' ? item : (item.url || item.src || '');
+                const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+                if (!url) return null;
+
+                const rawType = typeof item === 'string' ? '' : (item.type || item.media_type || '');
+                const type = resolveMediaType({ url, resourceType: rawType });
+                const id = typeof item === 'object' && item.id ? item.id : createId(`media-${sectionId || 'highlight'}`);
+                const position = typeof item === 'object' && item.position != null ? item.position : index;
+
+                return { id, url, type, position };
+            })
+            .filter(Boolean)
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+            .map((item, index) => ({ ...item, position: index }));
+    };
+
+    const normalizeHighlightSections = (sections = []) => {
+        if (!Array.isArray(sections)) return [];
+
+        return sections.map((section) => {
+            const safeSection = section && typeof section === 'object' ? section : {};
+            const id = typeof safeSection.id === 'string' && safeSection.id.trim()
+                ? safeSection.id.trim()
+                : createId('highlight');
+            const title = typeof safeSection.title === 'string' ? safeSection.title : '';
+            const target = highlightTargets.some((option) => option.value === safeSection.target)
+                ? safeSection.target
+                : 'none';
+            const custom_url = typeof safeSection.custom_url === 'string' ? safeSection.custom_url : '';
+            const media = normalizeHighlightMedia(safeSection.media, id);
+
+            return { ...safeSection, id, title, target, custom_url, media };
+        });
+    };
 
     useEffect(() => {
         loadBranding();
@@ -43,7 +124,11 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         setLoading(true);
         const { data, error } = await getTeamBranding(teamId);
         if (!error && data) {
-            setBranding(prev => ({ ...prev, ...data }));
+            setBranding(prev => {
+                const merged = { ...prev, ...data };
+                merged.highlights = normalizeHighlightSections(merged.highlights);
+                return merged;
+            });
         }
         setLoading(false);
     }
@@ -87,46 +172,183 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
         setUploadingLogo(false);
     }
 
-    async function handleHeroUpload(e) {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setUploadingHero(true);
-        const { url, error } = await uploadBrandingImage(file, 'hero');
-        if (error) {
-            showToast('Failed to upload hero image', 'error');
-        } else {
-            setBranding(prev => ({ ...prev, hero_image_url: url }));
-            showToast('Hero image uploaded!', 'success');
-        }
-        setUploadingHero(false);
-    }
 
     function handleChange(field, value) {
         setBranding(prev => ({ ...prev, [field]: value }));
     }
 
-    function handleStatChange(index, field, value) {
+    const updateHighlights = (updater) => {
         setBranding(prev => {
-            const newStats = [...(prev.stats || [])];
-            newStats[index] = { ...newStats[index], [field]: value };
-            return { ...prev, stats: newStats };
+            const current = Array.isArray(prev.highlights) ? prev.highlights : [];
+            const next = typeof updater === 'function' ? updater(current) : updater;
+            return { ...prev, highlights: next };
         });
-    }
+    };
 
-    function addStat() {
-        setBranding(prev => ({
-            ...prev,
-            stats: [...(prev.stats || []), { label: '', value: '' }]
-        }));
-    }
+    const handleAddHighlightSection = () => {
+        const newSection = {
+            id: createId('highlight'),
+            title: '',
+            target: 'none',
+            custom_url: '',
+            media: []
+        };
+        updateHighlights((sections) => [...sections, newSection]);
+    };
 
-    function removeStat(index) {
-        setBranding(prev => ({
-            ...prev,
-            stats: prev.stats.filter((_, i) => i !== index)
+    const handleRemoveHighlightSection = (sectionId) => {
+        updateHighlights((sections) => sections.filter((section) => section.id !== sectionId));
+        setHighlightUrlDrafts((prev) => {
+            const next = { ...prev };
+            delete next[sectionId];
+            return next;
+        });
+    };
+
+    const updateHighlightSection = (sectionId, updates) => {
+        updateHighlights((sections) => sections.map((section) => {
+            if (section.id !== sectionId) return section;
+            return { ...section, ...updates };
         }));
-    }
+    };
+
+    const handleHighlightTargetChange = (sectionId, target) => {
+        updateHighlights((sections) => sections.map((section) => {
+            if (section.id !== sectionId) return section;
+            const next = { ...section, target };
+            if (target !== 'custom') {
+                next.custom_url = '';
+            }
+            return next;
+        }));
+    };
+
+    const handleAddHighlightMediaUrl = (sectionId) => {
+        const rawUrl = highlightUrlDrafts[sectionId] || '';
+        const url = rawUrl.trim();
+        if (!url) return;
+
+        updateHighlights((sections) => sections.map((section) => {
+            if (section.id !== sectionId) return section;
+            const media = Array.isArray(section.media) ? section.media : [];
+            const nextMedia = [
+                ...media,
+                {
+                    id: createId('media'),
+                    url,
+                    type: resolveMediaType({ url }),
+                    position: media.length
+                }
+            ].map((item, index) => ({ ...item, position: index }));
+            return { ...section, media: nextMedia };
+        }));
+
+        setHighlightUrlDrafts((prev) => ({ ...prev, [sectionId]: '' }));
+    };
+
+    const handleRemoveHighlightMedia = (sectionId, mediaId) => {
+        updateHighlights((sections) => sections.map((section) => {
+            if (section.id !== sectionId) return section;
+            const nextMedia = (section.media || [])
+                .filter((item) => item.id !== mediaId)
+                .map((item, index) => ({ ...item, position: index }));
+            return { ...section, media: nextMedia };
+        }));
+    };
+
+    const handleHighlightMediaUpload = async (sectionId, event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        event.target.value = '';
+
+        if (file.size > 50 * 1024 * 1024) {
+            showToast('File too large. Max size is 50MB', 'error');
+            return;
+        }
+
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+            showToast('Invalid file type. Use image or video files', 'error');
+            return;
+        }
+
+        setHighlightUploads((prev) => ({ ...prev, [sectionId]: true }));
+        const { url, resourceType, error } = await uploadBrandingImage(file, 'highlight');
+        if (error) {
+            showToast('Upload failed: ' + (error.message || 'Unknown error'), 'error');
+            console.error('Highlight upload error:', error);
+        } else {
+            updateHighlights((sections) => sections.map((section) => {
+                if (section.id !== sectionId) return section;
+                const media = Array.isArray(section.media) ? section.media : [];
+                const nextMedia = [
+                    ...media,
+                    {
+                        id: createId('media'),
+                        url,
+                        type: resolveMediaType({ url, resourceType, fileType: file.type }),
+                        position: media.length
+                    }
+                ].map((item, index) => ({ ...item, position: index }));
+                return { ...section, media: nextMedia };
+            }));
+            showToast('Media uploaded!', 'success');
+        }
+        setHighlightUploads((prev) => ({ ...prev, [sectionId]: false }));
+    };
+
+    const handleHighlightMediaDragEnd = (sectionId, event) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        updateHighlights((sections) => sections.map((section) => {
+            if (section.id !== sectionId) return section;
+            const media = Array.isArray(section.media) ? section.media : [];
+            const oldIndex = media.findIndex((item) => item.id === active.id);
+            const newIndex = media.findIndex((item) => item.id === over.id);
+            if (oldIndex < 0 || newIndex < 0) return section;
+            const reordered = arrayMove(media, oldIndex, newIndex)
+                .map((item, index) => ({ ...item, position: index }));
+            return { ...section, media: reordered };
+        }));
+    };
+
+    const SortableHighlightMediaItem = ({ item, onRemove }) => {
+        const {
+            attributes,
+            listeners,
+            setNodeRef,
+            transform,
+            transition,
+            isDragging
+        } = useSortable({ id: item.id });
+
+        const style = {
+            transform: CSS.Transform.toString(transform),
+            transition,
+            opacity: isDragging ? 0.6 : 1
+        };
+
+        return (
+            <div ref={setNodeRef} style={style} className="highlight-media-item">
+                <div className="highlight-media-preview">
+                    {item.type === 'video' ? (
+                        <video src={item.url} muted preload="metadata" />
+                    ) : (
+                        <img src={item.url} alt="Highlight media" />
+                    )}
+                </div>
+                <div className="highlight-media-meta">
+                    <span className="highlight-media-type">{item.type}</span>
+                    <div className="highlight-media-actions">
+                        <button type="button" className="btn btn-secondary" onClick={onRemove}>Remove</button>
+                        <button type="button" className="drag-handle" {...attributes} {...listeners}>
+                            Drag
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
 
     if (loading) {
@@ -142,9 +364,18 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
     // Sample highlights for preview
     const sampleHighlights = [
         { id: 1, name: 'Services', image: branding.logo_url || 'https://via.placeholder.com/64' },
-        { id: 2, name: 'Portfolio', image: branding.hero_image_url || 'https://via.placeholder.com/64' },
+        { id: 2, name: 'Portfolio', image: 'https://via.placeholder.com/64' },
         { id: 3, name: 'Contact', image: 'https://via.placeholder.com/64' },
     ];
+
+    const previewHighlights = (branding.highlights || []).length
+        ? branding.highlights.map((section, index) => {
+            const media = Array.isArray(section.media) ? section.media : [];
+            const cover = media[0]?.url || branding.logo_url || 'https://via.placeholder.com/64';
+            const name = section.title || `Highlight ${index + 1}`;
+            return { id: section.id || `highlight-${index + 1}`, name, image: cover };
+        })
+        : sampleHighlights;
 
     // Sample grid items for preview
     const sampleGridItems = [
@@ -384,7 +615,7 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                             paddingBottom: '8px',
                             marginBottom: '16px'
                         }}>
-                            {sampleHighlights.map(highlight => (
+                            {previewHighlights.map(highlight => (
                                 <div key={highlight.id} style={{
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -531,60 +762,6 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                     </div>
                 </div>
 
-                {/* Hero Section */}
-                <div className="settings-section">
-                    <h3>🏞️ Hero Banner</h3>
-
-                    <div className="form-group">
-                        <label>Tagline (Main Heading)</label>
-                        <input
-                            type="text"
-                            value={branding.tagline}
-                            onChange={(e) => handleChange('tagline', e.target.value)}
-                            placeholder="Find Your Dream Home"
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label>Subtitle</label>
-                        <input
-                            type="text"
-                            value={branding.subtitle}
-                            onChange={(e) => handleChange('subtitle', e.target.value)}
-                            placeholder="Browse our exclusive portfolio..."
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label>Hero Banner Image</label>
-                        <div
-                            className="upload-area hero-upload"
-                            onClick={() => heroInputRef.current?.click()}
-                            style={{
-                                backgroundImage: branding.hero_image_url ? `url(${branding.hero_image_url})` : 'none',
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center'
-                            }}
-                        >
-                            <span style={{
-                                background: 'rgba(0,0,0,0.5)',
-                                color: 'white',
-                                padding: '0.5rem 1rem',
-                                borderRadius: '8px'
-                            }}>
-                                {uploadingHero ? 'Uploading...' : '📤 Click to upload hero image'}
-                            </span>
-                        </div>
-                        <input
-                            ref={heroInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleHeroUpload}
-                            style={{ display: 'none' }}
-                        />
-                    </div>
-                </div>
-
                 {/* Social Media Section */}
                 <div className="settings-section">
                     <h3>📱 Social Media Links</h3>
@@ -656,48 +833,125 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                     </div>
                 </div>
 
-                {/* Team Stats Section */}
+                {/* Highlights Section */}
                 <div className="settings-section">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h3 style={{ margin: 0 }}>📊 Performance Stats</h3>
-                        <button className="btn btn-secondary btn-sm" onClick={addStat} style={{ padding: '4px 12px', fontSize: '12px' }}>
-                            + Add Stat
+                    <h3>✨ Highlights</h3>
+                    <p className="section-hint">Create highlight sections with media and link targets.</p>
+                    <div className="highlights-editor">
+                        {branding.highlights && branding.highlights.length > 0 ? (
+                            branding.highlights.map((section, index) => {
+                                const media = Array.isArray(section.media) ? section.media : [];
+                                const mediaIds = media.map((item) => item.id);
+                                return (
+                                    <div key={section.id} className="highlight-section">
+                                        <div className="highlight-section-header">
+                                            <div className="highlight-section-title">
+                                                <span>Section {index + 1}</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary"
+                                                onClick={() => handleRemoveHighlightSection(section.id)}
+                                            >
+                                                Remove Section
+                                            </button>
+                                        </div>
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label>Title</label>
+                                                <input
+                                                    type="text"
+                                                    value={section.title || ''}
+                                                    onChange={(e) => updateHighlightSection(section.id, { title: e.target.value })}
+                                                    placeholder="Section title"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Target</label>
+                                                <select
+                                                    value={section.target || 'none'}
+                                                    onChange={(e) => handleHighlightTargetChange(section.id, e.target.value)}
+                                                >
+                                                    {highlightTargets.map((option) => (
+                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        {section.target === 'custom' && (
+                                            <div className="form-group">
+                                                <label>Custom Target ID</label>
+                                                <input
+                                                    type="text"
+                                                    value={section.custom_url || ''}
+                                                    onChange={(e) => updateHighlightSection(section.id, { custom_url: e.target.value })}
+                                                    placeholder="section-id or https://example.com"
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="highlight-media">
+                                            <div className="highlight-media-toolbar">
+                                                <label className="btn btn-secondary highlight-upload">
+                                                    {highlightUploads[section.id] ? 'Uploading...' : 'Upload media'}
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*,video/*"
+                                                        onChange={(e) => handleHighlightMediaUpload(section.id, e)}
+                                                        disabled={highlightUploads[section.id]}
+                                                    />
+                                                </label>
+                                                <div className="highlight-url">
+                                                    <input
+                                                        type="url"
+                                                        value={highlightUrlDrafts[section.id] || ''}
+                                                        onChange={(e) => setHighlightUrlDrafts((prev) => ({
+                                                            ...prev,
+                                                            [section.id]: e.target.value
+                                                        }))}
+                                                        placeholder="Paste image or video URL"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary"
+                                                        onClick={() => handleAddHighlightMediaUrl(section.id)}
+                                                        disabled={!highlightUrlDrafts[section.id]}
+                                                    >
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {media.length === 0 ? (
+                                                <div className="highlight-empty">No media yet. Upload or paste a URL.</div>
+                                            ) : (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragEnd={(event) => handleHighlightMediaDragEnd(section.id, event)}
+                                                >
+                                                    <SortableContext items={mediaIds} strategy={rectSortingStrategy}>
+                                                        <div className="highlight-media-grid">
+                                                            {media.map((item) => (
+                                                                <SortableHighlightMediaItem
+                                                                    key={item.id}
+                                                                    item={item}
+                                                                    onRemove={() => handleRemoveHighlightMedia(section.id, item.id)}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </SortableContext>
+                                                </DndContext>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div className="highlight-empty">No highlights yet. Add your first section.</div>
+                        )}
+                        <button type="button" className="btn btn-primary" onClick={handleAddHighlightSection}>
+                            Add Section
                         </button>
                     </div>
-
-                    {(branding.stats || []).map((stat, idx) => (
-                        <div key={idx} className="form-row" style={{ marginBottom: '1rem', alignItems: 'flex-end' }}>
-                            <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label>Label</label>
-                                <input
-                                    type="text"
-                                    value={stat.label}
-                                    onChange={(e) => handleStatChange(idx, 'label', e.target.value)}
-                                    placeholder="e.g. Properties Sold"
-                                />
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label>Value</label>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <input
-                                        type="text"
-                                        value={stat.value}
-                                        onChange={(e) => handleStatChange(idx, 'value', e.target.value)}
-                                        placeholder="e.g. 500+"
-                                    />
-                                    <button
-                                        onClick={() => removeStat(idx)}
-                                        style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0 12px', cursor: 'pointer' }}
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                    {(!branding.stats || branding.stats.length === 0) && (
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontStyle: 'italic' }}>No stats added yet.</p>
-                    )}
                 </div>
 
 
@@ -849,6 +1103,152 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                     font-size: 14px;
                 }
 
+                .form-group select {
+                    width: 100%;
+                    padding: 10px 12px;
+                    border: 1px solid var(--border-color, #444);
+                    border-radius: 6px;
+                    background: var(--bg-primary, #121220);
+                    color: var(--text-primary, #fff);
+                    font-size: 14px;
+                }
+
+                .section-hint {
+                    margin: -8px 0 12px;
+                    color: var(--text-secondary, #aaa);
+                    font-size: 0.85rem;
+                }
+
+                .highlights-editor {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }
+
+                .highlight-section {
+                    padding: 16px;
+                    border: 1px solid var(--border-color, #444);
+                    border-radius: 8px;
+                    background: var(--bg-primary, #141427);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .highlight-section-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 12px;
+                }
+
+                .highlight-section-title {
+                    font-weight: 600;
+                }
+
+                .highlight-media {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .highlight-media-toolbar {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+
+                .highlight-upload {
+                    width: fit-content;
+                    cursor: pointer;
+                }
+
+                .highlight-upload input {
+                    display: none;
+                }
+
+                .highlight-url {
+                    display: flex;
+                    gap: 8px;
+                }
+
+                .highlight-url input {
+                    flex: 1;
+                }
+
+                .highlight-media-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                    gap: 12px;
+                }
+
+                .highlight-media-item {
+                    background: var(--bg-secondary, #1e1e2e);
+                    border-radius: 8px;
+                    overflow: hidden;
+                    border: 1px solid var(--border-color, #333);
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                .highlight-media-preview {
+                    background: #0f0f1a;
+                    height: 120px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                .highlight-media-preview img,
+                .highlight-media-preview video {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+
+                .highlight-media-meta {
+                    padding: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+
+                .highlight-media-type {
+                    font-size: 0.75rem;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    color: var(--text-secondary, #aaa);
+                }
+
+                .highlight-media-actions {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .drag-handle {
+                    border: 1px solid var(--border-color, #444);
+                    background: transparent;
+                    color: var(--text-secondary, #aaa);
+                    border-radius: 6px;
+                    padding: 6px 10px;
+                    font-size: 12px;
+                    cursor: grab;
+                }
+
+                .drag-handle:active {
+                    cursor: grabbing;
+                }
+
+                .highlight-empty {
+                    padding: 12px;
+                    background: rgba(255, 255, 255, 0.05);
+                    border-radius: 6px;
+                    color: var(--text-secondary, #aaa);
+                    font-size: 0.85rem;
+                }
+
                 .upload-area {
                     border: 2px dashed var(--border-color, #444);
                     border-radius: 8px;
@@ -865,10 +1265,6 @@ export default function TeamBrandingSettings({ teamId, onClose }) {
                 .upload-area:hover {
                     border-color: var(--primary, #6366f1);
                     background: rgba(99, 102, 241, 0.05);
-                }
-
-                .hero-upload {
-                    min-height: 150px;
                 }
 
                 .modal-footer {

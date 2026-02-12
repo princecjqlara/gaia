@@ -193,7 +193,6 @@ jest.mock("../components/AdminSettingsModal", () => () => null);
 jest.mock("../components/TeamPerformanceModal", () => () => null);
 jest.mock("../components/NotificationsPanel", () => () => null);
 jest.mock("../components/CommunicationLog", () => () => null);
-jest.mock("../components/ReportsDashboard", () => () => null);
 jest.mock("../components/CalendarView", () => () => null);
 jest.mock("../components/HistoryModal", () => () => null);
 jest.mock("../components/LoginModal", () => () => null);

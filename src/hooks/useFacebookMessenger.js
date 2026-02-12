@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import facebookService from '../services/facebookService';
 import { analyzeConversation } from '../services/aiConversationAnalyzer';
 import { autoAssignService } from '../services/autoAssignService';
@@ -7,6 +7,8 @@ import { autoAssignService } from '../services/autoAssignService';
  * React hook for Facebook Messenger functionality
  */
 export function useFacebookMessenger() {
+    const INITIAL_MESSAGE_LIMIT = 8;
+    const MESSAGE_PAGE_SIZE = 15;
     const [conversations, setConversations] = useState([]);
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -47,6 +49,13 @@ export function useFacebookMessenger() {
     const [conversationSearchResults, setConversationSearchResults] = useState([]);
     const [searchingConversations, setSearchingConversations] = useState(false);
 
+    const selectedConversationRef = useRef(null);
+    const messageLimitRef = useRef(INITIAL_MESSAGE_LIMIT);
+
+    useEffect(() => {
+        selectedConversationRef.current = selectedConversation;
+    }, [selectedConversation]);
+
     // Load connected pages
     const loadConnectedPages = useCallback(async () => {
         try {
@@ -86,6 +95,74 @@ export function useFacebookMessenger() {
         });
     };
 
+    // Hydrate conversation previews using latest messages (fallback when conversation row is stale)
+    const hydrateConversationPreviews = useCallback(async (conversationList) => {
+        try {
+            if (!conversationList || conversationList.length === 0) return conversationList;
+
+            const conversationIds = conversationList
+                .map(conv => conv.conversation_id)
+                .filter(Boolean);
+
+            if (conversationIds.length === 0) return conversationList;
+
+            const [latestMessages, unreadMessages] = await Promise.all([
+                facebookService.getLatestMessagesForConversations(conversationIds, 500),
+                facebookService.getUnreadMessagesForConversations(conversationIds, 1000)
+            ]);
+
+            if (!latestMessages || latestMessages.length === 0) return conversationList;
+
+            const latestByConversation = new Map();
+            for (const msg of latestMessages) {
+                if (!latestByConversation.has(msg.conversation_id)) {
+                    latestByConversation.set(msg.conversation_id, msg);
+                }
+            }
+
+            const unreadCountByConversation = new Map();
+            if (unreadMessages && unreadMessages.length > 0) {
+                for (const msg of unreadMessages) {
+                    const current = unreadCountByConversation.get(msg.conversation_id) || 0;
+                    unreadCountByConversation.set(msg.conversation_id, current + 1);
+                }
+            }
+
+            const hydrated = conversationList.map(conv => {
+                const latest = latestByConversation.get(conv.conversation_id);
+                if (!latest) return conv;
+
+                const isActiveConversation =
+                    selectedConversationRef.current?.conversation_id === conv.conversation_id;
+                const inboundUnread = latest.is_from_page === false;
+
+                let nextUnread = conv.unread_count || 0;
+                if (isActiveConversation) {
+                    nextUnread = 0;
+                } else if (unreadCountByConversation.has(conv.conversation_id)) {
+                    nextUnread = unreadCountByConversation.get(conv.conversation_id);
+                } else if (inboundUnread) {
+                    nextUnread = Math.max(nextUnread, 1);
+                }
+
+                return {
+                    ...conv,
+                    last_message_text: latest.message_text || conv.last_message_text,
+                    last_message_time: latest.timestamp || conv.last_message_time,
+                    last_message_from_page: latest.is_from_page,
+                    unread_count: nextUnread
+                };
+            });
+
+            return hydrated.sort((a, b) =>
+                new Date(b.last_message_time || 0) - new Date(a.last_message_time || 0)
+            );
+        } catch (err) {
+            console.error('Error hydrating conversation previews:', err);
+            return conversationList;
+        }
+    }, []);
+
     // Load conversations with pagination
     // silent = true prevents loading state from causing UI flicker
     const loadConversations = useCallback(async (pageId = null, reset = true, silent = false) => {
@@ -100,22 +177,23 @@ export function useFacebookMessenger() {
 
             // Deduplicate to prevent same contact showing multiple times
             const dedupedConversations = deduplicateByParticipant(result.conversations);
+            const hydratedConversations = await hydrateConversationPreviews(dedupedConversations);
 
             if (reset) {
-                setConversations(dedupedConversations);
+                setConversations(hydratedConversations);
                 setConversationPage(1);
             } else {
-                setConversations(prev => deduplicateByParticipant([...prev, ...dedupedConversations]));
+                setConversations(prev => deduplicateByParticipant([...prev, ...hydratedConversations]));
             }
 
             setHasMoreConversations(result.hasMore);
             setTotalConversations(result.total);
 
             // Calculate unread count
-            const totalUnread = dedupedConversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+            const totalUnread = hydratedConversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
             setUnreadCount(prev => reset ? totalUnread : prev + totalUnread);
 
-            return dedupedConversations;
+            return hydratedConversations;
         } catch (err) {
             console.error('Error loading conversations:', err);
             setError(err.message);
@@ -152,11 +230,13 @@ export function useFacebookMessenger() {
     }, [conversationPage, hasMoreConversations, loading]);
 
     // Load messages for a conversation
-    const loadMessages = useCallback(async (conversationId) => {
+    const loadMessages = useCallback(async (conversationId, limit = messageLimitRef.current || MESSAGE_PAGE_SIZE) => {
         try {
             setLoading(true);
-            const msgs = await facebookService.getMessages(conversationId);
+            const msgs = await facebookService.getMessages(conversationId, limit);
             setMessages(msgs);
+            setHasMoreMessages(msgs.length === limit);
+            messageLimitRef.current = limit;
 
             // Mark messages as read
             await facebookService.markMessagesAsRead(conversationId);
@@ -214,19 +294,44 @@ export function useFacebookMessenger() {
         if (conversation) {
             try {
                 setLoading(true);
+                messageLimitRef.current = INITIAL_MESSAGE_LIMIT;
+                const initialLimit = messageLimitRef.current;
 
-                // First, sync messages from Facebook to get the latest
-                await facebookService.syncMessages(
+                // Load recent messages from database first (fast)
+                const msgs = await facebookService.getMessages(
                     conversation.conversation_id,
-                    conversation.page_id
+                    initialLimit
                 );
-
-                // Then load messages from database
-                const msgs = await facebookService.getMessages(conversation.conversation_id);
                 setMessages(msgs);
+                setHasMoreMessages(msgs.length === initialLimit);
 
                 // Mark messages as read
                 await facebookService.markMessagesAsRead(conversation.conversation_id);
+
+                // Sync latest messages in the background
+                facebookService
+                    .syncMessages(
+                        conversation.conversation_id,
+                        conversation.page_id
+                    )
+                    .then(async () => {
+                        if (
+                            selectedConversationRef.current?.conversation_id !==
+                            conversation.conversation_id
+                        ) {
+                            return;
+                        }
+
+                        const syncedMsgs = await facebookService.getMessages(
+                            conversation.conversation_id,
+                            initialLimit
+                        );
+                        setMessages(syncedMsgs);
+                        setHasMoreMessages(syncedMsgs.length === initialLimit);
+                    })
+                    .catch((syncError) => {
+                        console.warn('Background sync failed:', syncError);
+                    });
 
                 // Load automatic insights (booking status, timeline, stats, AI)
                 const insights = await facebookService.getConversationInsights(
@@ -261,9 +366,17 @@ export function useFacebookMessenger() {
 
         try {
             // Silently sync and get messages without clearing UI
-            await facebookService.syncMessages(conversationId, pageId);
-            const msgs = await facebookService.getMessages(conversationId);
+            try {
+                await facebookService.syncMessages(conversationId, pageId);
+            } catch (syncError) {
+                console.warn('Silent sync failed, falling back to local messages:', syncError);
+            }
+
+            const currentLimit = messageLimitRef.current || MESSAGE_PAGE_SIZE;
+            const msgs = await facebookService.getMessages(conversationId, currentLimit);
             setMessages(msgs);
+            setHasMoreMessages(msgs.length === currentLimit);
+            messageLimitRef.current = currentLimit;
 
             // Silently mark as read
             await facebookService.markMessagesAsRead(conversationId);
@@ -657,7 +770,7 @@ export function useFacebookMessenger() {
     }, [selectedConversation, loadMessages]);
 
     // Load more (older) messages - for scroll-up pagination
-    const loadMoreMessages = useCallback(async () => {
+    const loadMoreMessages = useCallback(async (limit = MESSAGE_PAGE_SIZE) => {
         if (!selectedConversation || messages.length === 0) return [];
 
         try {
@@ -667,13 +780,18 @@ export function useFacebookMessenger() {
 
             const olderMessages = await facebookService.getMoreMessages(
                 selectedConversation.conversation_id,
-                oldestMessage.timestamp
+                oldestMessage.timestamp,
+                limit
             );
 
             if (olderMessages.length > 0) {
                 // Prepend older messages
                 setMessages(prev => [...olderMessages, ...prev]);
+                const currentLimit = messageLimitRef.current || messages.length || MESSAGE_PAGE_SIZE;
+                messageLimitRef.current = currentLimit + olderMessages.length;
             }
+
+            setHasMoreMessages(olderMessages.length === limit);
 
             return olderMessages;
         } catch (err) {
@@ -940,30 +1058,55 @@ export function useFacebookMessenger() {
             messageSubscription = facebookService.subscribeToMessages((payload) => {
                 console.log('New message received:', payload);
 
+                const isFromPage = payload.new?.is_from_page === true;
+                const conversationId = payload.new?.conversation_id;
+                if (!conversationId) {
+                    return;
+                }
+
                 // If viewing the same conversation, add the message
                 if (selectedConversation &&
-                    payload.new.conversation_id === selectedConversation.conversation_id) {
+                    conversationId === selectedConversation.conversation_id) {
                     setMessages(prev => [...prev, payload.new]);
                 }
 
                 // Update the conversation in the list in-place (don't reset pagination)
                 setConversations(prev => {
-                    const exists = prev.some(conv => conv.conversation_id === payload.new.conversation_id);
+                    const exists = prev.some(conv => conv.conversation_id === conversationId);
                     if (exists) {
                         // Update existing conversation
-                        return prev.map(conv =>
-                            conv.conversation_id === payload.new.conversation_id
-                                ? { ...conv, last_message_text: payload.new.message_text, last_message_time: payload.new.timestamp }
-                                : conv
-                        );
+                        return prev.map(conv => {
+                            if (conv.conversation_id !== conversationId) return conv;
+
+                            const isActiveConversation = selectedConversation?.conversation_id === conversationId;
+                            const shouldIncrementUnread = !isFromPage && !isActiveConversation;
+                            const nextUnreadCount = shouldIncrementUnread
+                                ? (conv.unread_count || 0) + 1
+                                : conv.unread_count || 0;
+
+                            return {
+                                ...conv,
+                                last_message_text: payload.new.message_text || '[Attachment]',
+                                last_message_time: payload.new.timestamp,
+                                last_message_from_page: isFromPage,
+                                unread_count: nextUnreadCount
+                            };
+                        });
                     }
                     // Conversation not in current list - will be handled by conversation subscription
                     return prev;
                 });
 
+                if (!isFromPage) {
+                    const isActiveConversation = selectedConversation?.conversation_id === conversationId;
+                    if (!isActiveConversation) {
+                        setUnreadCount(prev => prev + 1);
+                    }
+                }
+
                 // If conversation is not in the list, trigger silent refresh to bring it to top
                 setConversations(prev => {
-                    const exists = prev.some(conv => conv.conversation_id === payload.new.conversation_id);
+                    const exists = prev.some(conv => conv.conversation_id === conversationId);
                     if (!exists) {
                         // Trigger async refresh (via setTimeout to avoid blocking)
                         setTimeout(() => {

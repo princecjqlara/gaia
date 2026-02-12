@@ -22,6 +22,10 @@ export default function AIControlPanel({ conversationId, participantName, onClos
     const [activeGoal, setActiveGoal] = useState(null);
     const [showGoalSelector, setShowGoalSelector] = useState(false);
     const [adminConfig, setAdminConfig] = useState(null);
+    const [projectedIntuitionTimes, setProjectedIntuitionTimes] = useState([]);
+    const [intuitionFollowUpCount, setIntuitionFollowUpCount] = useState(0);
+    const [intuitionFollowUpSentCount, setIntuitionFollowUpSentCount] = useState(0);
+    const [intuitionBaseTime, setIntuitionBaseTime] = useState(null);
 
     const supabase = getSupabaseClient();
 
@@ -32,19 +36,49 @@ export default function AIControlPanel({ conversationId, participantName, onClos
         }
     }, [conversationId]);
 
+    useEffect(() => {
+        if (!conversationId) {
+            return undefined;
+        }
+
+        const channel = supabase
+            .channel(`ai_panel_messages_${conversationId}`)
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'facebook_messages', filter: `conversation_id=eq.${conversationId}` },
+                (payload) => {
+                    if (payload?.new?.is_from_page === false) {
+                        loadAllData();
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            channel.unsubscribe();
+        };
+    }, [conversationId]);
+
     const loadAllData = async () => {
         setLoading(true);
         try {
-            const [safety, followUps, time, convData, goal, actions] = await Promise.all([
+            const [safety, followUps, time, convData, goal, actions, recentInboundMessage] = await Promise.all([
                 checkSafetyStatus(conversationId),
                 getScheduledFollowUps(conversationId, { includeAll: true }),
                 calculateBestTimeToContact(conversationId),
                 supabase.from('facebook_conversations')
-                    .select('agent_context, intuition_followup_disabled, best_time_scheduling_disabled')
+                    .select('agent_context, intuition_followup_disabled, best_time_scheduling_disabled, last_message_time')
                     .eq('conversation_id', conversationId)
                     .single(),
                 getActiveGoal(conversationId),
-                loadActionLog()
+                loadActionLog(),
+                supabase
+                    .from('facebook_messages')
+                    .select('timestamp')
+                    .eq('conversation_id', conversationId)
+                    .eq('is_from_page', false)
+                    .order('timestamp', { ascending: false })
+                    .limit(1)
             ]);
 
             setSafetyStatus(safety);
@@ -95,6 +129,114 @@ export default function AIControlPanel({ conversationId, participantName, onClos
             }
 
             setAdminConfig(loadedConfig);
+
+            const fibonacci = (n) => {
+                if (n <= 1) return 1;
+                let a = 1;
+                let b = 2;
+                for (let i = 2; i < n; i++) {
+                    const next = a + b;
+                    a = b;
+                    b = next;
+                }
+                return b;
+            };
+
+            const conversationTime = convData?.data?.last_message_time
+                ? new Date(convData.data.last_message_time)
+                : null;
+            const recentInboundTime = recentInboundMessage?.data?.[0]?.timestamp
+                ? new Date(recentInboundMessage.data[0].timestamp)
+                : null;
+
+            const hasConversationTime = conversationTime && !Number.isNaN(conversationTime.getTime());
+            const hasRecentInboundTime = recentInboundTime && !Number.isNaN(recentInboundTime.getTime());
+
+            const baseMessageTime = hasRecentInboundTime
+                ? recentInboundTime
+                : hasConversationTime
+                    ? conversationTime
+                    : null;
+
+            setIntuitionBaseTime(baseMessageTime);
+
+            const aggressivenessShift = Number.isFinite(loadedConfig?.intuition_fibonacci_shift)
+                ? loadedConfig.intuition_fibonacci_shift
+                : 0;
+            const fibIndexShift = -aggressivenessShift;
+
+            let followUpCountValue = 0;
+            let sentFollowUpCountValue = 0;
+
+            try {
+                let followUpCountQuery = supabase
+                    .from('ai_followup_schedule')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('conversation_id', conversationId)
+                    .eq('follow_up_type', 'intuition')
+                    .neq('status', 'cancelled');
+
+                let sentFollowUpCountQuery = supabase
+                    .from('ai_followup_schedule')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('conversation_id', conversationId)
+                    .eq('follow_up_type', 'intuition')
+                    .eq('status', 'sent');
+
+                if (baseMessageTime) {
+                    const baseIso = baseMessageTime.toISOString();
+                    followUpCountQuery = followUpCountQuery.gte('scheduled_at', baseIso);
+                    sentFollowUpCountQuery = sentFollowUpCountQuery.gte('scheduled_at', baseIso);
+                }
+
+                const [followUpCountResult, sentFollowUpCountResult] = await Promise.all([
+                    followUpCountQuery,
+                    sentFollowUpCountQuery
+                ]);
+
+                followUpCountValue = followUpCountResult?.count || 0;
+                sentFollowUpCountValue = sentFollowUpCountResult?.count || 0;
+            } catch (err) {
+                console.log('[AI Panel] Could not load intuition follow-up counts:', err.message);
+            }
+
+            setIntuitionFollowUpCount(followUpCountValue);
+            setIntuitionFollowUpSentCount(sentFollowUpCountValue);
+
+            const getStepDuration = (fibIndex) => {
+                const fibHours = fibonacci(fibIndex);
+                const durationMs = fibHours >= 24
+                    ? Math.ceil(fibHours / 24) * 24 * 60 * 60 * 1000
+                    : fibHours * 60 * 60 * 1000;
+                return { fibHours, durationMs };
+            };
+
+            if (baseMessageTime) {
+                const nextStep = followUpCountValue + 1;
+                const maxStep = nextStep + 2;
+                const projectedTimes = [];
+                let cumulativeMs = 0;
+
+                for (let step = 1; step <= maxStep; step++) {
+                    const fibIndex = Math.max(1, step + fibIndexShift);
+                    const { fibHours, durationMs } = getStepDuration(fibIndex);
+                    cumulativeMs += durationMs;
+
+                    if (step >= nextStep) {
+                        projectedTimes.push({
+                            scheduledAt: new Date(baseMessageTime.getTime() + cumulativeMs),
+                            fibHours,
+                            fibIndex,
+                            shift: aggressivenessShift,
+                            step
+                        });
+                    }
+                }
+
+                setProjectedIntuitionTimes(projectedTimes);
+            } else {
+                setProjectedIntuitionTimes([]);
+            }
         } catch (error) {
             console.error('Error loading AI panel data:', error);
         }
@@ -338,6 +480,17 @@ export default function AIControlPanel({ conversationId, participantName, onClos
         }
     };
 
+    const intuitionFollowUps = [...scheduledFollowUps]
+        .filter((followUp) => followUp.follow_up_type === 'intuition')
+        .filter((followUp) => {
+            if (!intuitionBaseTime) {
+                return true;
+            }
+            const scheduledAt = new Date(followUp.scheduled_at);
+            return !Number.isNaN(scheduledAt.getTime()) && scheduledAt >= intuitionBaseTime;
+        })
+        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+
     if (loading) {
         return (
             <div style={styles.overlay}>
@@ -483,14 +636,21 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                     {/* Next Intuition Follow-up Section */}
                     <div style={styles.section}>
                         <h3 style={styles.sectionTitle}>🔮 Next Intuition Follow-up</h3>
-                        {scheduledFollowUps && scheduledFollowUps.length > 0 ? (
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                            Steps completed: {intuitionFollowUpSentCount} · Total since last contact: {intuitionFollowUpCount}
+                        </div>
+                        {intuitionFollowUps.length > 0 ? (
                             <div style={styles.statusCard}>
-                                {scheduledFollowUps.slice(0, 3).map((followUp, idx) => (
+                                {intuitionFollowUps
+                                    .slice(0, 3)
+                                    .map((followUp, idx) => {
+                                        const stepNumber = intuitionFollowUpSentCount + idx + 1;
+                                        return (
                                     <div key={idx} style={{
                                         ...styles.statusRow,
-                                        marginBottom: idx < scheduledFollowUps.length - 1 ? '8px' : 0,
-                                        paddingBottom: idx < scheduledFollowUps.length - 1 ? '8px' : 0,
-                                        borderBottom: idx < scheduledFollowUps.length - 1 ? '1px solid #374151' : 'none'
+                                        marginBottom: idx < intuitionFollowUps.length - 1 ? '8px' : 0,
+                                        paddingBottom: idx < intuitionFollowUps.length - 1 ? '8px' : 0,
+                                        borderBottom: idx < intuitionFollowUps.length - 1 ? '1px solid #374151' : 'none'
                                     }}>
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: '12px', color: '#e5e7eb' }}>
@@ -512,12 +672,53 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                     {followUp.reason}
                                                 </div>
                                             )}
+                                            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
+                                                Step {stepNumber}
+                                            </div>
                                         </div>
                                         <span style={{
                                             ...styles.badge,
                                             ...(followUp.status === 'pending' ? styles.badgeGreen : styles.badgeRed)
                                         }}>
                                             {followUp.status || 'pending'}
+                                        </span>
+                                    </div>
+                                        );
+                                    })}
+                            </div>
+                        ) : projectedIntuitionTimes.length > 0 ? (
+                            <div style={styles.statusCard}>
+                                {projectedIntuitionTimes.map((projection, idx) => (
+                                    <div key={idx} style={{
+                                        ...styles.statusRow,
+                                        marginBottom: idx < projectedIntuitionTimes.length - 1 ? '8px' : 0,
+                                        paddingBottom: idx < projectedIntuitionTimes.length - 1 ? '8px' : 0,
+                                        borderBottom: idx < projectedIntuitionTimes.length - 1 ? '1px solid #374151' : 'none'
+                                    }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '12px', color: '#e5e7eb' }}>
+                                                {new Date(projection.scheduledAt).toLocaleDateString('en-US', {
+                                                    weekday: 'short',
+                                                    month: 'short',
+                                                    day: 'numeric'
+                                                })}
+                                            </div>
+                                            <div style={{ fontSize: '14px', color: '#10b981', fontWeight: '500' }}>
+                                                {new Date(projection.scheduledAt).toLocaleTimeString('en-US', {
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                    hour12: true
+                                                })}
+                                            </div>
+                                            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
+                                                Projected · Step {projection.step} · Fib {projection.fibHours}h (shift {projection.shift})
+                                            </div>
+                                        </div>
+                                        <span style={{
+                                            ...styles.badge,
+                                            ...styles.badgePurple
+                                        }}>
+                                            projected
                                         </span>
                                     </div>
                                 ))}
@@ -540,30 +741,64 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
                                                 Optimal Contact Windows
                                             </div>
-                                            {bestTime.bestSlots.slice(0, 3).map((slot, idx) => {
-                                                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                                                const dayName = dayNames[slot.dayOfWeek] || 'Unknown';
-                                                const hour = slot.hourOfDay;
-                                                return (
-                                                    <div key={idx} style={{
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        padding: '4px 0'
-                                                    }}>
-                                                        <span style={{ fontSize: '13px', color: '#e5e7eb' }}>
-                                                            {dayName} {hour}:00 - {hour + 1}:00
-                                                        </span>
-                                                        <span style={{
-                                                            fontSize: '11px',
-                                                            color: '#10b981',
-                                                            fontWeight: '500'
-                                                        }}>
-                                                            {slot.score ? Math.round(slot.score * 100) : '—'}% match
-                                                        </span>
-                                                    </div>
+                                            {(() => {
+                                                const maxScore = bestTime.bestSlots.reduce(
+                                                    (max, slot) => Math.max(max, slot.score || 0),
+                                                    0
                                                 );
-                                            })}
+
+                                                return bestTime.bestSlots.map((slot, idx) => {
+                                                    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                                                    const dayName = dayNames[slot.dayOfWeek] || 'Unknown';
+                                                    const hour = slot.hourOfDay;
+                                                    const messageCount = slot.count ?? 0;
+                                                    const scoreRatio = maxScore > 0 ? (slot.score || 0) / maxScore : 0;
+                                                    const confidenceLevel = messageCount >= 8 ? 'High' : messageCount >= 4 ? 'Medium' : 'Low';
+                                                    const engagementNote = messageCount === 0
+                                                        ? 'No message history'
+                                                        : scoreRatio >= 0.7
+                                                            ? 'Top engagement'
+                                                            : scoreRatio >= 0.4
+                                                                ? 'Moderate engagement'
+                                                                : 'Low engagement';
+                                                    const confidenceReason = messageCount === 0
+                                                        ? engagementNote
+                                                        : `${messageCount} messages · ${engagementNote}`;
+
+                                                    return (
+                                                        <div key={idx} style={{
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            padding: '4px 0'
+                                                        }}>
+                                                            <span style={{ fontSize: '13px', color: '#e5e7eb' }}>
+                                                                {dayName} {hour}:00
+                                                            </span>
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                alignItems: 'flex-end',
+                                                                gap: '2px'
+                                                            }}>
+                                                                <span style={{
+                                                                    fontSize: '11px',
+                                                                    color: '#10b981',
+                                                                    fontWeight: '600'
+                                                                }}>
+                                                                    {confidenceLevel} confidence
+                                                                </span>
+                                                                <span style={{
+                                                                    fontSize: '10px',
+                                                                    color: '#9ca3af'
+                                                                }}>
+                                                                    {confidenceReason}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
                                         </div>
                                     </div>
                                 ) : bestTime.hourOfDay !== undefined ? (

@@ -9,14 +9,13 @@ import AdminSettingsModal from "./components/AdminSettingsModal";
 import TeamPerformanceModal from "./components/TeamPerformanceModal";
 import NotificationsPanel from "./components/NotificationsPanel";
 import CommunicationLog from "./components/CommunicationLog";
-import ReportsDashboard from "./components/ReportsDashboard";
 import CalendarView from "./components/CalendarView";
 import HistoryModal from "./components/HistoryModal";
 import LoginModal from "./components/LoginModal";
 import LandingPage from "./components/LandingPage";
 import ToastContainer from "./components/ToastContainer";
 import MeetingRoom from "./components/MeetingRoom";
-import MessengerInboxSimple from "./components/MessengerInboxSimple";
+import MessengerInbox from "./components/MessengerInbox";
 import AIAssistantWidget from "./components/AIAssistantWidget";
 import BookingPage from "./components/BookingPage";
 import TeamOnlinePanel from "./components/TeamOnlinePanel";
@@ -55,7 +54,6 @@ function App() {
   const [showTeamPerformance, setShowTeamPerformance] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCommunicationLog, setShowCommunicationLog] = useState(false);
-  const [showReports, setShowReports] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showMeetingRoom, setShowMeetingRoom] = useState(false);
@@ -653,7 +651,6 @@ function App() {
             onAddClient={handleOpenAddModal}
             onAdminSettings={() => setShowAdminSettings(true)}
             onNotifications={() => setShowNotifications(true)}
-            onReports={() => setShowReports(true)}
             onCalendar={() => setShowCalendar(true)}
             onTeamPerformance={() => setShowTeamPerformance(true)}
             onTeamOnline={() => setShowTeamOnlinePanel(true)}
@@ -824,6 +821,7 @@ function App() {
                 viewMode={viewMode}
                 onViewClient={handleOpenViewModal}
                 onEditClient={handleOpenEditModal}
+                onUpdateClient={updateClient}
                 onMoveClient={async (clientId, targetPhase) => {
                   try {
                     await moveClientToPhase(clientId, targetPhase);
@@ -849,7 +847,7 @@ function App() {
                     }}
                   />
                 </div>
-                <MessengerInboxSimple
+                <MessengerInbox
                   clients={clients}
                   users={allUsers}
                   currentUserId={currentUser?.id}
@@ -960,14 +958,6 @@ function App() {
             />
           )}
 
-          {showReports && (
-            <ReportsDashboard
-              clients={clients}
-              users={allUsers}
-              isOpen={showReports}
-              onClose={() => setShowReports(false)}
-            />
-          )}
 
           {showCalendar && (
             <CalendarView
@@ -1051,9 +1041,26 @@ function App() {
       {/* Public Properties Page */}
       {showPublicProperties && (
         <PublicPropertiesContainer
-          onClose={() => {
+          onClose={(redirect) => {
             setShowPublicProperties(false);
-            window.history.pushState({}, "", "/");
+            if (redirect?.teamId) {
+              setProfileTeamId(redirect.teamId);
+              setShowTeamProfile(true);
+              window.history.pushState(
+                {},
+                "",
+                redirect.profilePath || `/${redirect.teamId}`,
+              );
+              return;
+            }
+
+            setShowTeamProfile(false);
+            setProfileTeamId(null);
+            window.history.pushState(
+              {},
+              "",
+              redirect?.profilePath || "/",
+            );
           }}
         />
       )}

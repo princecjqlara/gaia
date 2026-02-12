@@ -608,14 +608,36 @@ class FacebookService {
 
             const fbData = await this.fetchMessagesFromFacebook(conversationId, page.page_access_token);
 
+            const messageIds = (fbData.data || [])
+                .map(msg => msg.id)
+                .filter(Boolean);
+            const existingReadMap = new Map();
+
+            if (messageIds.length > 0) {
+                const { data: existingRead } = await getSupabase()
+                    .from('facebook_messages')
+                    .select('message_id, is_read')
+                    .in('message_id', messageIds);
+
+                if (existingRead && existingRead.length > 0) {
+                    for (const row of existingRead) {
+                        existingReadMap.set(row.message_id, row.is_read);
+                    }
+                }
+            }
+
             const messages = [];
             for (const msg of fbData.data || []) {
+                const isFromPage = msg.from?.id === pageId;
+                const existingRead = existingReadMap.get(msg.id);
+                const isRead = isFromPage ? true : existingRead === true;
                 const messageData = {
                     conversation_id: conversationId,
                     message_id: msg.id,
                     sender_id: msg.from?.id,
                     sender_name: msg.from?.name,
-                    is_from_page: msg.from?.id === pageId,
+                    is_from_page: isFromPage,
+                    is_read: isRead,
                     message_text: msg.message,
                     attachments: msg.attachments?.data || [],
                     timestamp: msg.created_time
@@ -693,6 +715,53 @@ class FacebookService {
             return (data || []).reverse();
         } catch (error) {
             console.error('Error fetching messages:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get latest messages for a set of conversations
+     * Used to refresh list previews when conversations table is stale
+     */
+    async getLatestMessagesForConversations(conversationIds = [], limit = 200) {
+        try {
+            if (!conversationIds || conversationIds.length === 0) return [];
+
+            const { data, error } = await getSupabase()
+                .from('facebook_messages')
+                .select('conversation_id, message_text, timestamp, is_from_page, is_read')
+                .in('conversation_id', conversationIds)
+                .order('timestamp', { ascending: false })
+                .limit(limit);
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching latest messages for conversations:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get unread inbound messages for a set of conversations
+     */
+    async getUnreadMessagesForConversations(conversationIds = [], limit = 1000) {
+        try {
+            if (!conversationIds || conversationIds.length === 0) return [];
+
+            const { data, error } = await getSupabase()
+                .from('facebook_messages')
+                .select('conversation_id, timestamp')
+                .in('conversation_id', conversationIds)
+                .eq('is_from_page', false)
+                .or('is_read.is.null,is_read.eq.false')
+                .order('timestamp', { ascending: false })
+                .limit(limit);
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching unread messages for conversations:', error);
             return [];
         }
     }
@@ -2953,6 +3022,55 @@ class FacebookService {
         } catch (error) {
             console.error('Error saving AI analysis:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Get paged viewed properties for a participant
+     */
+    async getViewedProperties(participantId, visitorName, { page = 1, pageSize = 10 } = {}) {
+        try {
+            const pid = participantId?.trim();
+            const name = visitorName?.trim();
+            const orConditions = [];
+            if (pid) orConditions.push(`participant_id.eq.${pid}`);
+            if (name) orConditions.push(`visitor_name.eq.${name}`);
+
+            if (orConditions.length === 0) {
+                return { items: [], hasMore: false };
+            }
+
+            const start = (page - 1) * pageSize;
+            const end = start + pageSize - 1;
+
+            const { data, error } = await getSupabase()
+                .from('property_views')
+                .select('*, properties(title, price, images, address, id, bedrooms, bathrooms)')
+                .or(orConditions.join(','))
+                .order('created_at', { ascending: false })
+                .range(start, end);
+
+            if (error) {
+                return { items: [], hasMore: false, error: error.message };
+            }
+
+            const items = (data || []).map((view) => ({
+                id: view.property_id,
+                title: view.properties?.title,
+                price: view.properties?.price,
+                image: view.properties?.images?.[0] || null,
+                address: view.properties?.address,
+                bedrooms: view.properties?.bedrooms || 0,
+                bathrooms: view.properties?.bathrooms || 0,
+                viewedAt: view.created_at,
+                viewedGallery: view.gallery_viewed || false,
+                checkedPrice: true
+            }));
+
+            return { items, hasMore: items.length === pageSize };
+        } catch (error) {
+            console.error('Error getting viewed properties:', error);
+            return { items: [], hasMore: false, error: error.message };
         }
     }
 

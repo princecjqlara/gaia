@@ -53,48 +53,6 @@ const StatsGrid = ({ metrics, role }) => {
         </div>
       ))}
 
-      {role === 'admin' && (
-        <>
-          <div className="stat-card admin-only">
-            <div className="stat-icon">💰</div>
-            <div className="stat-value">{formatPrice(metrics.monthlyRevenue)}</div>
-            <div className="stat-label">Monthly Revenue</div>
-          </div>
-          <div className="stat-card admin-only">
-            <div className="stat-icon">📉</div>
-            <div className="stat-value">{formatPrice(metrics.totalExpenses)}</div>
-            <div className="stat-label">Total Expenses</div>
-          </div>
-          <div className="stat-card admin-only" style={{ border: '2px solid var(--success)' }}>
-            <div className="stat-icon">📈</div>
-            <div className="stat-value" style={{ color: 'var(--success)' }}>
-              {formatPrice(metrics.netProfit)}
-            </div>
-            <div className="stat-label">Net Profit</div>
-          </div>
-          <div className="stat-card admin-only" style={{ border: '2px solid var(--primary)' }}>
-            <div className="stat-icon">🎯</div>
-            <div className="stat-value" style={{ color: 'var(--primary)' }}>
-              {formatPrice(metrics.potentialProfit || 0)}
-            </div>
-            <div className="stat-label">Potential Profit</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Pipeline: {formatPrice(metrics.pipelineValue || 0)}
-            </div>
-          </div>
-          <div className="stat-card admin-only" style={{ border: '2px solid var(--warning)' }}>
-            <div className="stat-icon">💎</div>
-            <div className="stat-value" style={{ color: 'var(--warning)' }}>
-              {formatPrice(metrics.expectedValue || 0)}
-            </div>
-            <div className="stat-label">Expected Value</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              All active clients combined
-            </div>
-          </div>
-
-        </>
-      )}
     </section>
   );
 };

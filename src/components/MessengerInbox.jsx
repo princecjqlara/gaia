@@ -154,6 +154,15 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   const [showPropertySelector, setShowPropertySelector] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState([]);
   
+  // Viewed properties (collapsible list)
+  const [viewedExpanded, setViewedExpanded] = useState(false);
+  const [viewedLoading, setViewedLoading] = useState(false);
+  const [viewedError, setViewedError] = useState(null);
+  const [viewedItems, setViewedItems] = useState([]);
+  const [viewedPage, setViewedPage] = useState(1);
+  const [viewedHasMore, setViewedHasMore] = useState(false);
+  const [viewedActionsOpenId, setViewedActionsOpenId] = useState(null);
+  
   // Bulk messaging
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
@@ -232,160 +241,6 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   // Mobile view
   const [mobileView, setMobileView] = useState("list"); // 'list', 'chat', 'details'
 
-  // Handle loading state - show something even if loading takes time
-  if (loading && conversations.length === 0) {
-    console.log('MessengerInbox: Showing loading state');
-    return (
-      <div
-        className="spinner"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "3rem",
-          fontSize: "1rem",
-          color: "var(--text-secondary)",
-          minHeight: "400px",
-        }}
-      >
-        <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>💬</div>
-        <div style={{ marginBottom: "0.5rem" }}>Loading Messenger...</div>
-        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-          {connectedPages?.length > 0 
-            ? `Connected to ${connectedPages.length} Facebook page${connectedPages.length > 1 ? 's' : ''}`
-            : "No Facebook pages connected yet"}
-        </div>
-      </div>
-    );
-  }
-
-  // Handle error state
-  if (error) {
-    console.log('MessengerInbox: Showing error state:', error);
-    return (
-      <div
-        style={{
-          color: "var(--error)",
-          padding: "1rem",
-          background: "var(--bg-tertiary)",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-color)",
-          maxWidth: "800px",
-          margin: "1.5rem auto",
-        }}
-      >
-        <p style={{ marginBottom: "1rem", fontWeight: "500" }}>
-          Failed to load conversations: {error.message || "Unknown error"}
-        </p>
-        <button
-          onClick={loadConversations}
-          style={{
-            padding: "0.5rem 1rem",
-            background: "var(--primary)",
-            color: "white",
-            border: "none",
-            borderRadius: "var(--radius-md)",
-            cursor: "pointer",
-            fontWeight: "500",
-          }}
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  // Check if Facebook pages are connected
-  if (connectedPages && connectedPages.length === 0 && !loading) {
-    return (
-      <div
-        style={{
-          color: "var(--text-secondary)",
-          padding: "2rem",
-          background: "var(--bg-tertiary)",
-          borderRadius: "var(--radius-lg)",
-          border: "1px solid var(--border-color)",
-          maxWidth: "800px",
-          margin: "1.5rem auto",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>💬</div>
-        <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>
-          Facebook Messenger
-        </h3>
-        <p style={{ marginBottom: "1.5rem", lineHeight: "1.5" }}>
-          Connect your Facebook Page to start managing Messenger conversations.
-        </p>
-        <button
-          onClick={() => {
-            // Open Facebook connection flow
-            const facebookServiceModule = import("../services/facebookService");
-            facebookServiceModule.then(({ facebookService }) => {
-              facebookService.authorizeFacebook();
-            });
-          }}
-          style={{
-            padding: "0.75rem 1.5rem",
-            background: "var(--primary)",
-            color: "white",
-            border: "none",
-            borderRadius: "var(--radius-md)",
-            cursor: "pointer",
-            fontWeight: "500",
-            fontSize: "1rem",
-          }}
-        >
-          Connect Facebook Page
-        </button>
-      </div>
-    );
-  }
-
-  // If no conversations but pages are connected, show empty state
-  if (conversations && conversations.length === 0 && !loading) {
-    return (
-      <div
-        style={{
-          color: "var(--text-secondary)",
-          padding: "2rem",
-          background: "var(--bg-tertiary)",
-          borderRadius: "var(--radius-lg)",
-          border: "1px solid var(--border-color)",
-          maxWidth: "800px",
-          margin: "1.5rem auto",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📭</div>
-        <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>
-          No Conversations
-        </h3>
-        <p style={{ marginBottom: "1.5rem", lineHeight: "1.5" }}>
-          {connectedPages?.length > 0
-            ? `Connected to ${connectedPages.length} Facebook page${connectedPages.length > 1 ? 's' : ''}, but no conversations found.`
-            : "No conversations available."}
-        </p>
-        <button
-          onClick={loadConversations}
-          style={{
-            padding: "0.75rem 1.5rem",
-            background: "var(--primary)",
-            color: "white",
-            border: "none",
-            borderRadius: "var(--radius-md)",
-            cursor: "pointer",
-            fontWeight: "500",
-            fontSize: "1rem",
-          }}
-        >
-          Refresh Conversations
-        </button>
-      </div>
-    );
-  }
-
   // Auto-analyze conversation:
   // 1. On selection if no analysis exists
   // 2. Every 3 messages
@@ -415,6 +270,16 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     !!conversationInsights?.aiAnalysis,
   ]);
 
+  useEffect(() => {
+    setViewedExpanded(false);
+    setViewedLoading(false);
+    setViewedError(null);
+    setViewedItems([]);
+    setViewedPage(1);
+    setViewedHasMore(false);
+    setViewedActionsOpenId(null);
+  }, [selectedConversation?.conversation_id]);
+
   // Properties for sharing - FETCHING ONLY (state already declared above)
   // Fetch properties on mount
   useEffect(() => {
@@ -428,54 +293,101 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     };
     fetchProperties();
   }, []);
-
-
-    try {
-      const saved = localStorage.getItem("warning_settings");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.log("Could not load warning settings:", e);
-    }
-    return {
-      warning_hours: 24,
-      danger_hours: 48,
-      response_deadline_hours: 24,
-      warning_color: "#f59e0b",
-      danger_color: "#ef4444",
-      enable_no_activity_warning: false,
-      enable_no_tag_warning: false,
-      enable_proposal_stuck_warning: false,
-    };
-
-
-
+  const INITIAL_FILL_MAX_MESSAGES = 15;
+  const INITIAL_FILL_BATCH_SIZE = 3;
+  const INITIAL_FILL_PADDING = 8;
 
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const shouldAutoScrollRef = useRef(true);
+  const initialFillStateRef = useRef({
+    conversationId: null,
+    done: false,
+    running: false,
+  });
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+
+  useEffect(() => {
+    initialFillStateRef.current = {
+      conversationId: selectedConversation?.conversation_id || null,
+      done: false,
+      running: false,
+    };
+  }, [selectedConversation?.conversation_id]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
+    if (!shouldAutoScrollRef.current) {
+      shouldAutoScrollRef.current = true;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const conversationId = selectedConversation?.conversation_id;
+    const container = messagesContainerRef.current;
+
+    if (!conversationId || !container) return;
+
+    const fillState = initialFillStateRef.current;
+    if (fillState.conversationId !== conversationId) return;
+    if (fillState.done || fillState.running) return;
+    if (loading || loadingOlderMessages || messages.length === 0) return;
+
+    const fitsFrame =
+      container.scrollHeight <= container.clientHeight + INITIAL_FILL_PADDING;
+    const canLoadMore =
+      hasMoreMessages && messages.length < INITIAL_FILL_MAX_MESSAGES;
+
+    if (!fitsFrame || !canLoadMore) {
+      fillState.done = true;
+      return;
+    }
+
+    fillState.running = true;
+    setLoadingOlderMessages(true);
+    shouldAutoScrollRef.current = true;
+
+    const batchSize = Math.min(
+      INITIAL_FILL_BATCH_SIZE,
+      INITIAL_FILL_MAX_MESSAGES - messages.length,
+    );
+
+    loadMoreMessages(batchSize)
+      .finally(() => {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+          setLoadingOlderMessages(false);
+          fillState.running = false;
+        });
+      });
+  }, [
+    selectedConversation?.conversation_id,
+    messages.length,
+    hasMoreMessages,
+    loading,
+    loadingOlderMessages,
+    loadMoreMessages,
+  ]);
 
   // Auto-refresh messages every 10 seconds when conversation is selected (silent - no loading)
   useEffect(() => {
     if (!selectedConversation) return;
 
+    const conversationId = selectedConversation.conversation_id;
+    const pageId = selectedConversation.page_id;
+
     const refreshInterval = setInterval(() => {
       // Silently refresh messages without causing loading flash
-      if (selectedConversation?.conversation_id) {
-        refreshMessages(
-          selectedConversation.conversation_id,
-          selectedConversation.page_id,
-        );
+      if (conversationId) {
+        refreshMessages(conversationId, pageId);
       }
     }, 10000); // 10 seconds
 
     return () => clearInterval(refreshInterval);
-  }, [selectedConversation?.id, refreshMessages]);
+  }, [selectedConversation?.conversation_id, selectedConversation?.page_id, refreshMessages]);
 
   // Auto-refresh conversation list every 5 seconds (silent to prevent UI flashing)
   // Using polling since Supabase Realtime may not be enabled
@@ -1190,7 +1102,244 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     return null;
   };
 
+  // Handle loading state - show something even if loading takes time
+  if (loading && conversations.length === 0) {
+    console.log('MessengerInbox: Showing loading state');
+    return (
+      <div
+        className="spinner"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "3rem",
+          fontSize: "1rem",
+          color: "var(--text-secondary)",
+          minHeight: "400px",
+        }}
+      >
+        <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>💬</div>
+        <div style={{ marginBottom: "0.5rem" }}>Loading Messenger...</div>
+        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+          {connectedPages?.length > 0
+            ? `Connected to ${connectedPages.length} Facebook page${connectedPages.length > 1 ? 's' : ''}`
+            : "No Facebook pages connected yet"}
+        </div>
+      </div>
+    );
+  }
 
+  // Handle error state
+  if (error) {
+    console.log('MessengerInbox: Showing error state:', error);
+    return (
+      <div
+        style={{
+          color: "var(--error)",
+          padding: "1rem",
+          background: "var(--bg-tertiary)",
+          borderRadius: "var(--radius-md)",
+          border: "1px solid var(--border-color)",
+          maxWidth: "800px",
+          margin: "1.5rem auto",
+        }}
+      >
+        <p style={{ marginBottom: "1rem", fontWeight: "500" }}>
+          Failed to load conversations: {error.message || "Unknown error"}
+        </p>
+        <button
+          onClick={loadConversations}
+          style={{
+            padding: "0.5rem 1rem",
+            background: "var(--primary)",
+            color: "white",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: "500",
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Check if Facebook pages are connected
+  if (connectedPages && connectedPages.length === 0 && !loading) {
+    return (
+      <div
+        style={{
+          color: "var(--text-secondary)",
+          padding: "2rem",
+          background: "var(--bg-tertiary)",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid var(--border-color)",
+          maxWidth: "800px",
+          margin: "1.5rem auto",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>💬</div>
+        <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>
+          Facebook Messenger
+        </h3>
+        <p style={{ marginBottom: "1.5rem", lineHeight: "1.5" }}>
+          Connect your Facebook Page to start managing Messenger conversations.
+        </p>
+        <button
+          onClick={() => {
+            // Open Facebook connection flow
+            const facebookServiceModule = import("../services/facebookService");
+            facebookServiceModule.then(({ facebookService }) => {
+              facebookService.authorizeFacebook();
+            });
+          }}
+          style={{
+            padding: "0.75rem 1.5rem",
+            background: "var(--primary)",
+            color: "white",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: "500",
+            fontSize: "1rem",
+          }}
+        >
+          Connect Facebook Page
+        </button>
+      </div>
+    );
+  }
+
+  // If no conversations but pages are connected, show empty state
+  if (conversations && conversations.length === 0 && !loading) {
+    return (
+      <div
+        style={{
+          color: "var(--text-secondary)",
+          padding: "2rem",
+          background: "var(--bg-tertiary)",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid var(--border-color)",
+          maxWidth: "800px",
+          margin: "1.5rem auto",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📭</div>
+        <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>
+          No Conversations
+        </h3>
+        <p style={{ marginBottom: "1.5rem", lineHeight: "1.5" }}>
+          {connectedPages?.length > 0
+            ? `Connected to ${connectedPages.length} Facebook page${connectedPages.length > 1 ? 's' : ''}, but no conversations found.`
+            : "No conversations available."}
+        </p>
+        <button
+          onClick={loadConversations}
+          style={{
+            padding: "0.75rem 1.5rem",
+            background: "var(--primary)",
+            color: "white",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: "500",
+            fontSize: "1rem",
+          }}
+        >
+          Refresh Conversations
+        </button>
+      </div>
+    );
+  }
+
+  const VIEWED_PREVIEW_COUNT = 1;
+  const VIEWED_PAGE_SIZE = 10;
+
+  const viewedPreviewSource =
+    conversationInsights?.viewedProperties?.length > 0
+      ? conversationInsights.viewedProperties
+      : selectedConversation?.viewed_properties?.length > 0
+        ? selectedConversation.viewed_properties
+        : selectedConversation?.viewed_property
+          ? [selectedConversation.viewed_property]
+          : conversationInsights?.viewedProperty
+            ? [conversationInsights.viewedProperty]
+            : [];
+
+  const previewViewedProperties = viewedPreviewSource.slice(
+    0,
+    VIEWED_PREVIEW_COUNT,
+  );
+
+  const loadViewedPropertiesPage = async (pageToLoad = 1) => {
+    if (!selectedConversation) return;
+    setViewedLoading(true);
+    setViewedError(null);
+
+    const { items, hasMore, error: viewedFetchError } =
+      await facebookService.getViewedProperties(
+        selectedConversation.participant_id,
+        selectedConversation.participant_name,
+        { page: pageToLoad, pageSize: VIEWED_PAGE_SIZE },
+      );
+
+    if (viewedFetchError) {
+      setViewedError(viewedFetchError);
+      setViewedLoading(false);
+      return;
+    }
+
+    setViewedItems((prev) =>
+      pageToLoad === 1 ? items : [...prev, ...items],
+    );
+    setViewedPage(pageToLoad);
+    setViewedHasMore(hasMore);
+    setViewedLoading(false);
+  };
+
+  const handleToggleViewed = async () => {
+    if (viewedExpanded) {
+      setViewedExpanded(false);
+      setViewedActionsOpenId(null);
+      return;
+    }
+
+    setViewedExpanded(true);
+    if (viewedItems.length === 0) {
+      await loadViewedPropertiesPage(1);
+    }
+  };
+
+  const viewedListItems =
+    viewedExpanded && viewedItems.length > 0
+      ? viewedItems
+      : previewViewedProperties;
+
+  const handleToggleViewedActions = (propertyKey) => {
+    setViewedActionsOpenId((current) =>
+      current === propertyKey ? null : propertyKey,
+    );
+  };
+
+  const evaluationClient =
+    safeClients.find(
+      (client) => client.id === selectedConversation?.linked_client_id,
+    ) || existingClient;
+  const evaluationQuestions = evaluationClient?.evaluationQuestions || [];
+  const evaluationAnswers = evaluationClient?.evaluationAnswers || [];
+  const aiContextSummaryRaw =
+    conversationInsights?.aiNotes ||
+    conversationInsights?.aiSummary ||
+    aiAnalysis?.notes ||
+    selectedConversation?.ai_summary ||
+    "";
+  const aiContextSummary = aiContextSummaryRaw
+    ? aiContextSummaryRaw.replace(/\s+/g, " ").trim()
+    : "";
 
   return (
     <>
@@ -2365,6 +2514,28 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
 
               {/* Messages */}
               <div
+                ref={messagesContainerRef}
+                onScroll={async (e) => {
+                  if (loadingOlderMessages || loading || !hasMoreMessages) return;
+                  if (e.currentTarget.scrollTop > 60) return;
+
+                  setLoadingOlderMessages(true);
+                  shouldAutoScrollRef.current = false;
+
+                  const previousScrollHeight = e.currentTarget.scrollHeight;
+                  const previousScrollTop = e.currentTarget.scrollTop;
+
+                  try {
+                    await loadMoreMessages();
+                  } finally {
+                    requestAnimationFrame(() => {
+                      const newScrollHeight = e.currentTarget.scrollHeight;
+                      e.currentTarget.scrollTop =
+                        newScrollHeight - previousScrollHeight + previousScrollTop;
+                      setLoadingOlderMessages(false);
+                    });
+                  }
+                }}
                 className="messages-scrollbar"
                 style={{
                   flex: 1,
@@ -2373,22 +2544,9 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                   display: "flex",
                   flexDirection: "column",
                   gap: "0.5rem",
+                  overflowY: "auto",
                 }}
               >
-                {/* Load More History - at top */}
-                {hasMoreMessages && (
-                  <div style={{ textAlign: "center", marginBottom: "0.5rem" }}>
-                    <button
-                      className="btn btn-sm btn-secondary"
-                      onClick={loadMoreMessages}
-                      disabled={loading}
-                      style={{ opacity: loading ? 0.4 : 0.7 }}
-                    >
-                      ⬆️ Load earlier messages
-                    </button>
-                  </div>
-                )}
-
                 {messages.length === 0 && !loading && (
                   <div
                     style={{
@@ -2430,6 +2588,20 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                         {syncing ? "Syncing..." : "🔄 Sync Now"}
                       </button>
                     </div>
+                  </div>
+                )}
+                {messages.length > 0 && hasMoreMessages && (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      marginBottom: "0.5rem",
+                      fontSize: "0.75rem",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    {loadingOlderMessages
+                      ? "Loading earlier messages..."
+                      : "Scroll up to load earlier messages"}
                   </div>
                 )}
                 {messages.map((msg) => (
@@ -3160,276 +3332,345 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                 </div>
               )}
 
-              {/* Viewed Property Card - Enhanced */}
-              {(selectedConversation.viewed_property ||
-                conversationInsights?.viewedProperty) && (
+              {/* Viewed Properties */}
+              {previewViewedProperties.length > 0 && (
                 <div style={{ marginBottom: "1.5rem" }}>
-                  <label
+                  <div
                     style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      display: "block",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "0.5rem",
+                      rowGap: "0.35rem",
                       marginBottom: "0.5rem",
                     }}
                   >
-                    🏠 Viewed Property
-                  </label>
-                  <div
-                    style={{
-                      background: "var(--bg-secondary)",
-                      borderRadius: "var(--radius-md)",
-                      overflow: "hidden",
-                      border: "1px solid var(--border-color)",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-                    }}
-                  >
-                    <div style={{ height: "140px", position: "relative" }}>
-                      <img
-                        src={
-                          (
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).image
-                        }
-                        alt={
-                          (
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).title
-                        }
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                      {/* Price Tag */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          bottom: "10px",
-                          left: "10px",
-                          background: "rgba(0,0,0,0.7)",
-                          color: "white",
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          fontSize: "0.9rem",
-                          fontWeight: "600",
-                        }}
-                      >
-                        ₱{" "}
-                        {parseInt(
-                          (
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).price,
-                        ).toLocaleString()}
-                      </div>
-                    </div>
-                    <div style={{ padding: "1rem" }}>
-                      <h4
-                        style={{
-                          margin: "0 0 0.25rem 0",
-                          fontSize: "1rem",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {
-                          (
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).title
-                        }
-                      </h4>
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--text-muted)",
-                          marginBottom: "0.5rem",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span>
-                          {(
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).id.substring(0, 8)}
-                          ...
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {(
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).bedrooms || 0}{" "}
-                          Beds
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {(
-                            selectedConversation.viewed_property ||
-                            conversationInsights?.viewedProperty
-                          ).bathrooms || 0}{" "}
-                          Baths
-                        </span>
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.5rem",
-                          marginTop: "1rem",
-                        }}
-                      >
-                        <button
-                          className="btn btn-sm"
-                          style={{
-                            width: "100%",
-                            background: "white",
-                            color: "#111827",
-                            border: "1px solid #e5e7eb",
-                            fontWeight: "600",
-                          }}
-                          onClick={() =>
-                            alert(
-                              `Opening details for ${(selectedConversation.viewed_property || conversationInsights?.viewedProperty).title}`,
-                            )
-                          }
-                        >
-                          View Details
-                        </button>
-                        <button
-                          className="btn btn-sm btn-primary"
-                          style={{
-                            width: "100%",
-                            fontWeight: "600",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                          }}
-                          onClick={() =>
-                            handleSendPropertyCard(
-                              selectedConversation.viewed_property ||
-                                conversationInsights?.viewedProperty,
-                            )
-                          }
-                        >
-                          📤 Send to Chat
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          style={{
-                            width: "100%",
-                            background: "#dc2626",
-                            color: "white",
-                            border: "1px solid #dc2626",
-                            fontWeight: "600",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                          }}
-                          onClick={() =>
-                            handleSendVideo(
-                              selectedConversation.viewed_property ||
-                                conversationInsights?.viewedProperty,
-                            )
-                          }
-                        >
-                          🎥 Send Video
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          style={{
-                            width: "100%",
-                            background:
-                              "linear-gradient(45deg, #f59e0b, #ef4444)",
-                            color: "white",
-                            border: "none",
-                            fontWeight: "700",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                          }}
-                          onClick={handleSendTopSelling}
-                        >
-                          🔥 Send Top Selling
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          style={{
-                            width: "100%",
-                            background: "white",
-                            color: "#111827",
-                            border: "1px solid #e5e7eb",
-                            fontWeight: "600",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                          }}
-                          onClick={() => {
-                            const prop =
-                              selectedConversation.viewed_property ||
-                              conversationInsights?.viewedProperty;
-                            const inquiryMessage = `Hi, I am interested in ${prop.title}. Can you provide more details?`;
-                            setMessageText(inquiryMessage);
-                          }}
-                        >
-                          💬 Inquire
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Conversations Summary (AI) */}
-              {(selectedConversation.ai_summary ||
-                conversationInsights?.aiNotes ||
-                conversationInsights?.aiSummary ||
-                aiAnalysis?.notes) && (
-                <div style={{ marginBottom: "1.5rem" }}>
-                  <label
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      display: "block",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    🤖 AI Summary
-                  </label>
-                  <div
-                    style={{
-                      background: "rgba(124, 58, 237, 0.1)",
-                      border: "1px solid rgba(124, 58, 237, 0.2)",
-                      borderRadius: "var(--radius-md)",
-                      padding: "1rem",
-                    }}
-                  >
-                    <p
+                    <label
                       style={{
-                        fontSize: "0.85rem",
-                        lineHeight: "1.5",
-                        margin: 0,
-                        color: "var(--text-primary)",
+                        fontSize: "0.75rem",
+                        color: "var(--text-muted)",
+                        display: "block",
+                        flex: "1 1 auto",
+                        minWidth: 0,
                       }}
                     >
-                      {conversationInsights?.aiNotes ||
-                        conversationInsights?.aiSummary ||
-                        aiAnalysis?.notes ||
-                        selectedConversation.ai_summary}
-                    </p>
+                      🏠 Viewed Properties
+                    </label>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={handleToggleViewed}
+                      disabled={
+                        viewedLoading && viewedExpanded && viewedItems.length === 0
+                      }
+                      style={{ flexShrink: 0 }}
+                    >
+                      {viewedExpanded
+                        ? "Hide viewed properties"
+                        : "Show all viewed properties"}
+                    </button>
                   </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.75rem",
+                    }}
+                  >
+                    {viewedListItems.map((property, index) => {
+                      const propertyKey =
+                        property?.id || `${property?.title || "property"}-${index}`;
+                      const actionsOpen = viewedActionsOpenId === propertyKey;
+                      const priceValue = Number(property?.price);
+                      const formattedPrice = Number.isFinite(priceValue)
+                        ? priceValue.toLocaleString()
+                        : property?.price;
+                      return (
+                        <div
+                          key={propertyKey}
+                          style={{
+                            display: "flex",
+                            gap: "0.75rem",
+                            padding: "0.6rem",
+                            background: "var(--bg-secondary)",
+                            borderRadius: "var(--radius-md)",
+                            border: "1px solid var(--border-color)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "64px",
+                              height: "64px",
+                              borderRadius: "8px",
+                              overflow: "hidden",
+                              background: "var(--bg-tertiary)",
+                              flexShrink: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--text-muted)",
+                              fontSize: "0.7rem",
+                            }}
+                          >
+                            {property?.image ? (
+                              <img
+                                src={property.image}
+                                alt={property?.title || "Viewed property"}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                }}
+                              />
+                            ) : (
+                              "No image"
+                            )}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "0.5rem",
+                              }}
+                            >
+                              <h4
+                                style={{
+                                  margin: 0,
+                                  fontSize: "0.9rem",
+                                  fontWeight: "600",
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {property?.title || "Untitled property"}
+                              </h4>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "0.35rem",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {formattedPrice && (
+                                  <span
+                                    style={{
+                                      fontSize: "0.8rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    ₱ {formattedPrice}
+                                  </span>
+                                )}
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() =>
+                                    handleToggleViewedActions(propertyKey)
+                                  }
+                                >
+                                  {actionsOpen ? "Hide actions" : "Actions"}
+                                </button>
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                marginTop: "0.2rem",
+                                fontSize: "0.72rem",
+                                color: "var(--text-muted)",
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "0.4rem",
+                              }}
+                            >
+                              {property?.id && (
+                                <span>{property.id.substring(0, 8)}...</span>
+                              )}
+                              <span>•</span>
+                              <span>{property?.bedrooms || 0} Beds</span>
+                              <span>•</span>
+                              <span>{property?.bathrooms || 0} Baths</span>
+                            </div>
+                            <div
+                              style={{
+                                display: actionsOpen ? "flex" : "none",
+                                flexWrap: "wrap",
+                                gap: "0.35rem",
+                                marginTop: "0.45rem",
+                              }}
+                            >
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() =>
+                                  alert(
+                                    `Opening details for ${property?.title || "this property"}`,
+                                  )
+                                }
+                              >
+                                View Details
+                              </button>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => handleSendPropertyCard(property)}
+                              >
+                                📤 Send to Chat
+                              </button>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => handleSendVideo(property)}
+                              >
+                                🎥 Send Video
+                              </button>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={handleSendTopSelling}
+                              >
+                                🔥 Send Top Selling
+                              </button>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => {
+                                  const inquiryMessage = `Hi, I am interested in ${property?.title || "this property"}. Can you provide more details?`;
+                                  setMessageText(inquiryMessage);
+                                }}
+                              >
+                                💬 Inquire
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {viewedExpanded && viewedLoading && viewedItems.length === 0 && (
+                    <div
+                      style={{
+                        marginTop: "0.5rem",
+                        fontSize: "0.75rem",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      Loading viewed properties...
+                    </div>
+                  )}
+                  {viewedError && (
+                    <div
+                      style={{
+                        marginTop: "0.5rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "0.75rem",
+                        color: "var(--error)",
+                      }}
+                    >
+                      <span>{viewedError}</span>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => loadViewedPropertiesPage(1)}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {viewedExpanded && viewedHasMore && (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      style={{ marginTop: "0.5rem" }}
+                      onClick={() => loadViewedPropertiesPage(viewedPage + 1)}
+                      disabled={viewedLoading}
+                    >
+                      {viewedLoading ? "Loading..." : "Load more"}
+                    </button>
+                  )}
                 </div>
               )}
+
+              {/* AI Context Summary */}
+              <div style={{ marginBottom: "1.5rem" }}>
+                <label
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                    display: "block",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  🧠 AI Context Summary
+                </label>
+                <div
+                  style={{
+                    background: "rgba(124, 58, 237, 0.1)",
+                    border: "1px solid rgba(124, 58, 237, 0.2)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "1rem",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      lineHeight: "1.5",
+                      margin: 0,
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {aiContextSummary || "No AI context summary yet."}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "1.5rem" }}>
+                <label
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                    display: "block",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  💬 Chatbot Q&A (Evaluation)
+                </label>
+                <div
+                  style={{
+                    background: "var(--bg-secondary)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "0.75rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.6rem",
+                    fontSize: "0.78rem",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {evaluationQuestions.length > 0 ? (
+                    evaluationQuestions.map((question, index) => (
+                      <div
+                        key={`${index}-${question.substring(0, 12)}`}
+                        style={{ lineHeight: 1.4 }}
+                      >
+                        <div
+                          style={{
+                            color: "var(--text-muted)",
+                            marginBottom: "0.2rem",
+                            fontWeight: "600",
+                          }}
+                        >
+                          Q{index + 1}: {question}
+                        </div>
+                        <div style={{ color: "var(--text-primary)" }}>
+                          {evaluationAnswers[index] || "(No answer)"}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontStyle: "italic" }}>
+                      No evaluation questions answered yet.
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Tags Section */}
               <div style={{ marginBottom: "1rem" }}>

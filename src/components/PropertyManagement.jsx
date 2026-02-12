@@ -1426,7 +1426,12 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                     properties={[previewProperty]}
                     branding={branding}
                     initialPropertyIndex={0}
-                    onClose={() => setPreviewProperty(null)}
+                    onClose={() => {
+                        setPreviewProperty(null);
+                        const profilePath = teamId ? `/${teamId}` : '/';
+                        window.history.pushState({}, '', profilePath);
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                    }}
                     teamId={teamId}
                     organizationId={organizationId}
                 />

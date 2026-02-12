@@ -15,6 +15,15 @@ const PublicPropertiesContainer = ({ onClose }) => {
     const [showcaseMode, setShowcaseMode] = useState(false);
     const [initialPropertyIndex, setInitialPropertyIndex] = useState(0);
 
+    const resolveProfileTeamId = () => {
+        return teamId || properties?.[0]?.team_id || properties?.[0]?.organization_id || null;
+    };
+
+    const getProfilePath = () => {
+        const resolved = resolveProfileTeamId();
+        return resolved ? `/${resolved}` : '/';
+    };
+
     useEffect(() => {
         // Parse search params for pid and mode
         const params = new URLSearchParams(window.location.search);
@@ -140,8 +149,13 @@ const PublicPropertiesContainer = ({ onClose }) => {
 
             setProperties(props || []);
 
+            const resolvedTeamId = currentTeamId || props?.[0]?.team_id || props?.[0]?.organization_id || null;
+            if (!currentTeamId && resolvedTeamId) {
+                setTeamId(resolvedTeamId);
+            }
+
             // 2. Load Branding
-            const brandingTeamId = currentTeamId || props?.[0]?.team_id || props?.[0]?.organization_id || null;
+            const brandingTeamId = resolvedTeamId || props?.[0]?.organization_id || null;
 
             if (brandingTeamId) {
                 const brand = await getPublicTeamBranding(brandingTeamId);
@@ -210,8 +224,10 @@ const PublicPropertiesContainer = ({ onClose }) => {
                 branding={branding}
                 initialPropertyIndex={initialIdx >= 0 ? initialIdx : 0}
                 onClose={() => {
-                    window.history.pushState({}, '', '/');
-                    if (onClose) onClose();
+                    const resolvedTeamId = resolveProfileTeamId();
+                    const profilePath = resolvedTeamId ? `/${resolvedTeamId}` : '/';
+                    window.history.pushState({}, '', profilePath);
+                    if (onClose) onClose({ profilePath, teamId: resolvedTeamId });
                 }}
                 visitorName={visitorName}
                 participantId={participantId}
@@ -226,9 +242,10 @@ const PublicPropertiesContainer = ({ onClose }) => {
             properties={properties}
             branding={branding}
             onClose={() => {
-                // Update URL to /
-                window.history.pushState({}, '', '/');
-                if (onClose) onClose();
+                const resolvedTeamId = resolveProfileTeamId();
+                const profilePath = resolvedTeamId ? `/${resolvedTeamId}` : '/';
+                window.history.pushState({}, '', profilePath);
+                if (onClose) onClose({ profilePath, teamId: resolvedTeamId });
             }}
             initialProperty={initialSelected}
             visitorName={visitorName} // Pass visitor name for tracking

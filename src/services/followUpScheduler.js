@@ -19,7 +19,7 @@ const getSupabase = () => {
 /**
  * Best Time to Contact result with multiple recommended time slots
  * @typedef {Object} BestTimeResult
- * @property {Array<{dayOfWeek: number, hourOfDay: number, score: number}>} bestSlots - Top time slots
+ * @property {Array<{dayOfWeek: number, hourOfDay: number, score: number}>} bestSlots - Ranked time slots
  * @property {number} confidence - Confidence in prediction (0-1)
  * @property {Date} nextBestTime - Next occurrence of best time
  * @property {boolean} usedNeighborData - Whether neighbor data was used
@@ -103,8 +103,8 @@ export async function calculateBestTimeToContact(conversationId) {
         // Sort by score descending
         rankedSlots.sort((a, b) => b.score - a.score);
 
-        // Get top 5 time slots (multiple best times)
-        const bestSlots = rankedSlots.slice(0, 5);
+        // Keep all ranked time slots (multiple best times)
+        const bestSlots = rankedSlots;
 
         if (bestSlots.length === 0) {
             return getDefaultBestTimes(conversationId);

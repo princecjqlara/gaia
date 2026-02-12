@@ -8,9 +8,6 @@ import { getSupabaseClient } from './supabase';
 const DEFAULT_BRANDING = {
     logo_url: null,
     team_display_name: null,
-    tagline: 'Find Your Dream Home',
-    subtitle: 'Browse our exclusive portfolio of premium properties.',
-    hero_image_url: null,
     primary_color: '#10b981',
     contact_phone: null,
     contact_email: null,
@@ -20,11 +17,7 @@ const DEFAULT_BRANDING = {
     website_url: null,
     address: null,
     bio: '',
-    stats: [
-        { label: 'Years of Experience', value: '10+' },
-        { label: 'Properties Sold', value: '500+' },
-        { label: 'Happy Clients', value: '1000+' }
-    ]
+    highlights: []
 };
 
 
@@ -87,10 +80,10 @@ export async function updateTeamBranding(teamId, branding) {
 }
 
 /**
- * Upload branding image (logo or hero) to Cloudinary
+ * Upload branding media (logo or highlight) to Cloudinary
  * @param {File} file - Image file to upload
  * @param {string} type - 'logo' or 'hero'
- * @returns {Promise<{url: string, error: object}>}
+ * @returns {Promise<{url: string, resourceType: string | null, error: object}>}
  */
 export async function uploadBrandingImage(file, type = 'logo') {
     try {
@@ -122,7 +115,7 @@ export async function uploadBrandingImage(file, type = 'logo') {
         formData.append('resource_type', 'auto');
 
         const response = await fetch(
-            `https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`,
+            `https://api.cloudinary.com/v1_1/${signData.cloudName}/auto/upload`,
             {
                 method: 'POST',
                 body: formData
@@ -138,10 +131,10 @@ export async function uploadBrandingImage(file, type = 'logo') {
         }
 
         console.log('Upload successful:', data.secure_url);
-        return { url: data.secure_url, error: null };
+        return { url: data.secure_url, resourceType: data.resource_type || null, error: null };
     } catch (error) {
         console.error('Error uploading branding image:', error);
-        return { url: null, error };
+        return { url: null, resourceType: null, error };
     }
 }
 

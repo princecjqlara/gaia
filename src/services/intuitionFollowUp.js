@@ -552,12 +552,109 @@ export async function triggerIntuitionFollowUp(conversationId) {
             };
         }
 
+        const db = getSupabase();
+
+        const { data: settings } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'ai_chatbot_config')
+            .single();
+
+        const config = settings?.value || {};
+        const aggressivenessShift = Number.isFinite(config.intuition_fibonacci_shift)
+            ? config.intuition_fibonacci_shift
+            : 0;
+        const fibIndexShift = -aggressivenessShift;
+
+        const { data: conversation } = await db
+            .from('facebook_conversations')
+            .select('last_message_time')
+            .eq('conversation_id', conversationId)
+            .single();
+
+        const { data: recentInboundMessage } = await db
+            .from('facebook_messages')
+            .select('timestamp')
+            .eq('conversation_id', conversationId)
+            .eq('is_from_page', false)
+            .order('timestamp', { ascending: false })
+            .limit(1)
+            .single();
+
+        const conversationTime = conversation?.last_message_time
+            ? new Date(conversation.last_message_time)
+            : null;
+        const recentInboundTime = recentInboundMessage?.timestamp
+            ? new Date(recentInboundMessage.timestamp)
+            : null;
+
+        const hasConversationTime = conversationTime && !Number.isNaN(conversationTime.getTime());
+        const hasRecentInboundTime = recentInboundTime && !Number.isNaN(recentInboundTime.getTime());
+
+        let lastMessageTime = hasRecentInboundTime
+            ? recentInboundTime
+            : hasConversationTime
+                ? conversationTime
+                : null;
+
+        if (!lastMessageTime) {
+            lastMessageTime = new Date();
+        }
+
+        const fibonacci = (n) => {
+            if (n <= 1) return 1;
+            let a = 1;
+            let b = 2;
+            for (let i = 2; i < n; i++) {
+                const next = a + b;
+                a = b;
+                b = next;
+            }
+            return b;
+        };
+
+        let followUpCount = 0;
+        try {
+            let followUpCountQuery = db
+                .from('ai_followup_schedule')
+                .select('id', { count: 'exact', head: true })
+                .eq('conversation_id', conversationId)
+                .eq('follow_up_type', 'intuition')
+                .neq('status', 'cancelled');
+
+            if (lastMessageTime) {
+                followUpCountQuery = followUpCountQuery.gte('scheduled_at', lastMessageTime.toISOString());
+            }
+
+            const { count } = await followUpCountQuery;
+            followUpCount = count || 0;
+        } catch (err) {
+            console.log('[INTUITION] Could not load follow-up count:', err.message);
+        }
+
+        const getStepDuration = (fibIndex) => {
+            const fibHours = fibonacci(fibIndex);
+            const durationMs = fibHours >= 24
+                ? Math.ceil(fibHours / 24) * 24 * 60 * 60 * 1000
+                : fibHours * 60 * 60 * 1000;
+            return { fibHours, durationMs };
+        };
+
+        const nextStep = followUpCount + 1;
+        let cumulativeMs = 0;
+        for (let step = 1; step <= nextStep; step++) {
+            const fibIndex = Math.max(1, step + fibIndexShift);
+            const { durationMs } = getStepDuration(fibIndex);
+            cumulativeMs += durationMs;
+        }
+
+        const scheduledAt = new Date(lastMessageTime.getTime() + cumulativeMs);
+
         // Schedule the follow-up
         const result = await scheduleFollowUp(conversationId, {
             type: 'intuition',
             reason: analysis.followUpReason,
-            delayHours: analysis.suggestedDelay,
-            useBestTime: analysis.suggestedDelay > 12 // Use best time for longer delays
+            scheduledAt
         });
 
         if (result.success) {

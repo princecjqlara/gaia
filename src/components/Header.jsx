@@ -9,7 +9,6 @@ const Header = ({
   onAddClient,
   onAdminSettings,
   onNotifications,
-  onReports,
   onCalendar,
   onTeamPerformance,
   onTeamOnline,
@@ -119,16 +118,6 @@ const Header = ({
         >
           ⚙️ Settings
         </button>
-        {onReports && (
-          <button
-            className="btn btn-secondary admin-only"
-            id="reportsBtn"
-            title="Reports & Analytics"
-            onClick={onReports}
-          >
-            📊 Reports
-          </button>
-        )}
         {onTeamPerformance && (
           <button
             className="btn btn-secondary admin-only"

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initSupabase, getSupabaseClient } from '../services/supabase';
 import { getPublicTeamBranding } from '../services/teamBrandingService';
+import { normalizeHighlightMedia, normalizeHighlights } from '../utils/highlights';
+import HighlightViewer from './HighlightViewer';
 
 /**
  * TeamProfilePage - Instagram-style public profile page for teams
@@ -18,7 +20,6 @@ const TeamProfilePage = ({ teamId, onClose }) => {
 
     const DEFAULT_BRANDING = {
         team_display_name: 'GAIA Properties',
-        tagline: 'Find Your Dream Home',
         bio: '🏠 Find Your Dream Home\n📍 Serving Metro Manila & Beyond\n💼 Premium Real Estate Services\n📞 Contact us for inquiries',
         logo_url: null,
         website_url: '',
@@ -27,13 +28,11 @@ const TeamProfilePage = ({ teamId, onClose }) => {
 
     const brandingData = { ...DEFAULT_BRANDING, ...branding };
 
-    // Sample highlights
-    const highlights = [
-        { id: 'services', name: 'Services', image: brandingData.logo_url || 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=100' },
-        { id: 'portfolio', name: 'Portfolio', image: brandingData.hero_image_url || 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=100' },
-        { id: 'team', name: 'Team', image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100' },
-        { id: 'contact', name: 'Contact', image: 'https://images.unsplash.com/photo-1423666639041-f56000c27a9a?w=100' },
-    ];
+    const normalizedHighlights = normalizeHighlights(brandingData.highlights || []);
+
+    const [isHighlightViewerOpen, setIsHighlightViewerOpen] = useState(false);
+    const [activeHighlightIndex, setActiveHighlightIndex] = useState(null);
+    const [activeHighlightMediaIndex, setActiveHighlightMediaIndex] = useState(0);
 
     const scrollToRef = (ref) => {
         if (ref?.current) {
@@ -50,31 +49,82 @@ const TeamProfilePage = ({ teamId, onClose }) => {
             window.location.href = `tel:${brandingData.contact_phone}`;
             return;
         }
+        if (brandingData.schedule_meeting_url) {
+            window.open(brandingData.schedule_meeting_url, '_blank', 'noopener,noreferrer');
+            return;
+        }
         if (brandingData.website_url) {
             window.open(brandingData.website_url, '_blank', 'noopener,noreferrer');
             return;
         }
         scrollToRef(footerRef);
+        alert('Contact details are not set yet. Add them in Branding settings.');
     };
 
-    const handleHighlightClick = (id) => {
-        switch (id) {
-            case 'services':
-                scrollToRef(actionsRef);
-                break;
-            case 'portfolio':
-                scrollToRef(propertiesRef);
-                break;
-            case 'team':
-                scrollToRef(profileRef);
-                break;
-            case 'contact':
-                handleContactClick();
-                break;
-            default:
-                break;
+    const isSafeExternalUrl = (value) => {
+        if (!value) return false;
+        try {
+            const parsed = new URL(value);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+            return false;
         }
     };
+
+    const handleHighlightTarget = (highlight) => {
+        const target = typeof highlight?.target === 'string' ? highlight.target : 'none';
+        if (target === 'services') {
+            scrollToRef(actionsRef);
+            return;
+        }
+        if (target === 'portfolio') {
+            scrollToRef(propertiesRef);
+            return;
+        }
+        if (target === 'contact') {
+            scrollToRef(footerRef);
+            return;
+        }
+        if (target === 'custom') {
+            const customUrl = typeof highlight?.custom_url === 'string' ? highlight.custom_url.trim() : '';
+            if (isSafeExternalUrl(customUrl)) {
+                window.open(customUrl, '_blank', 'noopener,noreferrer');
+            }
+        }
+    };
+
+    const handleHighlightClick = (highlight, index) => {
+        const media = normalizeHighlightMedia(highlight?.media || []);
+        if (media.length > 0) {
+            setActiveHighlightIndex(index);
+            setActiveHighlightMediaIndex(0);
+            setIsHighlightViewerOpen(true);
+            return;
+        }
+
+        if (highlight?.target && highlight.target !== 'none') {
+            handleHighlightTarget(highlight);
+        }
+    };
+
+    const closeHighlightViewer = () => {
+        setIsHighlightViewerOpen(false);
+        setActiveHighlightIndex(null);
+        setActiveHighlightMediaIndex(0);
+    };
+
+    const activeHighlight = activeHighlightIndex != null ? normalizedHighlights[activeHighlightIndex] : null;
+    const activeHighlightMedia = normalizeHighlightMedia(activeHighlight?.media || []);
+    const hasCustomHighlightUrl = Boolean(
+        activeHighlight?.target === 'custom' && typeof activeHighlight.custom_url === 'string' && activeHighlight.custom_url.trim()
+    );
+    const showGoToSection = Boolean(
+        activeHighlight?.target && activeHighlight.target !== 'none' && (activeHighlight.target !== 'custom' || hasCustomHighlightUrl)
+    );
+    const hasPrevHighlightMedia = activeHighlightMediaIndex > 0;
+    const hasNextHighlightMedia = activeHighlightMediaIndex < activeHighlightMedia.length - 1;
+
+    const visibleHighlights = normalizedHighlights;
 
     useEffect(() => {
         loadData();
@@ -368,69 +418,75 @@ const TeamProfilePage = ({ teamId, onClose }) => {
                     </button>
                 </div>
 
-                {/* Highlights */}
-                <div style={{
-                    display: 'flex',
-                    gap: '16px',
-                    overflowX: 'auto',
-                    paddingBottom: '8px',
-                    marginBottom: '16px'
-                }}>
-                    {highlights.map(highlight => (
-                        <button
-                            key={highlight.id}
-                            type="button"
-                            onClick={() => handleHighlightClick(highlight.id)}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: '6px',
-                                cursor: 'pointer',
-                                flexShrink: 0,
-                                background: 'transparent',
-                                border: 'none',
-                                padding: 0
-                            }}
-                        >
-                            <div style={{
-                                width: '64px',
-                                height: '64px',
-                                borderRadius: '50%',
-                                padding: '2px',
-                                background: '#dbdbdb'
-                            }}>
-                                <div style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    borderRadius: '50%',
-                                    border: '2px solid #fff',
-                                    overflow: 'hidden'
-                                }}>
-                                    <img
-                                        src={highlight.image}
-                                        alt={highlight.name}
-                                        style={{
+                {visibleHighlights.length > 0 && (
+                    <div style={{
+                        display: 'flex',
+                        gap: '16px',
+                        overflowX: 'auto',
+                        paddingBottom: '8px',
+                        marginBottom: '16px'
+                    }}>
+                        {visibleHighlights.map((highlight, index) => {
+                            const media = normalizeHighlightMedia(highlight?.media || []);
+                            const cover = media[0]?.url || (brandingData.logo_url || 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=100');
+                            const title = highlight?.title || highlight?.name || 'Highlight';
+                            return (
+                                <button
+                                    key={highlight.id}
+                                    type="button"
+                                    onClick={() => handleHighlightClick(highlight, index)}
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        cursor: 'pointer',
+                                        flexShrink: 0,
+                                        background: 'transparent',
+                                        border: 'none',
+                                        padding: 0
+                                    }}
+                                >
+                                    <div style={{
+                                        width: '64px',
+                                        height: '64px',
+                                        borderRadius: '50%',
+                                        padding: '2px',
+                                        background: '#dbdbdb'
+                                    }}>
+                                        <div style={{
                                             width: '100%',
                                             height: '100%',
-                                            objectFit: 'cover'
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                            <span style={{
-                                fontSize: '12px',
-                                color: '#262626',
-                                maxWidth: '64px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                            }}>
-                                {highlight.name}
-                            </span>
-                        </button>
-                    ))}
-                </div>
+                                            borderRadius: '50%',
+                                            border: '2px solid #fff',
+                                            overflow: 'hidden'
+                                        }}>
+                                            <img
+                                                src={cover}
+                                                alt={title}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'cover'
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '12px',
+                                        color: '#262626',
+                                        maxWidth: '64px',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {title}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Section Label */}
                 <div ref={propertiesRef} style={{
@@ -535,6 +591,18 @@ const TeamProfilePage = ({ teamId, onClose }) => {
                     © 2026 {brandingData.team_display_name}
                 </div>
             </div>
+
+            <HighlightViewer
+                isOpen={isHighlightViewerOpen}
+                highlightTitle={activeHighlight?.title || activeHighlight?.name || 'Highlight'}
+                media={activeHighlightMedia}
+                mediaIndex={activeHighlightMediaIndex}
+                onClose={closeHighlightViewer}
+                onPrev={() => hasPrevHighlightMedia && setActiveHighlightMediaIndex((prev) => prev - 1)}
+                onNext={() => hasNextHighlightMedia && setActiveHighlightMediaIndex((prev) => prev + 1)}
+                onGoToSection={() => activeHighlight && handleHighlightTarget(activeHighlight)}
+                showGoToSection={showGoToSection}
+            />
         </div>
     );
 };

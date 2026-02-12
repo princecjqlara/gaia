@@ -321,28 +321,6 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                   <div className="stat-label">Preparing</div>
                 </div>
 
-                <div className="stat-card" style={{ padding: '1rem' }}>
-                  <div className="stat-icon">✅</div>
-                  <div className="stat-value">{currentMetrics.paidClients}</div>
-                  <div className="stat-label">Paid Clients</div>
-                </div>
-                <div className="stat-card" style={{ padding: '1rem' }}>
-                  <div className="stat-icon">💰</div>
-                  <div className="stat-value">{formatPrice(currentMetrics.monthlyRevenue)}</div>
-                  <div className="stat-label">Monthly Revenue</div>
-                </div>
-                <div className="stat-card" style={{ padding: '1rem' }}>
-                  <div className="stat-icon">📉</div>
-                  <div className="stat-value">{formatPrice(currentMetrics.totalExpenses)}</div>
-                  <div className="stat-label">Total Expenses</div>
-                </div>
-                <div className="stat-card" style={{ padding: '1rem', border: '2px solid var(--success)' }}>
-                  <div className="stat-icon">📈</div>
-                  <div className="stat-value" style={{ color: 'var(--success)' }}>
-                    {formatPrice(currentMetrics.netProfit)}
-                  </div>
-                  <div className="stat-label">Net Profit</div>
-                </div>
               </div>
 
               {/* Team Members Breakdown */}
@@ -356,9 +334,6 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                           <th style={{ padding: '0.75rem', textAlign: 'left' }}>Team Member</th>
                           <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Clients</th>
 
-                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>Paid</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'right' }}>Revenue</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -374,13 +349,6 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                               </td>
                               <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.totalClients}</td>
 
-                              <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.paidClients}</td>
-                              <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '500' }}>
-                                {formatPrice(member.monthlyRevenue)}
-                              </td>
-                              <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '500', color: 'var(--success)' }}>
-                                {formatPrice(member.netProfit)}
-                              </td>
                             </tr>
                           ))}
                       </tbody>
@@ -408,8 +376,6 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                       <th style={{ padding: '0.75rem', textAlign: 'left' }}>Team Member</th>
                       <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Clients</th>
 
-                      <th style={{ padding: '0.75rem', textAlign: 'right' }}>Revenue</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit</th>
                       <th style={{ padding: '0.75rem', textAlign: 'right' }}>Score</th>
                     </tr>
                   </thead>
@@ -435,12 +401,6 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                           </td>
                           <td style={{ padding: '0.75rem', textAlign: 'center' }}>{member.totalClients}</td>
 
-                          <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '500' }}>
-                            {formatPrice(member.monthlyRevenue)}
-                          </td>
-                          <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '500', color: 'var(--success)' }}>
-                            {formatPrice(member.netProfit)}
-                          </td>
                           <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '600' }}>
                             {member.score.toLocaleString()}
                           </td>

@@ -10,18 +10,16 @@ export default function AIChatbotSettings({ onClose }) {
     const [saving, setSaving] = useState(false);
     const [config, setConfig] = useState({
         enabled: true,
-        default_cooldown_hours: 4,
         min_confidence_threshold: 0.6,
-        max_messages_per_day: 5,
         auto_takeover_on_low_confidence: true,
         default_message_split_threshold: 500,
-        intuition_silence_hours: 24,
         best_time_lookback_days: 30,
         auto_respond_to_new_messages: true,
         auto_greet_new_contacts: true, // Send greeting when new contact clicks ad/button
         enable_silence_followups: true,
         enable_intuition_followups: true,
-        enable_auto_lead_qualifier: true // Automatically update lead status based on AI analysis
+        enable_auto_lead_qualifier: true, // Automatically update lead status based on AI analysis
+        intuition_fibonacci_shift: 0
     });
     const [stats, setStats] = useState({
         totalConversations: 0,
@@ -47,7 +45,13 @@ export default function AIChatbotSettings({ onClose }) {
                 .single();
 
             if (!error && data?.value) {
-                setConfig(prev => ({ ...prev, ...data.value }));
+                const {
+                    default_cooldown_hours,
+                    intuition_silence_hours,
+                    max_messages_per_day,
+                    ...rest
+                } = data.value || {};
+                setConfig(prev => ({ ...prev, ...rest }));
             }
         } catch (err) {
             console.error('Error loading settings:', err);
@@ -450,40 +454,31 @@ export default function AIChatbotSettings({ onClose }) {
                         <h3 style={styles.sectionTitle}>⏱️ Timing</h3>
 
                         <div style={styles.formRow}>
-                            <span style={styles.label}>Cooldown between messages (hours)</span>
-                            <input
-                                type="number"
-                                style={styles.input}
-                                value={config.default_cooldown_hours}
-                                onChange={e => setConfig(p => ({ ...p, default_cooldown_hours: parseInt(e.target.value) || 4 }))}
-                                min="1"
-                                max="72"
-                            />
+                            <div>
+                                <span style={styles.label}>Intuition follow-up aggressiveness</span>
+                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                                    Lower = slower, Higher = faster (Fibonacci shift)
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="-2"
+                                    max="2"
+                                    step="1"
+                                    value={config.intuition_fibonacci_shift ?? 0}
+                                    onChange={e => setConfig(p => ({
+                                        ...p,
+                                        intuition_fibonacci_shift: parseInt(e.target.value, 10)
+                                    }))}
+                                    style={{ width: '120px' }}
+                                />
+                                <span style={{ fontSize: '12px', color: '#6b7280', width: '24px', textAlign: 'center' }}>
+                                    {config.intuition_fibonacci_shift ?? 0}
+                                </span>
+                            </div>
                         </div>
 
-                        <div style={styles.formRow}>
-                            <span style={styles.label}>Silence threshold (hours)</span>
-                            <input
-                                type="number"
-                                style={styles.input}
-                                value={config.intuition_silence_hours}
-                                onChange={e => setConfig(p => ({ ...p, intuition_silence_hours: parseInt(e.target.value) || 24 }))}
-                                min="12"
-                                max="168"
-                            />
-                        </div>
-
-                        <div style={styles.formRow}>
-                            <span style={styles.label}>Max messages per day per contact</span>
-                            <input
-                                type="number"
-                                style={styles.input}
-                                value={config.max_messages_per_day}
-                                onChange={e => setConfig(p => ({ ...p, max_messages_per_day: parseInt(e.target.value) || 5 }))}
-                                min="1"
-                                max="10"
-                            />
-                        </div>
                     </div>
 
                     {/* Confidence Settings */}

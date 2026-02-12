@@ -8,9 +8,6 @@ import { showToast } from '../utils/toast';
 const DEFAULT_BRANDING = {
     logo_url: null,
     team_display_name: 'GAIA',
-    tagline: 'Find Your Dream Home',
-    subtitle: 'Browse our exclusive portfolio of premium properties.',
-    hero_image_url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2070',
     primary_color: '#10b981',
     contact_phone: null,
     contact_email: null,
@@ -19,8 +16,7 @@ const DEFAULT_BRANDING = {
     whatsapp_url: null,
     website_url: null,
     address: null,
-    bio: '',
-    stats: []
+    bio: ''
 };
 
 const PropertyPreview = ({ properties = [], onClose, branding: propBranding, teamId, organizationId, initialProperty = null, onPropertySelect, visitorName, participantId }) => {
@@ -633,96 +629,46 @@ const PropertyPreview = ({ properties = [], onClose, branding: propBranding, tea
                 `}
             </style>
 
-            {/* Hero Banner */}
+            {/* Top Bar */}
             <div style={{
-                height: '420px',
-                background: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.5)), url(${branding.hero_image_url || DEFAULT_BRANDING.hero_image_url})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                color: 'white',
-                position: 'relative'
+                position: 'sticky',
+                top: 0,
+                zIndex: 5,
+                background: '#fff',
+                borderBottom: '1px solid #e5e7eb'
             }}>
-                <div style={{ maxWidth: '800px', padding: '0 2rem' }}>
-                    <h1 style={{ 
-                        fontSize: 'clamp(2rem, 5vw, 3rem)', 
-                        fontWeight: '800', 
-                        marginBottom: '0.75rem',
-                        textShadow: '0 2px 10px rgba(0,0,0,0.3)'
-                    }}>
-                        {branding.tagline || 'Find Your Dream Home'}
-                    </h1>
-                    <p style={{ 
-                        fontSize: '1rem', 
-                        opacity: 0.9,
-                        marginBottom: '2rem',
-                        maxWidth: '500px',
-                        margin: '0 auto 2rem'
-                    }}>
-                        {branding.subtitle || 'Browse our exclusive portfolio of premium properties.'}
-                    </p>
-
-                    {/* Stats Row */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '1rem 1.5rem'
+                }}>
                     <div style={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        gap: '3rem',
-                        flexWrap: 'wrap'
-                    }}>
-                        {(branding.stats && branding.stats.length > 0 ? branding.stats.slice(0, 3) : [
-                            { value: '10+', label: 'Years of Experience' },
-                            { value: '500+', label: 'Properties Sold' },
-                            { value: '1000+', label: 'Happy Clients' }
-                        ]).map((stat, idx) => (
-                            <div key={idx} style={{ textAlign: 'center' }}>
-                                <div style={{ 
-                                    fontSize: '1.75rem', 
-                                    fontWeight: '800', 
-                                    color: '#10b981',
-                                    marginBottom: '0.25rem'
-                                }}>
-                                    {stat.value}
-                                </div>
-                                <div style={{ 
-                                    fontSize: '0.75rem', 
-                                    opacity: 0.8,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.05em',
-                                    fontWeight: '500'
-                                }}>
-                                    {stat.label}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Close Button */}
-                <button
-                    onClick={onClose}
-                    style={{
-                        position: 'absolute',
-                        top: '1rem',
-                        right: '1rem',
-                        background: 'rgba(0,0,0,0.5)',
-                        color: '#fff',
-                        border: 'none',
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        cursor: 'pointer',
                         fontSize: '1.25rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backdropFilter: 'blur(10px)'
-                    }}
-                >
-                    ✕
-                </button>
+                        fontWeight: '700',
+                        color: '#111827'
+                    }}>
+                        {branding.team_display_name || 'GAIA'}
+                    </div>
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: '#111827',
+                            color: '#fff',
+                            border: 'none',
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '999px',
+                            cursor: 'pointer',
+                            fontSize: '1.25rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        ×
+                    </button>
+                </div>
             </div>
 
             {/* Search Bar Section */}
