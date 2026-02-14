@@ -925,30 +925,49 @@ export default async function handler(req, res) {
       }
 
       if (body.object === "page") {
-        // CRITICAL: Return 200 to Facebook IMMEDIATELY to avoid Vercel timeout
-        // Facebook requires a fast 200 response; AI processing continues after
-        res.status(200).send("EVENT_RECEIVED");
+        // Track if response has been sent (for safety timeout)
+        let responseSent = false;
 
-        // Process messages asynchronously after returning 200
-        for (const entry of body.entry || []) {
-          const pageId = entry.id;
-          for (const event of (entry.messaging || [])) {
-            try {
-              if (event.message) {
-                await handleIncomingMessage(pageId, event);
-              } else if (event.postback) {
-                await handlePostbackEvent(pageId, event);
-              } else if (event.referral) {
-                await handleReferralEvent(pageId, event);
+        // Safety timeout: send 200 after 25s if processing is still running
+        // Facebook requires response within ~30s, Vercel hobby timeout is 60s
+        const safetyTimeout = setTimeout(() => {
+          if (!responseSent) {
+            responseSent = true;
+            console.log("[WEBHOOK] Safety timeout - sending 200 before Facebook deadline");
+            res.status(200).send("EVENT_RECEIVED");
+          }
+        }, 25000);
+
+        try {
+          // Process ALL messages INCLUDING AI response BEFORE returning 200
+          // Vercel kills execution after res.send(), so we MUST finish first
+          for (const entry of body.entry || []) {
+            const pageId = entry.id;
+            for (const event of (entry.messaging || [])) {
+              try {
+                if (event.message) {
+                  await handleIncomingMessage(pageId, event);
+                } else if (event.postback) {
+                  await handlePostbackEvent(pageId, event);
+                } else if (event.referral) {
+                  await handleReferralEvent(pageId, event);
+                }
+              } catch (eventErr) {
+                console.error("[WEBHOOK] Error:", eventErr.message);
               }
-            } catch (eventErr) {
-              console.error("[WEBHOOK] Error:", eventErr.message);
+            }
+            for (const change of (entry.changes || [])) {
+              if (change.field === "feed" && change.value?.item === "comment") {
+                try { await handleCommentEvent(pageId, change.value); } catch (e) { console.error(e.message); }
+              }
             }
           }
-          for (const change of (entry.changes || [])) {
-            if (change.field === "feed" && change.value?.item === "comment") {
-              try { await handleCommentEvent(pageId, change.value); } catch (e) { console.error(e.message); }
-            }
+        } finally {
+          clearTimeout(safetyTimeout);
+          if (!responseSent) {
+            responseSent = true;
+            console.log("[WEBHOOK] Processing complete - sending 200");
+            res.status(200).send("EVENT_RECEIVED");
           }
         }
         return;
