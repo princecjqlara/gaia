@@ -663,7 +663,7 @@ Knowledge base: ${config.knowledge_base || "We are a digital marketing agency."}
         dm_sent: isInterested && config.comment_dm_interested !== false,
         created_at: new Date().toISOString(),
       })
-      .catch(() => {}); // Ignore if table doesn't exist
+      .catch(() => { }); // Ignore if table doesn't exist
   } catch (error) {
     console.error("[WEBHOOK] Error handling comment:", error.message);
   }
@@ -2026,14 +2026,13 @@ ${knownPhone ? `Phone Number: ${knownPhone}` : ""}
 ${conversation?.pipeline_stage ? `Pipeline Stage: ${conversation.pipeline_stage}` : ""}
 ${conversation?.lead_status ? `Lead Status: ${conversation.lead_status}` : ""}
 
-${
-  conversation?.agent_context
-    ? `## 📝 IMPORTANT CONTEXT (Agent Notes - REMEMBER THIS)
+${conversation?.agent_context
+        ? `## 📝 IMPORTANT CONTEXT (Agent Notes - REMEMBER THIS)
 ${conversation.agent_context}
 ---
 The above context was provided by a team member. Use this information to personalize responses and remember key details about this customer.`
-    : ""
-}
+        : ""
+      }
 `;
 
     // Add ACTIVE GOAL for the conversation
@@ -2185,13 +2184,13 @@ ${faqContent}
 
     // Add bot rules with stronger emphasis
     if (config.bot_rules_dos) {
-        aiPrompt += `
+      aiPrompt += `
 ## ✅ STRICT RULES - DO's (YOU MUST FOLLOW THESE)
 ${config.bot_rules_dos}
 `;
     }
     if (config.bot_rules_donts) {
-        aiPrompt += `
+      aiPrompt += `
 ## ❌ STRICT RULES - DON'Ts (NEVER DO THESE)
 ${config.bot_rules_donts}
 `;
@@ -2199,8 +2198,8 @@ ${config.bot_rules_donts}
 
     // Add properties information to AI context
     if (properties && properties.length > 0) {
-        const propertyList = properties.map((p, idx) => {
-            return `Property ${idx + 1} (ID: ${p.id}):
+      const propertyList = properties.map((p, idx) => {
+        return `Property ${idx + 1} (ID: ${p.id}):
 🏠 Title: ${p.title}
 📍 Location: ${p.address}
 💰 Price: ₱${parseInt(p.price || 0).toLocaleString()}
@@ -2210,9 +2209,9 @@ ${config.bot_rules_donts}
 📝 Description: ${(p.description || '').substring(0, 200)}...
 ${p.images && p.images.length > 0 ? `🖼️ Image: ${p.images[0]}` : ''}
 ---`;
-        }).join('\n');
+      }).join('\n');
 
-        aiPrompt += `
+      aiPrompt += `
 ## 🏠 AVAILABLE PROPERTIES (YOU CAN RECOMMEND THESE)
 Use this information to suggest properties to customers. When they ask about properties, you can:
 1. Recommend properties based on their preferences (budget, location, bedrooms, etc.)
@@ -2240,7 +2239,7 @@ Rules for recommending properties:
 - Only send up to 3 properties at once (don't overwhelm them)
 `;
     } else {
-        aiPrompt += `
+      aiPrompt += `
 ## 🏠 AVAILABLE PROPERTIES
 No properties are currently listed for sale.
 `;
@@ -2965,7 +2964,7 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
                 .eq("conversation_id", conversationId)
                 .eq("status", "pending");
               console.log("[WEBHOOK] FALLBACK: Cancelled pending follow-ups");
-            } catch (e) {}
+            } catch (e) { }
 
             // Update conversation
             try {
@@ -2980,7 +2979,7 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
               console.log(
                 "[WEBHOOK] FALLBACK: ✅ Updated conversation to booked",
               );
-            } catch (e) {}
+            } catch (e) { }
 
             // ADD TO CLIENTS TABLE (pipeline)
             try {
@@ -3886,4 +3885,5 @@ export const config = {
   api: {
     bodyParser: true,
   },
+  maxDuration: 60,
 };
