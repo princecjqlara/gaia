@@ -757,6 +757,86 @@ export default async function handler(req, res) {
     }
   }
 
+  // DEEP TEST: POST ?action=deep_test
+  // Actually runs triggerAIResponse for the most recent conversation and returns detailed results
+  if (req.method === "POST" && req.body?.action === "deep_test") {
+    const db = getSupabase();
+    if (!db) return res.status(500).json({ error: "No DB" });
+    const results = { steps: [], startTime: Date.now() };
+    try {
+      // Step 1: Get the real page
+      const { data: page } = await db.from("facebook_pages").select("*").eq("is_active", true).limit(1).single();
+      results.steps.push({ step: "page", id: page?.page_id, name: page?.page_name, tokenLen: page?.page_access_token?.length, tokenStart: page?.page_access_token?.substring(0, 10) });
+
+      if (!page) return res.status(200).json({ ...results, error: "No active page found" });
+
+      // Step 2: Get settings
+      const { data: settings } = await db.from("settings").select("value").eq("key", "ai_chatbot_config").single();
+      const config = settings?.value || {};
+      results.steps.push({ step: "settings", global_bot_enabled: config.global_bot_enabled !== false, auto_respond: config.auto_respond_to_new_messages !== false, has_system_prompt: !!config.system_prompt, prompt_preview: config.system_prompt?.substring(0, 80) });
+
+      // Step 3: Get most recent conversation
+      const { data: conv } = await db.from("facebook_conversations").select("*").eq("page_id", page.page_id).order("updated_at", { ascending: false }).limit(1).single();
+      results.steps.push({ step: "conversation", id: conv?.conversation_id, name: conv?.participant_name, ai_enabled: conv?.ai_enabled, human_takeover: conv?.human_takeover, last_ai_at: conv?.last_ai_response_at });
+
+      if (!conv) return res.status(200).json({ ...results, error: "No conversations found" });
+
+      // Step 4: Check cooldown
+      if (conv.last_ai_response_at) {
+        const secondsSince = (Date.now() - new Date(conv.last_ai_response_at).getTime()) / 1000;
+        results.steps.push({ step: "cooldown", secondsSince: Math.round(secondsSince), blocked: secondsSince < 30 });
+      } else {
+        results.steps.push({ step: "cooldown", secondsSince: "never", blocked: false });
+      }
+
+      // Step 5: Check spam
+      const { data: msgs } = await db.from("facebook_messages").select("is_from_page,message_text").eq("conversation_id", conv.conversation_id).order("timestamp", { ascending: false }).limit(5);
+      let consecutivePage = 0;
+      for (const m of (msgs || [])) { if (m.is_from_page) consecutivePage++; else break; }
+      results.steps.push({ step: "spam_check", consecutivePageMsgs: consecutivePage, blocked: consecutivePage >= 2, recentMsgs: msgs?.map(m => ({ from: m.is_from_page ? "page" : "user", text: m.message_text?.substring(0, 30) })) });
+
+      // Step 6: Try NVIDIA API
+      const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+      results.steps.push({ step: "nvidia_key", hasKey: !!NVIDIA_API_KEY, keyLen: NVIDIA_API_KEY?.length });
+
+      // Step 7: Build prompt and call AI
+      const systemPrompt = config.system_prompt || "You are a friendly AI sales assistant for a business. Be helpful, professional, and concise.";
+      const recentMessages = (msgs || []).reverse().map(m => ({
+        role: m.is_from_page ? "assistant" : "user",
+        content: m.message_text || "(no text)"
+      }));
+
+      const aiMessages = [
+        { role: "system", content: systemPrompt },
+        ...recentMessages.slice(-10)
+      ];
+
+      const aiStart = Date.now();
+      try {
+        const aiResp = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${NVIDIA_API_KEY}` },
+          body: JSON.stringify({ model: "meta/llama-3.1-70b-instruct", messages: aiMessages, max_tokens: 300, temperature: 0.7 }),
+        });
+        const aiData = await aiResp.json();
+        const aiReply = aiData.choices?.[0]?.message?.content;
+        results.steps.push({ step: "nvidia_call", ok: aiResp.ok, status: aiResp.status, timeMs: Date.now() - aiStart, replyPreview: aiReply?.substring(0, 100), error: aiData.error?.message });
+      } catch (aiErr) {
+        results.steps.push({ step: "nvidia_call", ok: false, timeMs: Date.now() - aiStart, error: aiErr.message });
+      }
+
+      // Step 8: Test Facebook send capability
+      results.steps.push({ step: "fb_send_ready", pageId: page.page_id, hasToken: !!page.page_access_token && page.page_access_token !== "pending", sendUrl: `https://graph.facebook.com/v21.0/${page.page_id}/messages` });
+
+      results.totalTimeMs = Date.now() - results.startTime;
+      return res.status(200).json(results);
+    } catch (e) {
+      results.error = e.message;
+      results.stack = e.stack?.substring(0, 200);
+      return res.status(500).json(results);
+    }
+  }
+
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
