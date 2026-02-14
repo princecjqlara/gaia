@@ -128,10 +128,10 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   } = hookResult;
 
   const lastAnalyzedCountRef = useRef(0);
-  
+
   // ALL LOCAL STATE HOOKS MUST BE DECLARED HERE, BEFORE ANY CONDITIONAL RETURNS
   // This is critical for React hooks rules
-  
+
   // Message and UI state
   const [messageText, setMessageText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -147,13 +147,13 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   const [editableNotes, setEditableNotes] = useState("");
   const [showMediaUpload, setShowMediaUpload] = useState(false);
   const [extractingDetails, setExtractingDetails] = useState(false);
-  
+
   // Properties for sharing
   const [properties, setProperties] = useState([]);
   const [showDropUp, setShowDropUp] = useState(false);
   const [showPropertySelector, setShowPropertySelector] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState([]);
-  
+
   // Viewed properties (collapsible list)
   const [viewedExpanded, setViewedExpanded] = useState(false);
   const [viewedLoading, setViewedLoading] = useState(false);
@@ -162,42 +162,42 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   const [viewedPage, setViewedPage] = useState(1);
   const [viewedHasMore, setViewedHasMore] = useState(false);
   const [viewedActionsOpenId, setViewedActionsOpenId] = useState(null);
-  
+
   // Bulk messaging
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
   const [bulkFilter, setBulkFilter] = useState("all");
   const [bulkTagFilter, setBulkTagFilter] = useState(""); // Tag ID for filtering
   const [bulkSending, setBulkSending] = useState(false);
-  
+
   // Tags management
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [tags, setTags] = useState([]);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#a855f7");
   const [selectedTagFilter, setSelectedTagFilter] = useState(null);
-  
+
   // Archived conversations
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
-  
+
   // Feature toggles
 
   const [showAIControlPanel, setShowAIControlPanel] = useState(false);
   const [showAIChatbotSettings, setShowAIChatbotSettings] = useState(false);
   const [showBestTimes, setShowBestTimes] = useState(false);
-  
+
   // Filtering state
   const [activeFilter, setActiveFilter] = useState("all");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [showDateFilter, setShowDateFilter] = useState(false);
-  
+
   // Selection mode
   const [selectedConversations, setSelectedConversations] = useState(new Set());
   const [selectMode, setSelectMode] = useState(false);
-  
+
   // Saved replies
   const [savedReplies, setSavedReplies] = useState([]);
   const [showSavedReplies, setShowSavedReplies] = useState(false);
@@ -205,16 +205,16 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   const [newReplyTitle, setNewReplyTitle] = useState("");
   const [newReplyContent, setNewReplyContent] = useState("");
   const [newReplyShortcut, setNewReplyShortcut] = useState("");
-  
+
   // Scheduling
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
-  
+
   // Conversation tags
   const [conversationTags, setConversationTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
-  
+
   // Warning settings
   const [warningSettings, setWarningSettings] = useState(() => {
     try {
@@ -237,7 +237,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
       danger_color: "#ef4444",
     };
   });
-  
+
   // Mobile view
   const [mobileView, setMobileView] = useState("list"); // 'list', 'chat', 'details'
 
@@ -1924,7 +1924,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
           >
             {/* Show global search results if search is active and has results */}
             {searchTerm.length >= 2 && conversationSearchResults?.length > 0 ? (
-               conversationSearchResults.map((conv) => {
+              conversationSearchResults.map((conv) => {
                 return (
                   <div
                     key={conv.id || conv.conversation_id}
@@ -2067,73 +2067,73 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                   "Searching..."
                 ) : searchTerm.length >= 2 ? (
                   "No contacts found matching your search."
-                 ) : conversations.length === 0 ? (
-                   <div
-                     style={{
-                       display: "flex",
-                       flexDirection: "column",
-                       alignItems: "center",
-                       gap: "1rem",
-                       padding: "2rem",
-                       background: "var(--bg-tertiary)",
-                       borderRadius: "var(--radius-lg)",
-                       border: "2px dashed var(--border-color)",
-                       margin: "1rem",
-                       textAlign: "center",
-                     }}
-                   >
-                     <div style={{ fontSize: "3rem", opacity: 0.7 }}>💬</div>
-                     <h4 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>
-                       Messenger Inbox is Empty
-                     </h4>
-                     <p style={{ margin: 0, color: "var(--text-secondary)", maxWidth: "400px" }}>
-                       No conversations yet. Connect a Facebook page to sync messages from Facebook Messenger.
-                     </p>
-                     <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem" }}>
-                       <button
-                         className="btn btn-sm btn-primary"
-                         onClick={() => {
-                           // Open admin settings to connect Facebook
-                           if (window.parent?.setShowAdminSettings) {
-                             window.parent.setShowAdminSettings(true);
-                           } else {
-                             alert("Go to Admin Settings → Facebook Integration to connect a Facebook page");
-                           }
-                         }}
-                         style={{ padding: "0.5rem 1rem" }}
-                       >
-                         🔗 Connect Facebook Page
-                       </button>
-                       <button
-                         className="btn btn-sm btn-secondary"
-                         onClick={() => {
-                           if (
-                             confirm("Load demo data? This will enable demo mode.")
-                           ) {
-                             localStorage.setItem("gaia_demo_mode", "true");
-                             window.location.reload();
-                           }
-                         }}
-                         style={{ padding: "0.5rem 1rem", background: "#e5e7eb", color: "#374151" }}
-                       >
-                         📂 Try Demo Mode
-                       </button>
-                     </div>
-                     <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "1rem", maxWidth: "500px" }}>
-                       <p style={{ margin: 0 }}>
-                         <strong>To get started:</strong>
-                       </p>
-                       <ol style={{ margin: "0.5rem 0", paddingLeft: "1.5rem", textAlign: "left" }}>
-                         <li>Go to Admin Settings → Facebook Integration</li>
-                         <li>Connect your Facebook Business Page</li>
-                         <li>Sync conversations from Facebook</li>
-                         <li>Or use Demo Mode to test without Facebook</li>
-                       </ol>
-                     </div>
-                   </div>
-                 ) : (
-                   "No conversations match your filter."
-                 )}
+                ) : conversations.length === 0 ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "1rem",
+                      padding: "2rem",
+                      background: "var(--bg-tertiary)",
+                      borderRadius: "var(--radius-lg)",
+                      border: "2px dashed var(--border-color)",
+                      margin: "1rem",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ fontSize: "3rem", opacity: 0.7 }}>💬</div>
+                    <h4 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>
+                      Messenger Inbox is Empty
+                    </h4>
+                    <p style={{ margin: 0, color: "var(--text-secondary)", maxWidth: "400px" }}>
+                      No conversations yet. Connect a Facebook page to sync messages from Facebook Messenger.
+                    </p>
+                    <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem" }}>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => {
+                          // Open admin settings to connect Facebook
+                          if (window.parent?.setShowAdminSettings) {
+                            window.parent.setShowAdminSettings(true);
+                          } else {
+                            alert("Go to Admin Settings → Facebook Integration to connect a Facebook page");
+                          }
+                        }}
+                        style={{ padding: "0.5rem 1rem" }}
+                      >
+                        🔗 Connect Facebook Page
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => {
+                          if (
+                            confirm("Load demo data? This will enable demo mode.")
+                          ) {
+                            localStorage.setItem("gaia_demo_mode", "true");
+                            window.location.reload();
+                          }
+                        }}
+                        style={{ padding: "0.5rem 1rem", background: "#e5e7eb", color: "#374151" }}
+                      >
+                        📂 Try Demo Mode
+                      </button>
+                    </div>
+                    <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "1rem", maxWidth: "500px" }}>
+                      <p style={{ margin: 0 }}>
+                        <strong>To get started:</strong>
+                      </p>
+                      <ol style={{ margin: "0.5rem 0", paddingLeft: "1.5rem", textAlign: "left" }}>
+                        <li>Go to Admin Settings → Facebook Integration</li>
+                        <li>Connect your Facebook Business Page</li>
+                        <li>Sync conversations from Facebook</li>
+                        <li>Or use Demo Mode to test without Facebook</li>
+                      </ol>
+                    </div>
+                  </div>
+                ) : (
+                  "No conversations match your filter."
+                )}
               </div>
             ) : (
               filteredConversations.map((conv) => {
@@ -2429,47 +2429,47 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     {selectedConversation.participant_name || "Unknown"}
                     {(!selectedConversation.participant_name ||
                       selectedConversation.participant_name === "Unknown") && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            // First try to fetch from Facebook
-                            await refreshContactName();
-                          } catch (err) {
-                            console.error("Failed to refresh name:", err);
-                            // If Facebook fails, prompt user to enter a custom name
-                            const customName = window.prompt(
-                              "Facebook could not provide this contact's name (privacy restriction).\n\nEnter a name for this contact:",
-                              "",
-                            );
-                            if (customName && customName.trim()) {
-                              try {
-                                await setContactName(customName.trim());
-                              } catch (setErr) {
-                                console.error(
-                                  "Failed to set custom name:",
-                                  setErr,
-                                );
-                                alert(
-                                  "Failed to save the name. Please try again.",
-                                );
+                        <button
+                          onClick={async () => {
+                            try {
+                              // First try to fetch from Facebook
+                              await refreshContactName();
+                            } catch (err) {
+                              console.error("Failed to refresh name:", err);
+                              // If Facebook fails, prompt user to enter a custom name
+                              const customName = window.prompt(
+                                "Facebook could not provide this contact's name (privacy restriction).\n\nEnter a name for this contact:",
+                                "",
+                              );
+                              if (customName && customName.trim()) {
+                                try {
+                                  await setContactName(customName.trim());
+                                } catch (setErr) {
+                                  console.error(
+                                    "Failed to set custom name:",
+                                    setErr,
+                                  );
+                                  alert(
+                                    "Failed to save the name. Please try again.",
+                                  );
+                                }
                               }
                             }
-                          }
-                        }}
-                        title="Refresh name from Facebook or set custom name"
-                        style={{
-                          background: "var(--bg-secondary)",
-                          border: "1px solid var(--border-color)",
-                          borderRadius: "4px",
-                          padding: "0.125rem 0.5rem",
-                          fontSize: "0.7rem",
-                          cursor: "pointer",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        🔄 Set Name
-                      </button>
-                    )}
+                          }}
+                          title="Refresh name from Facebook or set custom name"
+                          style={{
+                            background: "var(--bg-secondary)",
+                            border: "1px solid var(--border-color)",
+                            borderRadius: "4px",
+                            padding: "0.125rem 0.5rem",
+                            fontSize: "0.7rem",
+                            cursor: "pointer",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          🔄 Set Name
+                        </button>
+                      )}
                   </div>
                   {selectedConversation.linked_client && (
                     <div
@@ -2854,8 +2854,8 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                               transition: "background 0.2s",
                             }}
                             onMouseEnter={(e) =>
-                              (e.currentTarget.style.background =
-                                "var(--bg-secondary)")
+                            (e.currentTarget.style.background =
+                              "var(--bg-secondary)")
                             }
                             onMouseLeave={(e) =>
                               (e.currentTarget.style.background = "transparent")
@@ -3217,120 +3217,120 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
               {(selectedConversation.contact_info ||
                 conversationInsights?.contactInfo ||
                 selectedConversation.email) && (
-                <div
-                  style={{
-                    marginBottom: "1.5rem",
-                    background: "var(--bg-secondary)",
-                    padding: "1rem",
-                    borderRadius: "var(--radius-md)",
-                  }}
-                >
-                  <h5
-                    style={{
-                      margin: "0 0 0.5rem 0",
-                      fontSize: "0.8rem",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    📋 Contact Details (Scraped)
-                  </h5>
                   <div
                     style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.5rem",
-                      fontSize: "0.85rem",
+                      marginBottom: "1.5rem",
+                      background: "var(--bg-secondary)",
+                      padding: "1rem",
+                      borderRadius: "var(--radius-md)",
                     }}
                   >
-                    {(selectedConversation.contact_info?.email ||
-                      conversationInsights?.contactInfo?.email ||
-                      selectedConversation.participant_email) && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span>📧</span>{" "}
-                        <span style={{ wordBreak: "break-all" }}>
-                          {selectedConversation.contact_info?.email ||
-                            conversationInsights?.contactInfo?.email ||
-                            selectedConversation.participant_email}
-                        </span>
-                      </div>
-                    )}
-                    {(selectedConversation.contact_info?.phone ||
-                      conversationInsights?.contactInfo?.phone) && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span>📞</span>{" "}
-                        <span>
-                          {selectedConversation.contact_info?.phone ||
-                            conversationInsights?.contactInfo?.phone}
-                        </span>
-                      </div>
-                    )}
-                    {(selectedConversation.contact_info?.location ||
-                      conversationInsights?.contactInfo?.location) && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span>📍</span>{" "}
-                        <span>
-                          {selectedConversation.contact_info?.location ||
-                            conversationInsights?.contactInfo?.location}
-                        </span>
-                      </div>
-                    )}
-                    {conversationInsights?.contactInfo?.businessName && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span>🏢</span>{" "}
-                        <span>
-                          {conversationInsights.contactInfo.businessName}
-                        </span>
-                      </div>
-                    )}
-                    {conversationInsights?.contactInfo?.website && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span>🌐</span>{" "}
-                        <a
-                          href={conversationInsights.contactInfo.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                    <h5
+                      style={{
+                        margin: "0 0 0.5rem 0",
+                        fontSize: "0.8rem",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      📋 Contact Details (Scraped)
+                    </h5>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      {(selectedConversation.contact_info?.email ||
+                        conversationInsights?.contactInfo?.email ||
+                        selectedConversation.participant_email) && (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            <span>📧</span>{" "}
+                            <span style={{ wordBreak: "break-all" }}>
+                              {selectedConversation.contact_info?.email ||
+                                conversationInsights?.contactInfo?.email ||
+                                selectedConversation.participant_email}
+                            </span>
+                          </div>
+                        )}
+                      {(selectedConversation.contact_info?.phone ||
+                        conversationInsights?.contactInfo?.phone) && (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            <span>📞</span>{" "}
+                            <span>
+                              {selectedConversation.contact_info?.phone ||
+                                conversationInsights?.contactInfo?.phone}
+                            </span>
+                          </div>
+                        )}
+                      {(selectedConversation.contact_info?.location ||
+                        conversationInsights?.contactInfo?.location) && (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            <span>📍</span>{" "}
+                            <span>
+                              {selectedConversation.contact_info?.location ||
+                                conversationInsights?.contactInfo?.location}
+                            </span>
+                          </div>
+                        )}
+                      {conversationInsights?.contactInfo?.businessName && (
+                        <div
                           style={{
-                            color: "var(--primary)",
-                            wordBreak: "break-all",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
                           }}
                         >
-                          {conversationInsights.contactInfo.website}
-                        </a>
-                      </div>
-                    )}
+                          <span>🏢</span>{" "}
+                          <span>
+                            {conversationInsights.contactInfo.businessName}
+                          </span>
+                        </div>
+                      )}
+                      {conversationInsights?.contactInfo?.website && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          <span>🌐</span>{" "}
+                          <a
+                            href={conversationInsights.contactInfo.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: "var(--primary)",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {conversationInsights.contactInfo.website}
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Viewed Properties */}
               {previewViewedProperties.length > 0 && (
@@ -4162,7 +4162,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
             >
               <h3 style={{ marginTop: 0 }}>📢 Send Bulk Message</h3>
               <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-                Uses ACCOUNT_UPDATE tag for Facebook compliance
+                Uses HUMAN_AGENT tag for Facebook compliance (7-day window)
               </p>
 
               <div style={{ marginBottom: "1rem" }}>

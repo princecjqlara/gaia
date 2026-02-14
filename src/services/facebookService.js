@@ -832,6 +832,11 @@ class FacebookService {
             let useMessageTag = false;
             if (conv?.last_message_time) {
                 const hoursSinceLastActivity = (Date.now() - new Date(conv.last_message_time).getTime()) / (1000 * 60 * 60);
+                // HUMAN_AGENT tag only works within 7-day (168h) window
+                if (hoursSinceLastActivity > 168) {
+                    console.log(`[SEND] Skipping quick reply - outside 7-day window (${hoursSinceLastActivity.toFixed(1)}h)`);
+                    throw new Error('Cannot send message: contact is outside the 7-day messaging window');
+                }
                 useMessageTag = hoursSinceLastActivity > 24;
             }
 
@@ -845,7 +850,7 @@ class FacebookService {
 
             if (useMessageTag) {
                 requestBody.messaging_type = 'MESSAGE_TAG';
-                requestBody.tag = 'ACCOUNT_UPDATE';
+                requestBody.tag = 'HUMAN_AGENT';
             }
 
             const response = await fetch(
@@ -889,7 +894,7 @@ class FacebookService {
 
     /**
      * Send a message via Facebook Graph API
-     * Automatically uses ACCOUNT_UPDATE tag when outside 24-hour messaging window
+     * Automatically uses HUMAN_AGENT tag when outside 24-hour but within 7-day messaging window
      */
     async sendMessage(pageId, recipientId, messageText, conversationId = null) {
         try {
@@ -912,6 +917,11 @@ class FacebookService {
 
             if (conv?.last_message_time) {
                 const hoursSinceLastActivity = (Date.now() - new Date(conv.last_message_time).getTime()) / (1000 * 60 * 60);
+                // HUMAN_AGENT tag only works within 7-day (168h) window
+                if (hoursSinceLastActivity > 168) {
+                    console.log(`[SEND] Cannot send - outside 7-day window (${hoursSinceLastActivity.toFixed(1)}h)`);
+                    throw new Error('Cannot send message: contact is outside the 7-day messaging window. They need to message you first.');
+                }
                 useMessageTag = hoursSinceLastActivity > 24;
                 console.log(`[SEND] Hours since last activity: ${hoursSinceLastActivity.toFixed(1)}, Using tag: ${useMessageTag}`);
             }
@@ -922,11 +932,11 @@ class FacebookService {
                 message: { text: messageText }
             };
 
-            // Add MESSAGE_TAG if outside 24-hour window
+            // Add MESSAGE_TAG with HUMAN_AGENT if outside 24-hour window but within 7-day
             if (useMessageTag) {
                 requestBody.messaging_type = 'MESSAGE_TAG';
-                requestBody.tag = 'ACCOUNT_UPDATE';
-                console.log(`[SEND] Using ACCOUNT_UPDATE tag (outside 24h window)`);
+                requestBody.tag = 'HUMAN_AGENT';
+                console.log(`[SEND] Using HUMAN_AGENT tag (outside 24h, within 7-day window)`);
             }
 
             const response = await fetch(
@@ -953,8 +963,8 @@ class FacebookService {
                     errorMessage.includes('outside');
 
                 if (isWindowError && !useMessageTag) {
-                    console.log(`[SEND] Retrying with ACCOUNT_UPDATE tag due to messaging window error`);
-                    return this.sendMessageWithTag(pageId, recipientId, messageText, 'ACCOUNT_UPDATE');
+                    console.log(`[SEND] Retrying with HUMAN_AGENT tag due to messaging window error`);
+                    return this.sendMessageWithTag(pageId, recipientId, messageText, 'HUMAN_AGENT');
                 }
 
                 throw new Error(errorMessage);
@@ -991,10 +1001,10 @@ class FacebookService {
 
 
     /**
-     * Send a message with MESSAGE_TAG for messaging outside 24-hour window
-     * Uses ACCOUNT_UPDATE tag for messaging outside 24-hour window
+     * Send a message with MESSAGE_TAG for messaging outside 24-hour but within 7-day window
+     * Uses HUMAN_AGENT tag for customer service messaging
      */
-    async sendMessageWithTag(pageId, recipientId, messageText, tag = 'ACCOUNT_UPDATE') {
+    async sendMessageWithTag(pageId, recipientId, messageText, tag = 'HUMAN_AGENT') {
         try {
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
@@ -1741,7 +1751,7 @@ class FacebookService {
                     body: JSON.stringify({
                         recipient: { id: recipientId },
                         messaging_type: 'MESSAGE_TAG',
-                        tag: 'ACCOUNT_UPDATE',
+                        tag: 'HUMAN_AGENT',
                         message: {
                             attachment: {
                                 type: 'template',
@@ -1804,7 +1814,7 @@ class FacebookService {
                     body: JSON.stringify({
                         recipient: { id: recipientId },
                         messaging_type: 'MESSAGE_TAG',
-                        tag: 'ACCOUNT_UPDATE',
+                        tag: 'HUMAN_AGENT',
                         message: {
                             attachment: {
                                 type: 'template',
@@ -1885,7 +1895,7 @@ class FacebookService {
                     body: JSON.stringify({
                         recipient: { id: recipientId },
                         messaging_type: 'MESSAGE_TAG',
-                        tag: 'ACCOUNT_UPDATE',
+                        tag: 'HUMAN_AGENT',
                         message: {
                             attachment: {
                                 type: 'template',
@@ -2603,8 +2613,8 @@ class FacebookService {
                     // Replace template variables with actual values
                     const personalizedMessage = replaceTemplateVars(messageText, recipient);
 
-                    // Use ACCOUNT_UPDATE tag for bulk/automated messages
-                    await this.sendMessageWithTag(pageId, recipient.participant_id, personalizedMessage, 'ACCOUNT_UPDATE');
+                    // Use HUMAN_AGENT tag for bulk messages (only works within 7-day window)
+                    await this.sendMessageWithTag(pageId, recipient.participant_id, personalizedMessage, 'HUMAN_AGENT');
                     sent++;
                     // Add small delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 100));

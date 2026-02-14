@@ -83,7 +83,7 @@ export const useScheduledMessageProcessor = (isActive = true) => {
                                         recipient: { id: recipient },
                                         message: { text: msg.message_text },
                                         messaging_type: 'MESSAGE_TAG',
-                                        tag: 'ACCOUNT_UPDATE'
+                                        tag: 'HUMAN_AGENT'
                                     })
                                 }
                             );
