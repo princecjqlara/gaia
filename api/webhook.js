@@ -699,6 +699,64 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: "ok", checks });
   }
 
+  // FULL WEBHOOK TEST: POST ?action=webhook_test
+  // Traces the entire AI response flow and reports what happens at each step
+  if (req.method === "POST" && req.body?.action === "webhook_test") {
+    const steps = [];
+    const db = getSupabase();
+    if (!db) return res.status(500).json({ error: "No DB" });
+    try {
+      // Step 1: Get settings
+      const { data: settings, error: settErr } = await db.from("settings").select("value").eq("key", "ai_chatbot_config").single();
+      steps.push({ step: "settings", ok: !settErr, enabled: settings?.value?.global_bot_enabled !== false, autoRespond: settings?.value?.auto_respond_to_new_messages !== false, error: settErr?.message });
+
+      // Step 2: Get page
+      const { data: pages, error: pgErr } = await db.from("facebook_pages").select("page_id,page_name,page_access_token,is_active").limit(5);
+      steps.push({ step: "pages", ok: !pgErr, count: pages?.length, pages: pages?.map(p => ({ id: p.page_id, name: p.page_name, hasToken: !!p.page_access_token && p.page_access_token !== "pending", tokenLen: p.page_access_token?.length, active: p.is_active })), error: pgErr?.message });
+
+      // Step 3: Get a recent conversation
+      const { data: convs, error: convErr } = await db.from("facebook_conversations").select("conversation_id,participant_name,ai_enabled,human_takeover").order("updated_at", { ascending: false }).limit(3);
+      steps.push({ step: "conversations", ok: !convErr, count: convs?.length, convs: convs?.map(c => ({ id: c.conversation_id?.substring(0, 20), name: c.participant_name, ai: c.ai_enabled, humanTakeover: c.human_takeover })), error: convErr?.message });
+
+      // Step 4: Check recent messages from first conversation
+      if (convs?.[0]) {
+        const cid = convs[0].conversation_id;
+        const { data: msgs, error: msgErr } = await db.from("facebook_messages").select("is_from_page,message_text,timestamp").eq("conversation_id", cid).order("timestamp", { ascending: false }).limit(5);
+
+        // Spam check: how many consecutive page messages?
+        let consecutivePage = 0;
+        for (const m of (msgs || [])) {
+          if (m.is_from_page) consecutivePage++;
+          else break;
+        }
+        steps.push({ step: "messages", ok: !msgErr, convId: cid.substring(0, 20), count: msgs?.length, consecutivePageMsgs: consecutivePage, wouldSpamBlock: consecutivePage >= 2, lastMsg: msgs?.[0]?.message_text?.substring(0, 50), error: msgErr?.message });
+      }
+
+      // Step 5: NVIDIA test
+      const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+      if (NVIDIA_API_KEY) {
+        try {
+          const aiResp = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${NVIDIA_API_KEY}` },
+            body: JSON.stringify({ model: "meta/llama-3.1-70b-instruct", messages: [{ role: "user", content: "Say OK" }], max_tokens: 10, temperature: 0.1 }),
+          });
+          const aiData = aiResp.ok ? await aiResp.json() : { error: await aiResp.text() };
+          steps.push({ step: "nvidia", ok: aiResp.ok, status: aiResp.status, reply: aiData.choices?.[0]?.message?.content || aiData.error?.substring?.(0, 100) });
+        } catch (e) { steps.push({ step: "nvidia", ok: false, error: e.message }); }
+      } else {
+        steps.push({ step: "nvidia", ok: false, error: "No API key" });
+      }
+
+      // Step 6: Check verify token
+      steps.push({ step: "verify_token", token: process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || "NOT SET" });
+
+      return res.status(200).json({ status: "ok", steps });
+    } catch (e) {
+      return res.status(500).json({ error: e.message, steps });
+    }
+  }
+
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
