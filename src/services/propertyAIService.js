@@ -1,34 +1,21 @@
 // Property AI Service for Gaia
 // Provides property matching and Q&A capabilities using NVIDIA AI
+// Uses server-side proxy to avoid CORS issues
 
-const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
-
-const getApiKey = () => {
-    return import.meta.env?.VITE_NVIDIA_API_KEY ||
-        import.meta.env?.NVIDIA_API_KEY ||
-        '';
-};
+const AI_PROXY_URL = '/api/ai/chat';
 
 const nvidiaChat = async (messages, options = {}) => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-        console.warn('NVIDIA API key not configured');
-        return null;
-    }
-
     try {
-        const response = await fetch(NVIDIA_API_URL, {
+        const response = await fetch(AI_PROXY_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: options.model || 'nvidia/llama-3.1-nemotron-70b-instruct',
                 messages,
                 temperature: options.temperature || 0.7,
                 max_tokens: options.maxTokens || 1024,
-                stream: false
             })
         });
 
@@ -94,17 +81,17 @@ ${JSON.stringify(criteria, null, 2)}
 
 Available Properties:
 ${JSON.stringify(properties.map(p => ({
-    id: p.id,
-    title: p.title,
-    type: p.type,
-    status: p.status,
-    address: p.address,
-    price: p.price,
-    bedrooms: p.bedrooms,
-    bathrooms: p.bathrooms,
-    floorArea: p.floorArea,
-    lotArea: p.lotArea
-})), null, 2)}
+        id: p.id,
+        title: p.title,
+        type: p.type,
+        status: p.status,
+        address: p.address,
+        price: p.price,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        floorArea: p.floorArea,
+        lotArea: p.lotArea
+    })), null, 2)}
 
 Return a JSON response with this structure:
 {
@@ -177,25 +164,25 @@ Analyze this property and provide insights:
 
 Property:
 ${JSON.stringify({
-    title: property.title,
-    type: property.type,
-    status: property.status,
-    address: property.address,
-    price: property.price,
-    bedrooms: property.bedrooms,
-    bathrooms: property.bathrooms,
-    floorArea: property.floorArea,
-    lotArea: property.lotArea,
-    description: property.description?.substring(0, 300)
-}, null, 2)}
+                title: property.title,
+                type: property.type,
+                status: property.status,
+                address: property.address,
+                price: property.price,
+                bedrooms: property.bedrooms,
+                bathrooms: property.bathrooms,
+                floorArea: property.floorArea,
+                lotArea: property.lotArea,
+                description: property.description?.substring(0, 300)
+            }, null, 2)}
 
 Comparable Properties:
 ${JSON.stringify(comparableProperties.map(p => ({
-    title: p.title,
-    price: p.price,
-    bedrooms: p.bedrooms,
-    floorArea: p.floorArea
-})), null, 2)}
+                title: p.title,
+                price: p.price,
+                bedrooms: p.bedrooms,
+                floorArea: p.floorArea
+            })), null, 2)}
 
 Provide insights on:
 1. Price competitiveness

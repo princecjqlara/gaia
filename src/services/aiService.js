@@ -1,36 +1,21 @@
 // NVIDIA AI Service for Gaia
-// Uses NVIDIA NIM API with gpt-oss-120b model
+// Uses server-side proxy to avoid CORS issues
 
-const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const AI_PROXY_URL = '/api/ai/chat';
 
-// Get API key from environment (check both naming conventions)
-const getApiKey = () => {
-    return import.meta.env?.VITE_NVIDIA_API_KEY ||
-        import.meta.env?.NVIDIA_API_KEY ||
-        '';
-};
-
-// Base chat completion
+// Base chat completion (routed through server-side proxy)
 export const nvidiaChat = async (messages, options = {}) => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-        console.warn('NVIDIA API key not configured');
-        return null;
-    }
-
     try {
-        const response = await fetch(NVIDIA_API_URL, {
+        const response = await fetch(AI_PROXY_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: options.model || 'nvidia/llama-3.1-nemotron-70b-instruct',
                 messages,
                 temperature: options.temperature || 0.7,
                 max_tokens: options.maxTokens || 1024,
-                stream: false
             })
         });
 
