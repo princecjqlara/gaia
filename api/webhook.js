@@ -837,6 +837,51 @@ export default async function handler(req, res) {
     }
   }
 
+  // SUBSCRIBE PAGE: POST ?action=subscribe_page
+  // Subscribes the Facebook page to the app to receive webhook events
+  if (req.method === "POST" && req.body?.action === "subscribe_page") {
+    const db = getSupabase();
+    if (!db) return res.status(500).json({ error: "No DB" });
+    try {
+      // Get the active page
+      const { data: page } = await db.from("facebook_pages").select("*").eq("is_active", true).limit(1).single();
+      if (!page) return res.status(200).json({ error: "No active page found" });
+      if (!page.page_access_token || page.page_access_token === "pending") {
+        return res.status(200).json({ error: "Page access token is missing or pending" });
+      }
+
+      // Step 1: Check current subscription status
+      const checkUrl = `https://graph.facebook.com/v21.0/${page.page_id}/subscribed_apps?access_token=${page.page_access_token}`;
+      const checkResp = await fetch(checkUrl);
+      const checkData = await checkResp.json();
+
+      // Step 2: Subscribe the page to the app
+      const subscribeUrl = `https://graph.facebook.com/v21.0/${page.page_id}/subscribed_apps`;
+      const subscribeResp = await fetch(subscribeUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscribed_fields: "messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,feed",
+          access_token: page.page_access_token
+        })
+      });
+      const subscribeData = await subscribeResp.json();
+
+      // Step 3: Verify subscription
+      const verifyResp = await fetch(checkUrl);
+      const verifyData = await verifyResp.json();
+
+      return res.status(200).json({
+        page: { id: page.page_id, name: page.page_name },
+        before: checkData,
+        subscribeResult: subscribeData,
+        after: verifyData
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
