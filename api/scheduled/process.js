@@ -564,6 +564,12 @@ export default async function handler(req, res) {
                         const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
 
                         if (NVIDIA_API_KEY && conversationContext) {
+                            // Determine if this is a read-receipt triggered follow-up
+                            const isReadTriggered = followup.follow_up_type === 'read_receipt';
+                            const readReceiptContext = isReadTriggered
+                                ? `\n## IMPORTANT CONTEXT: The customer just opened and READ your last message moments ago but hasn't replied yet. They are likely active on their phone RIGHT NOW. This is a perfect time to gently nudge them. Do NOT say "I saw you read my message" — just follow up naturally as if you're catching them at a good time.\n`
+                                : '';
+
                             try {
                                 const followUpPrompt = `${systemPrompt}
 
@@ -571,8 +577,8 @@ ${knowledgeBase ? `## Knowledge Base:\n${knowledgeBase}\n` : ''}
 ## Language: Respond in ${language}
 
 ## Task: Generate a follow-up message for this conversation.
-The customer hasn't responded in a while.
-
+${isReadTriggered ? 'The customer just saw your message and is likely active right now.' : 'The customer hasn\'t responded in a while.'}
+${readReceiptContext}
 ## Your Follow-up Instructions:
 ${followUpInstruction}
 
@@ -581,6 +587,7 @@ ${followUpInstruction}
 2. Keeps it short (1-2 sentences like a real text message)
 3. Feels natural, not automated
 4. Gently moves the conversation forward
+${isReadTriggered ? '5. Since they just saw your message, be timely and conversational — like texting a friend who just came online' : ''}
 
 ## Recent Conversation:
 ${conversationContext}

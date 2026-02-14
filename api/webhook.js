@@ -1072,6 +1072,8 @@ export default async function handler(req, res) {
               try {
                 if (event.message) {
                   await handleIncomingMessage(pageId, event);
+                } else if (event.read) {
+                  await handleReadReceipt(pageId, event);
                 } else if (event.postback) {
                   await handlePostbackEvent(pageId, event);
                 } else if (event.referral) {
@@ -3421,6 +3423,108 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
     }
   } catch (err) {
     console.error("[WEBHOOK] Follow-up analysis exception:", err.message);
+  }
+}
+
+/**
+ * Handle Facebook Read Receipt
+ * When a contact reads/sees our message, schedule a quick follow-up
+ * that acknowledges they've seen the message and nudges them to respond.
+ */
+async function handleReadReceipt(pageId, event) {
+  const senderId = event.sender?.id;
+  const readTimestamp = event.read?.watermark; // Messages up to this timestamp were read
+
+  if (!senderId || !readTimestamp) return;
+
+  const db = getSupabase();
+  if (!db) return;
+
+  console.log(`[WEBHOOK] 👁️ Read receipt from ${senderId} at ${new Date(readTimestamp).toISOString()}`);
+
+  try {
+    // 1. Find the conversation for this participant
+    const { data: conv } = await db
+      .from('facebook_conversations')
+      .select('conversation_id, participant_name')
+      .eq('participant_id', senderId)
+      .eq('page_id', pageId)
+      .single();
+
+    if (!conv) {
+      console.log('[WEBHOOK] 👁️ Read receipt: no conversation found, skipping');
+      return;
+    }
+
+    // 2. Check if there's already a pending read-triggered follow-up (prevent spam)
+    const { data: existingFollow } = await db
+      .from('ai_followup_schedule')
+      .select('id')
+      .eq('conversation_id', conv.conversation_id)
+      .eq('status', 'pending')
+      .eq('follow_up_type', 'read_receipt')
+      .limit(1)
+      .single();
+
+    if (existingFollow) {
+      console.log('[WEBHOOK] 👁️ Read-triggered follow-up already pending, skipping');
+      return;
+    }
+
+    // 3. Check the last message in this conversation — was it from the page (AI)?
+    const { data: lastMsg } = await db
+      .from('facebook_messages')
+      .select('is_from_page, timestamp, message_text')
+      .eq('conversation_id', conv.conversation_id)
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!lastMsg || !lastMsg.is_from_page) {
+      // Last message was from the customer, no need to follow up on a read
+      console.log('[WEBHOOK] 👁️ Last message was from customer, no read follow-up needed');
+      return;
+    }
+
+    // 4. Check that the message was sent reasonably recently (within 24h)
+    const msgAge = Date.now() - new Date(lastMsg.timestamp).getTime();
+    if (msgAge > 24 * 60 * 60 * 1000) {
+      console.log('[WEBHOOK] 👁️ Last AI message is older than 24h, skipping read follow-up');
+      return;
+    }
+
+    // 5. Check that the customer hasn't already replied to this message
+    const { data: replyAfter } = await db
+      .from('facebook_messages')
+      .select('id')
+      .eq('conversation_id', conv.conversation_id)
+      .eq('is_from_page', false)
+      .gt('timestamp', lastMsg.timestamp)
+      .limit(1)
+      .single();
+
+    if (replyAfter) {
+      console.log('[WEBHOOK] 👁️ Customer already replied after last AI message, skipping');
+      return;
+    }
+
+    // 6. Schedule a quick read-aware follow-up (5-15 min delay)
+    const delayMinutes = Math.floor(Math.random() * 11) + 5; // 5-15 minutes
+    const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+
+    await db.from('ai_followup_schedule').insert({
+      conversation_id: conv.conversation_id,
+      page_id: pageId,
+      scheduled_at: scheduledAt.toISOString(),
+      status: 'pending',
+      follow_up_type: 'read_receipt',
+      notes: `Contact read message at ${new Date(readTimestamp).toISOString()}. Scheduled read-aware follow-up in ${delayMinutes} minutes.`
+    });
+
+    console.log(`[WEBHOOK] 👁️ Read-triggered follow-up scheduled for ${conv.participant_name || senderId} in ${delayMinutes} min`);
+  } catch (err) {
+    // Non-fatal — follow_up_type column might not exist yet, or table missing
+    console.log('[WEBHOOK] Read receipt handling (non-fatal):', err.message);
   }
 }
 
