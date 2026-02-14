@@ -675,7 +675,29 @@ Knowledge base: ${config.knowledge_base || "We are a digital marketing agency."}
  * Also handles property click notifications
  */
 export default async function handler(req, res) {
-  console.log("[WEBHOOK] v2.1 - AI Auto-Response + Property Click Tracking");
+  console.log("[WEBHOOK] v3.0 - Optimized AI Response");
+
+  // Diagnostic endpoint: GET /api/webhook?action=diagnose
+  if (req.method === "GET" && req.query.action === "diagnose") {
+    const db = getSupabase();
+    const checks = {
+      supabase: !!db,
+      nvidia_key: !!(process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY),
+      supabase_url: !!(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
+      service_role: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    };
+    if (db) {
+      try {
+        const { data, error } = await db.from("settings").select("key").limit(1);
+        checks.settings_query = error ? `ERROR: ${error.message}` : `OK (${data?.length} rows)`;
+      } catch (e) { checks.settings_query = `EXCEPTION: ${e.message}`; }
+      try {
+        const { data, error } = await db.from("facebook_pages").select("page_id").limit(1);
+        checks.pages_query = error ? `ERROR: ${error.message}` : `OK (${data?.length} rows)`;
+      } catch (e) { checks.pages_query = `EXCEPTION: ${e.message}`; }
+    }
+    return res.status(200).json({ status: "ok", checks });
+  }
 
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -1891,10 +1913,16 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     }
 
     // PARALLEL: Fetch settings + spam check at the same time
-    const [settingsResult, spamCheckResult] = await Promise.all([
-      db.from("settings").select("value").eq("key", "ai_chatbot_config").single(),
-      db.from("facebook_messages").select("is_from_page").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(3),
-    ]);
+    let settingsResult, spamCheckResult;
+    try {
+      [settingsResult, spamCheckResult] = await Promise.all([
+        db.from("settings").select("value").eq("key", "ai_chatbot_config").single(),
+        db.from("facebook_messages").select("is_from_page").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(3),
+      ]);
+    } catch (parallelErr) {
+      console.error("[WEBHOOK] Parallel fetch 1 FAILED:", parallelErr.message);
+      return;
+    }
 
     const config = settingsResult.data?.value || {};
 
@@ -1924,11 +1952,17 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     console.log(`[WEBHOOK] Checks passed in ${Date.now() - startTime}ms - loading data...`);
 
     // PARALLEL: Fetch page token, properties, and messages all at once
-    const [pageResult, propertiesResult, messagesResult] = await Promise.all([
-      db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single(),
-      db.from("properties").select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images").eq("status", "For Sale").order("created_at", { ascending: false }).limit(10),
-      db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(15),
-    ]);
+    let pageResult, propertiesResult, messagesResult;
+    try {
+      [pageResult, propertiesResult, messagesResult] = await Promise.all([
+        db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single(),
+        db.from("properties").select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images").eq("status", "For Sale").order("created_at", { ascending: false }).limit(10),
+        db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(15),
+      ]);
+    } catch (parallelErr) {
+      console.error("[WEBHOOK] Parallel fetch 2 FAILED:", parallelErr.message);
+      return;
+    }
 
     const page = pageResult.data;
     const properties = propertiesResult.data;
