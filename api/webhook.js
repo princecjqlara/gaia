@@ -892,6 +892,29 @@ export default async function handler(req, res) {
         return await handleCloudinarySign(req, res, body);
       }
 
+      // ===== PROCESS AI (self-callback from webhook) =====
+      // This runs as a SEPARATE Vercel function invocation with its own 10s timer
+      if (body.action === "process_ai") {
+        console.log("[WEBHOOK] process_ai invoked for conversation:", body.conversation_id);
+        try {
+          const db = getSupabase();
+          const { data: conv } = await db
+            .from("facebook_conversations")
+            .select("*")
+            .eq("conversation_id", body.conversation_id)
+            .single();
+          if (conv) {
+            await triggerAIResponse(db, body.conversation_id, body.page_id, conv);
+            console.log("[WEBHOOK] process_ai completed successfully");
+          } else {
+            console.log("[WEBHOOK] process_ai: conversation not found");
+          }
+        } catch (e) {
+          console.error("[WEBHOOK] process_ai error:", e.message);
+        }
+        return res.status(200).json({ ok: true });
+      }
+
       // ===== FACEBOOK WEBHOOK EVENTS =====
       // Only log actual message events, not delivery/read receipts
       const hasMessageEvent = body.entry?.some((e) =>
@@ -902,60 +925,41 @@ export default async function handler(req, res) {
       }
 
       if (body.object === "page") {
-        // CRITICAL: Return 200 to Facebook IMMEDIATELY
-        // Then process messages in background to avoid Vercel 10s timeout
-        const backgroundWork = (async () => {
-          for (const entry of body.entry || []) {
-            const pageId = entry.id;
-            const messaging = entry.messaging || [];
+        // Process messages synchronously (fast: just saves to DB, no AI)
+        for (const entry of body.entry || []) {
+          const pageId = entry.id;
+          const messaging = entry.messaging || [];
 
-            for (const event of messaging) {
-              try {
-                // Only process actual messages, ignore delivery/read receipts
-                if (event.message) {
-                  await handleIncomingMessage(pageId, event);
-                }
-                // Handle postbacks (Ice Breakers, Get Started buttons, persistent menu)
-                else if (event.postback) {
-                  console.log("[WEBHOOK] Postback received");
-                  await handlePostbackEvent(pageId, event);
-                }
-                // Handle referrals (ad clicks, m.me links with ref parameter)
-                else if (event.referral) {
-                  console.log("[WEBHOOK] Referral received");
-                  await handleReferralEvent(pageId, event);
-                }
-              } catch (eventErr) {
-                console.error("[WEBHOOK] Error processing event:", eventErr.message);
+          for (const event of messaging) {
+            try {
+              if (event.message) {
+                await handleIncomingMessage(pageId, event);
+              } else if (event.postback) {
+                console.log("[WEBHOOK] Postback received");
+                await handlePostbackEvent(pageId, event);
+              } else if (event.referral) {
+                console.log("[WEBHOOK] Referral received");
+                await handleReferralEvent(pageId, event);
               }
+            } catch (eventErr) {
+              console.error("[WEBHOOK] Error processing event:", eventErr.message);
             }
+          }
 
-            // Handle Facebook feed events (comments, reactions, etc.)
-            const changes = entry.changes || [];
-            for (const change of changes) {
-              if (change.field === "feed" && change.value?.item === "comment") {
-                console.log("[WEBHOOK] Comment received on post");
-                try {
-                  await handleCommentEvent(pageId, change.value);
-                } catch (commentErr) {
-                  console.error("[WEBHOOK] Comment error:", commentErr.message);
-                }
+          // Handle Facebook feed events
+          const changes = entry.changes || [];
+          for (const change of changes) {
+            if (change.field === "feed" && change.value?.item === "comment") {
+              console.log("[WEBHOOK] Comment received on post");
+              try {
+                await handleCommentEvent(pageId, change.value);
+              } catch (commentErr) {
+                console.error("[WEBHOOK] Comment error:", commentErr.message);
               }
             }
           }
-        })();
-
-        // Use Vercel's waitUntil if available (keeps function alive after response)
-        if (typeof globalThis?.waitUntil === 'function') {
-          globalThis.waitUntil(backgroundWork);
-        } else if (res.waitUntil) {
-          res.waitUntil(backgroundWork);
-        } else {
-          // Fallback: let the promise run but don't await it
-          backgroundWork.catch(err => console.error("[WEBHOOK] Background error:", err.message));
         }
 
-        // Return 200 to Facebook IMMEDIATELY — do NOT wait for processing
         return res.status(200).send("EVENT_RECEIVED");
       }
 
@@ -1906,10 +1910,18 @@ async function handleIncomingMessage(pageId, event) {
       }
     }
 
-    // TRIGGER AI AUTO-RESPONSE for incoming user messages (not echoes)
+    // TRIGGER AI AUTO-RESPONSE via self-callback (separate Vercel function invocation)
+    // This gives the AI response its own fresh 10-second timer
     if (!isFromPage && message.text) {
-      console.log("[WEBHOOK] Triggering AI auto-response...");
-      await triggerAIResponse(db, conversationId, pageId, existingConv);
+      console.log("[WEBHOOK] Firing AI self-callback for conversation:", conversationId);
+      const appUrl = process.env.APP_URL || process.env.VERCEL_URL || 'https://gaia-tech.vercel.app';
+      const callbackUrl = appUrl.startsWith('http') ? appUrl : `https://${appUrl}`;
+      // Fire-and-forget: do NOT await this fetch
+      fetch(`${callbackUrl}/api/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'process_ai', conversation_id: conversationId, page_id: pageId }),
+      }).catch(err => console.error('[WEBHOOK] AI callback fetch error:', err.message));
 
       // AI AUTO-LABELING: Apply labels based on conversation content
       // Run in background to not block response
