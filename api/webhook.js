@@ -3471,6 +3471,18 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
+    // 2b. Only send read-receipt follow-ups if contact has previously replied to a follow-up
+    const { count: priorReplies } = await db
+      .from('message_ab_results')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', conv.conversation_id)
+      .eq('got_reply', true);
+
+    if (!priorReplies || priorReplies === 0) {
+      console.log('[WEBHOOK] 👁️ Contact has never replied to a follow-up, skipping read follow-up');
+      return;
+    }
+
     // 3. Check the last message in this conversation — was it from the page (AI)?
     const { data: lastMsg } = await db
       .from('facebook_messages')
