@@ -1,17 +1,16 @@
 // NVIDIA AI Service for Gaia
 // Uses server-side proxy to avoid CORS issues
 
-const AI_PROXY_URL = '/api/ai/chat';
-
 // Base chat completion (routed through server-side proxy)
 export const nvidiaChat = async (messages, options = {}) => {
     try {
-        const response = await fetch(AI_PROXY_URL, {
+        const response = await fetch('/api/webhook', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+                action: 'ai_chat',
                 model: options.model || 'nvidia/llama-3.1-nemotron-70b-instruct',
                 messages,
                 temperature: options.temperature || 0.7,

@@ -758,6 +758,76 @@ export default async function handler(req, res) {
         return await handleInquiryClick(req, res, body);
       }
 
+      // ===== AI CHAT PROXY =====
+      // Proxies frontend AI calls to NVIDIA to avoid CORS issues
+      if (body.action === "ai_chat") {
+        const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+        if (!NVIDIA_API_KEY) {
+          return res.status(500).json({ error: "NVIDIA API key not configured" });
+        }
+        try {
+          const { messages, model, temperature, max_tokens } = body;
+          const aiResp = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${NVIDIA_API_KEY}` },
+            body: JSON.stringify({
+              model: model || "nvidia/llama-3.1-nemotron-70b-instruct",
+              messages: messages || [],
+              temperature: temperature ?? 0.7,
+              max_tokens: max_tokens ?? 1024,
+              stream: false,
+            }),
+          });
+          if (!aiResp.ok) {
+            const errText = await aiResp.text();
+            return res.status(aiResp.status).json({ error: errText });
+          }
+          const aiData = await aiResp.json();
+          return res.status(200).json(aiData);
+        } catch (e) {
+          return res.status(500).json({ error: e.message });
+        }
+      }
+
+      // ===== CREATE ORG MEMBER (consolidated from create-org-member.js) =====
+      if (body.action === "create_org_member") {
+        try {
+          const { email, name, password, role, organization_id, auth_token } = body;
+          if (!email || !name || !password || !organization_id) {
+            return res.status(400).json({ error: "Missing required fields" });
+          }
+          if (!["admin", "user"].includes(role)) {
+            return res.status(400).json({ error: "Invalid role" });
+          }
+          const db = getSupabase();
+          // Verify caller is organizer
+          const token = auth_token || req.headers.authorization?.split(" ")[1];
+          if (!token) return res.status(401).json({ error: "Unauthorized" });
+          const { data: { user: callerUser }, error: authErr } = await db.auth.getUser(token);
+          if (authErr || !callerUser) return res.status(401).json({ error: "Invalid token" });
+          const { data: callerData } = await db.from("users").select("role, organization_id").eq("id", callerUser.id).single();
+          if (callerData?.role !== "organizer" || callerData?.organization_id !== organization_id) {
+            return res.status(403).json({ error: "Only organizers can add members" });
+          }
+          // Create auth user
+          const { data: authData, error: createErr } = await db.auth.admin.createUser({
+            email, password, email_confirm: true
+          });
+          if (createErr) return res.status(400).json({ error: createErr.message });
+          // Create profile
+          const { data: userData, error: profileErr } = await db.from("users").insert({
+            id: authData.user.id, email, name, role, organization_id
+          }).select().single();
+          if (profileErr) {
+            await db.auth.admin.deleteUser(authData.user.id);
+            return res.status(400).json({ error: profileErr.message });
+          }
+          return res.status(200).json({ success: true, user: { id: userData.id, email: userData.email, name: userData.name, role: userData.role } });
+        } catch (e) {
+          return res.status(500).json({ error: e.message });
+        }
+      }
+
       // ===== CLOUDINARY SIGN HANDLER =====
       // Returns a signed upload payload (no preset required)
       if (body.action === "cloudinary_sign") {

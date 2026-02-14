@@ -148,10 +148,11 @@ export async function addOrganizationMember(email, name, password, role = 'admin
 
     // Create auth user via API (requires service role)
     // This should be done through an API endpoint
-    const response = await fetch('/api/create-org-member', {
+    const response = await fetch('/api/webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+            action: 'create_org_member',
             email,
             name,
             password,
