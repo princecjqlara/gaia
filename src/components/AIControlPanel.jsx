@@ -646,43 +646,43 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                     .map((followUp, idx) => {
                                         const stepNumber = intuitionFollowUpSentCount + idx + 1;
                                         return (
-                                    <div key={idx} style={{
-                                        ...styles.statusRow,
-                                        marginBottom: idx < intuitionFollowUps.length - 1 ? '8px' : 0,
-                                        paddingBottom: idx < intuitionFollowUps.length - 1 ? '8px' : 0,
-                                        borderBottom: idx < intuitionFollowUps.length - 1 ? '1px solid #374151' : 'none'
-                                    }}>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontSize: '12px', color: '#e5e7eb' }}>
-                                                {new Date(followUp.scheduled_at).toLocaleDateString('en-US', {
-                                                    weekday: 'short',
-                                                    month: 'short',
-                                                    day: 'numeric'
-                                                })}
-                                            </div>
-                                            <div style={{ fontSize: '14px', color: '#10b981', fontWeight: '500' }}>
-                                                {new Date(followUp.scheduled_at).toLocaleTimeString('en-US', {
-                                                    hour: 'numeric',
-                                                    minute: '2-digit',
-                                                    hour12: true
-                                                })}
-                                            </div>
-                                            {followUp.reason && (
-                                                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
-                                                    {followUp.reason}
+                                            <div key={idx} style={{
+                                                ...styles.statusRow,
+                                                marginBottom: idx < intuitionFollowUps.length - 1 ? '8px' : 0,
+                                                paddingBottom: idx < intuitionFollowUps.length - 1 ? '8px' : 0,
+                                                borderBottom: idx < intuitionFollowUps.length - 1 ? '1px solid #374151' : 'none'
+                                            }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: '12px', color: '#e5e7eb' }}>
+                                                        {new Date(followUp.scheduled_at).toLocaleDateString('en-US', {
+                                                            weekday: 'short',
+                                                            month: 'short',
+                                                            day: 'numeric'
+                                                        })}
+                                                    </div>
+                                                    <div style={{ fontSize: '14px', color: '#10b981', fontWeight: '500' }}>
+                                                        {new Date(followUp.scheduled_at).toLocaleTimeString('en-US', {
+                                                            hour: 'numeric',
+                                                            minute: '2-digit',
+                                                            hour12: true
+                                                        })}
+                                                    </div>
+                                                    {followUp.reason && (
+                                                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
+                                                            {followUp.reason}
+                                                        </div>
+                                                    )}
+                                                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
+                                                        Step {stepNumber}
+                                                    </div>
                                                 </div>
-                                            )}
-                                            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
-                                                Step {stepNumber}
+                                                <span style={{
+                                                    ...styles.badge,
+                                                    ...(followUp.status === 'pending' ? styles.badgeGreen : styles.badgeRed)
+                                                }}>
+                                                    {followUp.status || 'pending'}
+                                                </span>
                                             </div>
-                                        </div>
-                                        <span style={{
-                                            ...styles.badge,
-                                            ...(followUp.status === 'pending' ? styles.badgeGreen : styles.badgeRed)
-                                        }}>
-                                            {followUp.status || 'pending'}
-                                        </span>
-                                    </div>
                                         );
                                     })}
                             </div>
@@ -748,9 +748,9 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                 );
 
                                                 return bestTime.bestSlots.map((slot, idx) => {
-                                                    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                                                    const dayName = dayNames[slot.dayOfWeek] || 'Unknown';
                                                     const hour = slot.hourOfDay;
+                                                    const displayHour = hour > 12 ? hour - 12 : hour || 12;
+                                                    const ampm = hour >= 12 ? 'PM' : 'AM';
                                                     const messageCount = slot.count ?? 0;
                                                     const scoreRatio = maxScore > 0 ? (slot.score || 0) / maxScore : 0;
                                                     const confidenceLevel = messageCount >= 8 ? 'High' : messageCount >= 4 ? 'Medium' : 'Low';
@@ -773,7 +773,7 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                             padding: '4px 0'
                                                         }}>
                                                             <span style={{ fontSize: '13px', color: '#e5e7eb' }}>
-                                                                {dayName} {hour}:00
+                                                                Daily {displayHour}:00 {ampm}
                                                             </span>
                                                             <div style={{
                                                                 display: 'flex',
@@ -803,24 +803,17 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                     </div>
                                 ) : bestTime.hourOfDay !== undefined ? (
                                     (() => {
-                                        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                                        const dayName = dayNames[bestTime.dayOfWeek] || '';
+                                        const hour = bestTime.hourOfDay;
+                                        const displayHour = hour > 12 ? hour - 12 : hour || 12;
+                                        const ampm = hour >= 12 ? 'PM' : 'AM';
                                         return (
                                             <div>
                                                 <div style={styles.statusRow}>
                                                     <span>Best Hour</span>
                                                     <span style={{ color: '#10b981', fontWeight: '500' }}>
-                                                        {bestTime.hourOfDay}:00 - {bestTime.hourOfDay + 1}:00
+                                                        Daily {displayHour}:00 {ampm}
                                                     </span>
                                                 </div>
-                                                {dayName && (
-                                                    <div style={{ ...styles.statusRow, marginTop: '4px' }}>
-                                                        <span>Best Day</span>
-                                                        <span style={{ color: '#10b981', fontWeight: '500' }}>
-                                                            {dayName}
-                                                        </span>
-                                                    </div>
-                                                )}
                                             </div>
                                         );
                                     })()

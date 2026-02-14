@@ -3151,10 +3151,10 @@ class FacebookService {
                     .eq('message_direction', 'inbound'); // Customer messages
 
                 if (engagementData && engagementData.length > 0) {
-                    // Group by day and hour, sum engagement scores
+                    // Group by hour only (daily pattern, not by day of week)
                     const timeScores = {};
                     engagementData.forEach(e => {
-                        const key = `${e.day_of_week}-${e.hour_of_day}`;
+                        const key = `${e.hour_of_day}`;
                         timeScores[key] = (timeScores[key] || 0) + (e.engagement_score || 1);
                     });
 
@@ -3169,15 +3169,12 @@ class FacebookService {
                     });
 
                     if (bestKey) {
-                        const [dayOfWeek, hourOfDay] = bestKey.split('-').map(Number);
-                        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const hourOfDay = Number(bestKey);
                         const hour = hourOfDay > 12 ? hourOfDay - 12 : hourOfDay || 12;
                         const ampm = hourOfDay >= 12 ? 'PM' : 'AM';
                         bestTimeToContact = {
-                            day: days[dayOfWeek],
-                            dayOfWeek,
                             hour: hourOfDay,
-                            formatted: `${days[dayOfWeek]}s around ${hour}:00 ${ampm}`,
+                            formatted: `Daily around ${hour}:00 ${ampm}`,
                             confidence: Math.min(engagementData.length / 5, 1) // Higher confidence with more data
                         };
                     }

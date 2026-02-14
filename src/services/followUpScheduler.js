@@ -63,15 +63,14 @@ export async function calculateBestTimeToContact(conversationId) {
             return getDefaultBestTimes(conversationId);
         }
 
-        // Calculate weighted scores for each day/hour combination
+        // Calculate weighted scores for each hour (daily pattern, not by day of week)
         const timeScores = {};
 
         for (const eng of allEngagements) {
-            const key = `${eng.day_of_week}-${eng.hour_of_day}`;
+            const key = `${eng.hour_of_day}`;
 
             if (!timeScores[key]) {
                 timeScores[key] = {
-                    dayOfWeek: eng.day_of_week,
                     hourOfDay: eng.hour_of_day,
                     count: 0,
                     totalLatency: 0,
@@ -93,7 +92,6 @@ export async function calculateBestTimeToContact(conversationId) {
             const rating = (slot.count * 0.3) + (latencyFactor * 0.4) + (avgScore * 0.3);
 
             rankedSlots.push({
-                dayOfWeek: slot.dayOfWeek,
                 hourOfDay: slot.hourOfDay,
                 score: rating,
                 count: slot.count
@@ -113,10 +111,10 @@ export async function calculateBestTimeToContact(conversationId) {
         // Calculate confidence
         const confidence = Math.min(allEngagements.length / 20, 1) * (dataSource === 'contact' ? 1 : 0.7);
 
-        // Get next occurrences for all slots
+        // Get next occurrences for all slots (daily)
         const slotsWithNextTime = bestSlots.map(slot => ({
             ...slot,
-            nextTime: getNextOccurrence(slot.dayOfWeek, slot.hourOfDay)
+            nextTime: getNextDailyOccurrence(slot.hourOfDay)
         }));
 
         // Find soonest next time
@@ -130,7 +128,6 @@ export async function calculateBestTimeToContact(conversationId) {
             dataPoints: allEngagements.length,
             usedNeighborData: dataSource === 'neighbors',
             // Keep legacy single return for backward compatibility
-            dayOfWeek: bestSlots[0].dayOfWeek,
             hourOfDay: bestSlots[0].hourOfDay
         };
 
@@ -195,29 +192,27 @@ function getDefaultBestTimes(conversationId = null) {
         seedValue = Math.abs(seedValue);
     }
 
-    // Map seed to day (1-5 for Mon-Fri) and hour (9-16 for business hours)
-    const primaryDay = 1 + (seedValue % 5); // 1-5 (Mon-Fri)
-    const primaryHour = 9 + ((seedValue >> 8) % 8); // 9-16 (9am-4pm)
+    // Map seed to hour (9-16 for business hours)
+    const primaryHour = 9 + (seedValue % 8); // 9-16 (9am-4pm)
 
-    // Generate 5 slots based on the seed, spread across the week
+    // Generate 5 daily slots based on the seed, spread across business hours
     const defaultSlots = [
-        { dayOfWeek: primaryDay, hourOfDay: primaryHour, score: 0.8 },
-        { dayOfWeek: 1 + ((primaryDay) % 5), hourOfDay: 9 + ((primaryHour + 4) % 8), score: 0.75 },
-        { dayOfWeek: 1 + ((primaryDay + 1) % 5), hourOfDay: 9 + ((primaryHour + 2) % 8), score: 0.7 },
-        { dayOfWeek: 1 + ((primaryDay + 2) % 5), hourOfDay: 9 + ((primaryHour + 6) % 8), score: 0.65 },
-        { dayOfWeek: 1 + ((primaryDay + 3) % 5), hourOfDay: 9 + ((primaryHour + 1) % 8), score: 0.6 }
+        { hourOfDay: primaryHour, score: 0.8 },
+        { hourOfDay: 9 + ((primaryHour - 9 + 4) % 8), score: 0.75 },
+        { hourOfDay: 9 + ((primaryHour - 9 + 2) % 8), score: 0.7 },
+        { hourOfDay: 9 + ((primaryHour - 9 + 6) % 8), score: 0.65 },
+        { hourOfDay: 9 + ((primaryHour - 9 + 1) % 8), score: 0.6 }
     ];
 
-    // Find next occurrence of the primary slot
-    let nextBestTime = getNextOccurrence(primaryDay, primaryHour);
+    // Find next daily occurrence of the primary slot
+    let nextBestTime = getNextDailyOccurrence(primaryHour);
 
     return {
         bestSlots: defaultSlots,
-        dayOfWeek: primaryDay,
         hourOfDay: primaryHour,
         confidence: 0.3,
         nextBestTime,
-        allNextTimes: defaultSlots.map(s => getNextOccurrence(s.dayOfWeek, s.hourOfDay)),
+        allNextTimes: defaultSlots.map(s => getNextDailyOccurrence(s.hourOfDay)),
         dataPoints: 0,
         usedNeighborData: false
     };
@@ -229,21 +224,32 @@ function getDefaultBestTime() {
 }
 
 /**
- * Get next occurrence of a specific day/hour
+ * Get next daily occurrence of a specific hour (today if not passed, otherwise tomorrow)
  */
-function getNextOccurrence(dayOfWeek, hourOfDay) {
+function getNextDailyOccurrence(hourOfDay) {
     const now = new Date();
     const result = new Date(now);
 
     // Set the hour
     result.setHours(hourOfDay, 0, 0, 0);
 
-    // Calculate days until target day
+    // If this hour has already passed today, use tomorrow
+    if (now.getHours() >= hourOfDay) {
+        result.setDate(result.getDate() + 1);
+    }
+
+    return result;
+}
+
+// Keep legacy getNextOccurrence for any remaining uses
+function getNextOccurrence(dayOfWeek, hourOfDay) {
+    const now = new Date();
+    const result = new Date(now);
+    result.setHours(hourOfDay, 0, 0, 0);
     let daysUntil = dayOfWeek - now.getDay();
     if (daysUntil < 0 || (daysUntil === 0 && now.getHours() >= hourOfDay)) {
         daysUntil += 7;
     }
-
     result.setDate(result.getDate() + daysUntil);
     return result;
 }
