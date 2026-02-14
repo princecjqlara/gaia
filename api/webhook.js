@@ -1903,6 +1903,71 @@ async function handleIncomingMessage(pageId, event) {
       } catch (err) {
         console.error("[WEBHOOK] Engagement/followup error:", err.message);
       }
+
+      // ============================================
+      // A/B TESTING: Track reply for sequence scoring
+      // ============================================
+      try {
+        // Find the most recent unreplied A/B test result for this conversation
+        const { data: abResult } = await db
+          .from("message_ab_results")
+          .select("id, prompt_id, sequence_id, sent_at")
+          .eq("conversation_id", conversationId)
+          .eq("got_reply", false)
+          .order("sent_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (abResult) {
+          const sentAt = new Date(abResult.sent_at);
+          const replyAt = new Date(timestamp);
+          const replyLatencyMins = Math.round((replyAt - sentAt) / (1000 * 60));
+
+          // Calculate conversion score (0-100)
+          let conversionScore = 30; // Base: +30 for replying
+          if (replyLatencyMins < 60) conversionScore += 20;       // Fast reply
+          else if (replyLatencyMins < 360) conversionScore += 10; // Medium reply
+
+          // Update the A/B result
+          await db.from("message_ab_results").update({
+            got_reply: true,
+            replied_at: replyAt.toISOString(),
+            reply_latency_minutes: replyLatencyMins,
+            conversion_score: conversionScore,
+          }).eq("id", abResult.id);
+
+          // Increment total_replies on the prompt
+          if (abResult.prompt_id) {
+            const { data: promptData } = await db.from("message_prompts")
+              .select("total_replies")
+              .eq("id", abResult.prompt_id)
+              .single();
+            if (promptData) {
+              await db.from("message_prompts")
+                .update({ total_replies: (promptData.total_replies || 0) + 1 })
+                .eq("id", abResult.prompt_id);
+            }
+          }
+
+          // Increment total_replies on the sequence
+          if (abResult.sequence_id) {
+            const { data: seqData } = await db.from("message_sequences")
+              .select("total_replies")
+              .eq("id", abResult.sequence_id)
+              .single();
+            if (seqData) {
+              await db.from("message_sequences")
+                .update({ total_replies: (seqData.total_replies || 0) + 1 })
+                .eq("id", abResult.sequence_id);
+            }
+          }
+
+          console.log(`[WEBHOOK] 📊 A/B reply tracked: seq=${abResult.sequence_id?.substring(0, 8) || 'none'}, prompt=${abResult.prompt_id?.substring(0, 8) || 'none'}, latency=${replyLatencyMins}min, score=${conversionScore}`);
+        }
+      } catch (abErr) {
+        // Non-fatal - table might not exist yet
+        console.log("[WEBHOOK] A/B reply tracking (non-fatal):", abErr.message);
+      }
     }
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)

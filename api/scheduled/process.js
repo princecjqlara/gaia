@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * Process due scheduled messages AND AI intuition follow-ups
  * This endpoint is called by cron-job.org or similar services
- * Updated: 2026-01-15 11:30 - Fixed to always process AI follow-ups
+ * Updated: 2026-02-15 - Added A/B testing with Thompson Sampling for follow-up prompts
  */
 export default async function handler(req, res) {
     // Disable caching for this API route
@@ -462,6 +462,90 @@ export default async function handler(req, res) {
                         const knowledgeBase = aiConfig.knowledge_base || '';
                         const language = aiConfig.language || 'Taglish';
 
+                        // ============================================
+                        // A/B TESTING: Sequence-Based Thompson Sampling
+                        // ============================================
+                        let selectedPrompt = null;
+                        let selectedPromptId = null;
+                        let selectedSequenceId = null;
+                        let abSequenceStep = 1;
+
+                        try {
+                            // 1. Count previous messages to determine which step we're on
+                            const { count: prevSent } = await supabase
+                                .from('message_ab_results')
+                                .select('id', { count: 'exact', head: true })
+                                .eq('conversation_id', followup.conversation_id);
+                            abSequenceStep = (prevSent || 0) + 1;
+
+                            // 2. Check if contact already has an assigned sequence
+                            const { data: prevResult } = await supabase
+                                .from('message_ab_results')
+                                .select('sequence_id')
+                                .eq('conversation_id', followup.conversation_id)
+                                .not('sequence_id', 'is', null)
+                                .order('sent_at', { ascending: false })
+                                .limit(1)
+                                .single();
+
+                            let chosenSequenceId = prevResult?.sequence_id || null;
+
+                            // 3. If no assigned sequence, use Thompson Sampling to pick one
+                            if (!chosenSequenceId) {
+                                const { data: activeSequences } = await supabase
+                                    .from('message_sequences')
+                                    .select('id, label, total_sent, total_replies')
+                                    .eq('is_active', true);
+
+                                if (activeSequences && activeSequences.length > 0) {
+                                    const sampleGamma = (shape) => {
+                                        let sum = 0;
+                                        for (let i = 0; i < Math.ceil(shape); i++) {
+                                            sum -= Math.log(Math.random());
+                                        }
+                                        return sum;
+                                    };
+                                    const samples = activeSequences.map(seq => {
+                                        const successes = seq.total_replies || 0;
+                                        const failures = Math.max(0, (seq.total_sent || 0) - successes);
+                                        const x = sampleGamma(successes + 1);
+                                        const y = sampleGamma(failures + 1);
+                                        return { seq, sample: x / (x + y) };
+                                    });
+                                    samples.sort((a, b) => b.sample - a.sample);
+                                    chosenSequenceId = samples[0].seq.id;
+                                    console.log(`[AI FOLLOWUP] 🧪 Thompson Sampling selected sequence "${samples[0].seq.label}" (score: ${samples[0].sample.toFixed(3)}, ${activeSequences.length} sequences)`);
+                                }
+                            }
+
+                            // 4. Get the prompt at the correct step for this sequence
+                            if (chosenSequenceId) {
+                                selectedSequenceId = chosenSequenceId;
+                                const { data: stepPrompt } = await supabase
+                                    .from('message_prompts')
+                                    .select('id, prompt_text, label, total_sent, total_replies')
+                                    .eq('sequence_id', chosenSequenceId)
+                                    .eq('sequence_position', abSequenceStep)
+                                    .eq('is_active', true)
+                                    .single();
+
+                                if (stepPrompt) {
+                                    selectedPrompt = stepPrompt;
+                                    selectedPromptId = stepPrompt.id;
+                                    console.log(`[AI FOLLOWUP] 🧪 Using step ${abSequenceStep} prompt: "${stepPrompt.label || 'unlabeled'}"`);
+                                } else {
+                                    console.log(`[AI FOLLOWUP] 🧪 No prompt at step ${abSequenceStep} — sequence exhausted, using default`);
+                                }
+                            }
+                        } catch (abErr) {
+                            console.log(`[AI FOLLOWUP] A/B selection error, using default: ${abErr.message}`);
+                        }
+
+                        // Build follow-up instruction from selected prompt or use default
+                        const followUpInstruction = selectedPrompt
+                            ? selectedPrompt.prompt_text
+                            : 'Generate a natural follow-up message. Reference what was discussed, keep it short, feel natural, and gently move the conversation forward.';
+
                         // Get ALL conversation messages for context (no limit)
                         const { data: recentMessages } = await supabase
                             .from('facebook_messages')
@@ -486,8 +570,13 @@ export default async function handler(req, res) {
 ${knowledgeBase ? `## Knowledge Base:\n${knowledgeBase}\n` : ''}
 ## Language: Respond in ${language}
 
-## Task: Generate a natural follow-up message for this conversation.
-The customer hasn't responded in a while. Create a friendly, contextual follow-up that:
+## Task: Generate a follow-up message for this conversation.
+The customer hasn't responded in a while.
+
+## Your Follow-up Instructions:
+${followUpInstruction}
+
+## Guidelines:
 1. References what was discussed (don't repeat word-for-word)
 2. Keeps it short (1-2 sentences like a real text message)
 3. Feels natural, not automated
@@ -630,6 +719,44 @@ Generate ONLY the follow-up message, nothing else:`;
 
                             console.log(`[AI FOLLOWUP] ✅ Sent ${messageParts.length} part(s) to ${contactName}`);
                             aiFollowupsSent++;
+
+                            // ============================================
+                            // A/B TESTING: Record result (sequence + prompt)
+                            // ============================================
+                            if (selectedPromptId || selectedSequenceId) {
+                                try {
+                                    // Record A/B test result with sequence context
+                                    await supabase.from('message_ab_results').insert({
+                                        prompt_id: selectedPromptId,
+                                        sequence_id: selectedSequenceId,
+                                        conversation_id: followup.conversation_id,
+                                        variant_label: selectedPrompt?.label || 'default',
+                                        message_sent: message,
+                                        sent_at: new Date().toISOString(),
+                                        sequence_step: abSequenceStep
+                                    });
+                                    // Increment total_sent on prompt
+                                    if (selectedPromptId) {
+                                        const newSent = (selectedPrompt?.total_sent || 0) + 1;
+                                        await supabase.from('message_prompts')
+                                            .update({ total_sent: newSent })
+                                            .eq('id', selectedPromptId);
+                                    }
+                                    // Increment total_sent on sequence
+                                    if (selectedSequenceId) {
+                                        const { data: seqData } = await supabase.from('message_sequences')
+                                            .select('total_sent')
+                                            .eq('id', selectedSequenceId)
+                                            .single();
+                                        await supabase.from('message_sequences')
+                                            .update({ total_sent: (seqData?.total_sent || 0) + 1 })
+                                            .eq('id', selectedSequenceId);
+                                    }
+                                    console.log(`[AI FOLLOWUP] 📊 A/B result recorded: seq=${selectedSequenceId?.substring(0, 8)}, step=${abSequenceStep}, prompt=${selectedPrompt?.label || 'default'}`);
+                                } catch (abRecordErr) {
+                                    console.log(`[AI FOLLOWUP] A/B record error (non-fatal): ${abRecordErr.message}`);
+                                }
+                            }
 
                             // Check if there's already a pending follow-up before scheduling another
                             const { data: existingPending } = await supabase

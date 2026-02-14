@@ -42,6 +42,14 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   const [connectedPages, setConnectedPages] = useState([]);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
 
+  // Sequences & A/B Testing State
+  const [sequences, setSequences] = useState([]);
+  const [messagePrompts, setMessagePrompts] = useState([]);
+  const [sequencePerformance, setSequencePerformance] = useState([]);
+  const [loadingSequences, setLoadingSequences] = useState(false);
+  const [savingSequence, setSavingSequence] = useState(false);
+  const [expandedSequenceId, setExpandedSequenceId] = useState(null);
+
   // Fetch connected pages on mount
   useEffect(() => {
     const fetchPages = async () => {
@@ -405,6 +413,219 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       setSaving(false);
     }
   };
+
+  // ==========================================
+  // MESSAGE PROMPTS & A/B TESTING FUNCTIONS
+  // ==========================================
+  const getDb = async () => {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    return createClient(supabaseUrl, supabaseKey);
+  };
+
+  const loadSequences = async () => {
+    try {
+      setLoadingSequences(true);
+      const db = await getDb();
+      // Load sequences
+      const { data: seqs, error: seqErr } = await db
+        .from('message_sequences')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (seqErr) throw seqErr;
+      setSequences(seqs || []);
+
+      // Load all prompts (with sequence info)
+      const { data: prompts, error: promptErr } = await db
+        .from('message_prompts')
+        .select('*')
+        .order('sequence_position', { ascending: true });
+      if (promptErr) throw promptErr;
+      setMessagePrompts(prompts || []);
+    } catch (err) {
+      console.error('Error loading sequences:', err);
+    } finally {
+      setLoadingSequences(false);
+    }
+  };
+
+  const loadSequencePerformance = async () => {
+    try {
+      const db = await getDb();
+      const { data, error } = await db
+        .from('sequence_performance')
+        .select('*')
+        .order('avg_conversion_score', { ascending: false });
+      if (error) throw error;
+      setSequencePerformance(data || []);
+    } catch (err) {
+      console.error('Error loading sequence performance:', err);
+    }
+  };
+
+  const addSequence = async () => {
+    try {
+      setSavingSequence(true);
+      const db = await getDb();
+      const { data, error } = await db
+        .from('message_sequences')
+        .insert({ label: 'New Sequence', is_active: true })
+        .select()
+        .single();
+      if (error) throw error;
+      setSequences(prev => [...prev, data]);
+      setExpandedSequenceId(data.id);
+      // Add first empty step automatically
+      const { data: step, error: stepErr } = await db
+        .from('message_prompts')
+        .insert({
+          prompt_text: '',
+          label: 'Step 1',
+          sequence_id: data.id,
+          sequence_position: 1,
+          is_active: true
+        })
+        .select()
+        .single();
+      if (!stepErr && step) {
+        setMessagePrompts(prev => [...prev, step]);
+      }
+    } catch (err) {
+      console.error('Error adding sequence:', err);
+      alert('Failed to add sequence: ' + err.message);
+    } finally {
+      setSavingSequence(false);
+    }
+  };
+
+  const removeSequence = async (seqId) => {
+    if (!confirm('Delete this sequence and all its steps?')) return;
+    try {
+      const db = await getDb();
+      const { error } = await db
+        .from('message_sequences')
+        .delete()
+        .eq('id', seqId);
+      if (error) throw error;
+      setSequences(prev => prev.filter(s => s.id !== seqId));
+      setMessagePrompts(prev => prev.filter(p => p.sequence_id !== seqId));
+    } catch (err) {
+      console.error('Error deleting sequence:', err);
+    }
+  };
+
+  const toggleSequenceActive = async (seqId, isActive) => {
+    try {
+      const db = await getDb();
+      const { error } = await db
+        .from('message_sequences')
+        .update({ is_active: !isActive, updated_at: new Date().toISOString() })
+        .eq('id', seqId);
+      if (error) throw error;
+      setSequences(prev =>
+        prev.map(s => s.id === seqId ? { ...s, is_active: !isActive } : s)
+      );
+    } catch (err) {
+      console.error('Error toggling sequence:', err);
+    }
+  };
+
+  const updateSequenceLabel = async (seqId, newLabel) => {
+    try {
+      const db = await getDb();
+      const { error } = await db
+        .from('message_sequences')
+        .update({ label: newLabel, updated_at: new Date().toISOString() })
+        .eq('id', seqId);
+      if (error) throw error;
+      setSequences(prev =>
+        prev.map(s => s.id === seqId ? { ...s, label: newLabel } : s)
+      );
+    } catch (err) {
+      console.error('Error updating sequence label:', err);
+    }
+  };
+
+  const addStepToSequence = async (seqId) => {
+    try {
+      const db = await getDb();
+      const existingSteps = messagePrompts.filter(p => p.sequence_id === seqId);
+      const nextPos = existingSteps.length + 1;
+      const { data, error } = await db
+        .from('message_prompts')
+        .insert({
+          prompt_text: '',
+          label: `Step ${nextPos}`,
+          sequence_id: seqId,
+          sequence_position: nextPos,
+          is_active: true
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      setMessagePrompts(prev => [...prev, data]);
+    } catch (err) {
+      console.error('Error adding step:', err);
+    }
+  };
+
+  const removeStep = async (promptId, seqId) => {
+    try {
+      const db = await getDb();
+      const { error } = await db
+        .from('message_prompts')
+        .delete()
+        .eq('id', promptId);
+      if (error) throw error;
+      // Remove and re-number remaining steps
+      const remaining = messagePrompts
+        .filter(p => p.id !== promptId && p.sequence_id === seqId)
+        .sort((a, b) => a.sequence_position - b.sequence_position);
+      for (let i = 0; i < remaining.length; i++) {
+        if (remaining[i].sequence_position !== i + 1) {
+          await db.from('message_prompts')
+            .update({ sequence_position: i + 1, label: `Step ${i + 1}` })
+            .eq('id', remaining[i].id);
+          remaining[i].sequence_position = i + 1;
+          remaining[i].label = `Step ${i + 1}`;
+        }
+      }
+      setMessagePrompts(prev => {
+        const withoutDeleted = prev.filter(p => p.id !== promptId);
+        return withoutDeleted.map(p => {
+          const updated = remaining.find(r => r.id === p.id);
+          return updated ? { ...p, ...updated } : p;
+        });
+      });
+    } catch (err) {
+      console.error('Error removing step:', err);
+    }
+  };
+
+  const updateStepPrompt = async (promptId, newText) => {
+    try {
+      const db = await getDb();
+      const { error } = await db
+        .from('message_prompts')
+        .update({ prompt_text: newText, updated_at: new Date().toISOString() })
+        .eq('id', promptId);
+      if (error) throw error;
+      setMessagePrompts(prev =>
+        prev.map(p => p.id === promptId ? { ...p, prompt_text: newText } : p)
+      );
+    } catch (err) {
+      console.error('Error updating step:', err);
+    }
+  };
+
+  // Load sequences when AI chatbot tab is active
+  useEffect(() => {
+    if (activeMainTab === 'aichatbot') {
+      loadSequences();
+      loadSequencePerformance();
+    }
+  }, [activeMainTab]);
 
   // Stages Management Functions
   const loadCustomStages = async () => {
@@ -2272,80 +2493,228 @@ REFERRAL: Customer was referred by someone`}
                 </div>
               </div>
 
-              {/* Follow-up Prompts - AI Generates Messages */}
+              {/* ============================================ */}
+              {/* 🧪 SEQUENCE A/B TESTING                    */}
+              {/* ============================================ */}
               <div style={{ marginBottom: '2rem' }}>
-                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🤖 Follow-up Prompts (AI-Generated)</h5>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🧪 Follow-up Sequences & A/B Testing</h5>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Give the AI instructions for what to achieve in follow-ups. The AI will generate contextual messages based on the conversation history.
+                  Create multiple follow-up sequences. Each sequence is an ordered chain of prompts (Step 1 → Step 2 → Step 3...). The AI tests different sequences and automatically shifts traffic to the one that converts best.
                 </p>
 
                 <div style={{ padding: '0.75rem 1rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>💡 The AI will read the conversation and generate a personalized follow-up based on your prompt</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>
+                    🎰 <strong>Thompson Sampling:</strong> The system tests different sequences, learning which ordered combination of prompts gets the most replies. Higher-performing sequences get more traffic automatically.
+                  </span>
                 </div>
 
-                <div style={{ display: 'grid', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Initial Follow-up Prompt (after 24h silence)</label>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      placeholder="Check in with the contact, remind them of what was discussed, and ask if they have any questions."
-                      defaultValue={(() => {
-                        try {
-                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                          return config.followup_prompt_initial || '';
-                        } catch { return ''; }
-                      })()}
-                      onChange={(e) => {
-                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                        config.followup_prompt_initial = e.target.value;
-                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
-                      }}
-                      style={{ resize: 'vertical', fontSize: '0.875rem' }}
-                    />
-                  </div>
+                {/* Sequences List */}
+                {loadingSequences ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading sequences...</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                    {sequences.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                        No sequences yet. Click "Add Sequence" below to create your first follow-up chain!
+                      </div>
+                    )}
+                    {sequences.map((seq, seqIdx) => {
+                      const steps = messagePrompts
+                        .filter(p => p.sequence_id === seq.id)
+                        .sort((a, b) => a.sequence_position - b.sequence_position);
+                      const perf = sequencePerformance.find(p => p.sequence_id === seq.id);
+                      const isChampion = sequencePerformance.length > 0 && sequencePerformance[0]?.sequence_id === seq.id && (perf?.total_sent || 0) >= 5;
+                      const isExpanded = expandedSequenceId === seq.id;
 
-                  <div className="form-group">
-                    <label className="form-label">Second Follow-up Prompt (after 48h)</label>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      placeholder="Gently follow up, offer to schedule a call, and provide value by sharing relevant info about our services."
-                      defaultValue={(() => {
-                        try {
-                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                          return config.followup_prompt_second || '';
-                        } catch { return ''; }
-                      })()}
-                      onChange={(e) => {
-                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                        config.followup_prompt_second = e.target.value;
-                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
-                      }}
-                      style={{ resize: 'vertical', fontSize: '0.875rem' }}
-                    />
-                  </div>
+                      return (
+                        <div
+                          key={seq.id}
+                          style={{
+                            background: seq.is_active ? 'var(--bg-tertiary)' : 'rgba(100,100,100,0.1)',
+                            borderRadius: 'var(--radius-lg)',
+                            border: isChampion ? '2px solid #22c55e' : '1px solid var(--border-color)',
+                            opacity: seq.is_active ? 1 : 0.6,
+                            overflow: 'hidden',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          {/* Sequence Header */}
+                          <div
+                            onClick={() => setExpandedSequenceId(isExpanded ? null : seq.id)}
+                            style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '0.75rem 1rem', cursor: 'pointer',
+                              borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                              <span style={{ fontSize: '1.1rem' }}>{isExpanded ? '▼' : '▶'}</span>
+                              <input
+                                type="text"
+                                value={seq.label}
+                                onChange={(e) => updateSequenceLabel(seq.id, e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  background: 'transparent', border: 'none', outline: 'none',
+                                  fontWeight: '600', fontSize: '0.9rem', color: 'var(--text-primary)',
+                                  width: '200px'
+                                }}
+                              />
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {steps.length} step{steps.length !== 1 ? 's' : ''}
+                              </span>
+                              {isChampion && (
+                                <span style={{
+                                  fontSize: '0.7rem', padding: '2px 8px',
+                                  background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e',
+                                  borderRadius: '12px', fontWeight: '600'
+                                }}>🏆 Champion</span>
+                              )}
+                              {!seq.is_active && (
+                                <span style={{
+                                  fontSize: '0.7rem', padding: '2px 8px',
+                                  background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444',
+                                  borderRadius: '12px'
+                                }}>Paused</span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => toggleSequenceActive(seq.id, seq.is_active)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', padding: '2px' }}
+                                title={seq.is_active ? 'Pause sequence' : 'Activate sequence'}
+                              >
+                                {seq.is_active ? '⏸️' : '▶️'}
+                              </button>
+                              <button
+                                onClick={() => removeSequence(seq.id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '2px', color: '#ef4444' }}
+                                title="Delete sequence"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Re-engagement Prompt (after 7+ days)</label>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      placeholder="Re-engage the contact with something new (promo, new service, case study). Make them feel valued and not forgotten."
-                      defaultValue={(() => {
-                        try {
-                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                          return config.followup_prompt_reengagement || '';
-                        } catch { return ''; }
-                      })()}
-                      onChange={(e) => {
-                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                        config.followup_prompt_reengagement = e.target.value;
-                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
-                      }}
-                      style={{ resize: 'vertical', fontSize: '0.875rem' }}
-                    />
+                          {/* Expanded: Steps + Performance */}
+                          {isExpanded && (
+                            <div style={{ padding: '1rem' }}>
+                              {/* Performance bar */}
+                              {perf && (perf.total_sent || 0) > 0 && (
+                                <div style={{
+                                  display: 'flex', gap: '1rem', padding: '0.5rem 0.75rem',
+                                  background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-md)',
+                                  fontSize: '0.75rem', color: 'var(--text-secondary)', flexWrap: 'wrap',
+                                  marginBottom: '1rem'
+                                }}>
+                                  <span>📤 <strong>{perf.total_sent}</strong> sent</span>
+                                  <span>💬 <strong>{perf.total_replies}</strong> replies</span>
+                                  <span>📊 <strong>{perf.reply_rate}%</strong> reply rate</span>
+                                  <span>⚡ Avg: <strong>{Number(perf.avg_conversion_score).toFixed(1)}</strong></span>
+                                  <span style={{
+                                    color: perf.confidence === 'high' ? '#22c55e' :
+                                      perf.confidence === 'medium' ? '#f59e0b' :
+                                        perf.confidence === 'low' ? '#ef4444' : '#6b7280'
+                                  }}>
+                                    🎯 {perf.confidence}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Steps list */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                {steps.map((step, stepIdx) => (
+                                  <div key={step.id} style={{
+                                    display: 'flex', gap: '0.5rem', alignItems: 'flex-start',
+                                    padding: '0.5rem', background: 'rgba(0,0,0,0.08)', borderRadius: 'var(--radius-md)'
+                                  }}>
+                                    <div style={{
+                                      minWidth: '28px', height: '28px', borderRadius: '50%',
+                                      background: 'var(--primary)', color: 'white',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: '0.75rem', fontWeight: '700', marginTop: '4px'
+                                    }}>
+                                      {step.sequence_position}
+                                    </div>
+                                    <textarea
+                                      className="form-input"
+                                      rows={2}
+                                      placeholder={`e.g. ${stepIdx === 0 ? 'Check in warmly, reference the conversation' : stepIdx === 1 ? 'Offer specific value or answer questions' : 'Create gentle urgency or provide social proof'}`}
+                                      defaultValue={step.prompt_text}
+                                      onBlur={(e) => {
+                                        if (e.target.value !== step.prompt_text) {
+                                          updateStepPrompt(step.id, e.target.value);
+                                        }
+                                      }}
+                                      style={{ flex: 1, resize: 'vertical', fontSize: '0.85rem' }}
+                                    />
+                                    {steps.length > 1 && (
+                                      <button
+                                        onClick={() => removeStep(step.id, seq.id)}
+                                        style={{
+                                          background: 'none', border: 'none', cursor: 'pointer',
+                                          fontSize: '0.9rem', padding: '4px', color: '#ef4444', marginTop: '4px'
+                                        }}
+                                        title="Remove step"
+                                      >✕</button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Add step button */}
+                              <button
+                                onClick={() => addStepToSequence(seq.id)}
+                                style={{
+                                  width: '100%', padding: '8px', background: 'transparent',
+                                  border: '1px dashed rgba(99, 102, 241, 0.4)', borderRadius: 'var(--radius-md)',
+                                  color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem',
+                                  fontWeight: '500', transition: 'all 0.15s ease'
+                                }}
+                                onMouseOver={(e) => e.target.style.background = 'rgba(99, 102, 241, 0.1)'}
+                                onMouseOut={(e) => e.target.style.background = 'transparent'}
+                              >
+                                + Add Step {steps.length + 1}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+                )}
+
+                {/* Add New Sequence Button */}
+                <button
+                  onClick={addSequence}
+                  disabled={savingSequence}
+                  style={{
+                    width: '100%', padding: '12px',
+                    background: 'var(--bg-secondary)',
+                    border: '2px dashed rgba(99, 102, 241, 0.3)', borderRadius: 'var(--radius-lg)',
+                    color: 'var(--primary)', cursor: 'pointer', fontSize: '0.9rem',
+                    fontWeight: '600', transition: 'all 0.2s ease',
+                    opacity: savingSequence ? 0.6 : 1
+                  }}
+                  onMouseOver={(e) => e.target.style.borderColor = 'var(--primary)'}
+                  onMouseOut={(e) => e.target.style.borderColor = 'rgba(99, 102, 241, 0.3)'}
+                >
+                  {savingSequence ? 'Creating...' : '➕ Add New Sequence'}
+                </button>
+
+                {/* How it works */}
+                <div style={{
+                  marginTop: '1rem', padding: '0.75rem 1rem',
+                  background: 'rgba(34, 197, 94, 0.08)', borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(34, 197, 94, 0.2)'
+                }}>
+                  <div style={{ fontWeight: '600', fontSize: '0.8rem', color: '#22c55e', marginBottom: '0.25rem' }}>📊 How It Works</div>
+                  <ul style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, paddingLeft: '1.25rem' }}>
+                    <li>Each contact is assigned to one sequence</li>
+                    <li>Steps fire in order (Step 1 first, then Step 2, etc.) at the follow-up intervals you set</li>
+                    <li>The system tests all active sequences and shifts traffic to the one with the highest reply rate</li>
+                    <li>Scoring: +30 reply, +20 fast reply (&lt;1h), +10 medium (&lt;6h)</li>
+                  </ul>
                 </div>
               </div>
 
