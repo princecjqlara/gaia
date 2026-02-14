@@ -925,16 +925,9 @@ export default async function handler(req, res) {
       }
 
       if (body.object === "page") {
-        // CRITICAL: Return 200 to Facebook IMMEDIATELY - before ANY processing
-        // Vercel keeps the function alive after res.send() until event queue drains or 10s timeout
-        res.status(200).send("EVENT_RECEIVED");
-
-        // Now process messages (function is still alive for ~9 more seconds)
         for (const entry of body.entry || []) {
           const pageId = entry.id;
-          const messaging = entry.messaging || [];
-
-          for (const event of messaging) {
+          for (const event of (entry.messaging || [])) {
             try {
               if (event.message) {
                 await handleIncomingMessage(pageId, event);
@@ -944,19 +937,16 @@ export default async function handler(req, res) {
                 await handleReferralEvent(pageId, event);
               }
             } catch (eventErr) {
-              console.error("[WEBHOOK] Error processing event:", eventErr.message);
+              console.error("[WEBHOOK] Error:", eventErr.message);
             }
           }
-
-          const changes = entry.changes || [];
-          for (const change of changes) {
+          for (const change of (entry.changes || [])) {
             if (change.field === "feed" && change.value?.item === "comment") {
               try { await handleCommentEvent(pageId, change.value); } catch (e) { console.error(e.message); }
             }
           }
         }
-
-        return; // Already sent response above
+        return res.status(200).send("EVENT_RECEIVED");
       }
 
       return res.status(200).send("OK");
@@ -1794,18 +1784,15 @@ async function handleIncomingMessage(pageId, event) {
       }
     }
 
-    // TRIGGER AI AUTO-RESPONSE via self-callback (separate Vercel function invocation)
-    // This gives the AI response its own fresh 10-second timer
+    // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
     if (!isFromPage && message.text) {
-      console.log("[WEBHOOK] Firing AI self-callback for conversation:", conversationId);
-      const appUrl = process.env.APP_URL || process.env.VERCEL_URL || 'https://gaia-tech.vercel.app';
-      const callbackUrl = appUrl.startsWith('http') ? appUrl : `https://${appUrl}`;
-      // Fire-and-forget: do NOT await this fetch
-      fetch(`${callbackUrl}/api/webhook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'process_ai', conversation_id: conversationId, page_id: pageId }),
-      }).catch(err => console.error('[WEBHOOK] AI callback fetch error:', err.message));
+      console.log("[WEBHOOK] Calling triggerAIResponse inline...");
+      try {
+        await triggerAIResponse(db, conversationId, pageId, existingConv);
+        console.log("[WEBHOOK] triggerAIResponse completed");
+      } catch (aiErr) {
+        console.error("[WEBHOOK] triggerAIResponse ERROR:", aiErr.message);
+      }
 
       // AI AUTO-LABELING: Apply labels based on conversation content
       // Run in background to not block response
