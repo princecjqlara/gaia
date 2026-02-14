@@ -905,7 +905,6 @@ class FacebookService {
 
             // Check if we need to use a message tag (outside 24h window)
             let useMessageTag = false;
-            let lastMessageTime = null;
 
             // Get conversation to check last_message_time
             const { data: conv } = await getSupabase()
@@ -915,15 +914,36 @@ class FacebookService {
                 .eq('page_id', pageId)
                 .single();
 
-            if (conv?.last_message_time) {
-                const hoursSinceLastActivity = (Date.now() - new Date(conv.last_message_time).getTime()) / (1000 * 60 * 60);
-                // HUMAN_AGENT tag only works within 7-day (168h) window
+            // Check the ACTUAL last inbound message from the customer (not the conversation's generic timestamp)
+            // Facebook's 7-day HUMAN_AGENT window is based on when the USER last messaged the page
+            let lastInboundTime = null;
+            if (conv?.conversation_id) {
+                const { data: lastInbound } = await getSupabase()
+                    .from('facebook_messages')
+                    .select('timestamp')
+                    .eq('conversation_id', conv.conversation_id)
+                    .eq('is_from_page', false)
+                    .order('timestamp', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (lastInbound?.timestamp) {
+                    lastInboundTime = new Date(lastInbound.timestamp);
+                }
+            }
+
+            // Fallback to conversation's last_message_time if no inbound messages found
+            const referenceTime = lastInboundTime || (conv?.last_message_time ? new Date(conv.last_message_time) : null);
+
+            if (referenceTime) {
+                const hoursSinceLastActivity = (Date.now() - referenceTime.getTime()) / (1000 * 60 * 60);
+                // HUMAN_AGENT tag only works within 7-day (168h) window of customer's last message
                 if (hoursSinceLastActivity > 168) {
-                    console.log(`[SEND] Cannot send - outside 7-day window (${hoursSinceLastActivity.toFixed(1)}h)`);
+                    console.log(`[SEND] Cannot send - outside 7-day window (${hoursSinceLastActivity.toFixed(1)}h since last inbound)`);
                     throw new Error('Cannot send message: contact is outside the 7-day messaging window. They need to message you first.');
                 }
                 useMessageTag = hoursSinceLastActivity > 24;
-                console.log(`[SEND] Hours since last activity: ${hoursSinceLastActivity.toFixed(1)}, Using tag: ${useMessageTag}`);
+                console.log(`[SEND] Hours since last inbound: ${hoursSinceLastActivity.toFixed(1)}, Using tag: ${useMessageTag}`);
             }
 
             // Build request body
