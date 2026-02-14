@@ -5,6 +5,7 @@
  */
 
 import { getSupabaseClient } from './supabase';
+import { getLabelBehavior } from './labelDetector';
 
 const getSupabase = () => {
     const client = getSupabaseClient();
@@ -37,7 +38,7 @@ export async function checkSafetyStatus(conversationId) {
         // Get conversation with AI fields
         const { data: conversation, error } = await db
             .from('facebook_conversations')
-            .select('ai_enabled, human_takeover, takeover_until, opt_out, cooldown_until, ai_confidence')
+            .select('ai_enabled, human_takeover, takeover_until, opt_out, cooldown_until, ai_confidence, ai_label')
             .eq('conversation_id', conversationId)
             .single();
 
@@ -72,6 +73,11 @@ export async function checkSafetyStatus(conversationId) {
         const config = settings?.value || { min_confidence_threshold: 0.6 };
         const isBelowConfidence = (conversation.ai_confidence || 1.0) < config.min_confidence_threshold;
 
+        // Check label behavior
+        const labelBehavior = getLabelBehavior(conversation.ai_label);
+        const labelBlocksAI = labelBehavior.aiMode === 'silent' || labelBehavior.aiMode === 'none';
+        const labelFaqOnly = labelBehavior.aiMode === 'faq_only';
+
         // Determine if AI can respond
         let canAIRespond = true;
         let blockReason = null;
@@ -82,6 +88,9 @@ export async function checkSafetyStatus(conversationId) {
         } else if (conversation.opt_out) {
             canAIRespond = false;
             blockReason = 'opted_out';
+        } else if (labelBlocksAI) {
+            canAIRespond = false;
+            blockReason = `label_${conversation.ai_label}`;
         } else if (isInTakeover) {
             canAIRespond = false;
             blockReason = 'human_takeover';
@@ -101,7 +110,9 @@ export async function checkSafetyStatus(conversationId) {
             inCooldown: isInCooldown,
             confidence: conversation.ai_confidence || 1.0,
             cooldownEndsAt: cooldownUntil,
-            takeoverEndsAt: takeoverUntil
+            takeoverEndsAt: takeoverUntil,
+            aiLabel: conversation.ai_label || null,
+            labelFaqOnly
         };
     } catch (error) {
         console.error('[SAFETY] Error checking safety status:', error);

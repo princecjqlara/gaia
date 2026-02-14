@@ -8,6 +8,7 @@ import { getSupabaseClient } from './supabase';
 import { checkSafetyStatus, logSafetyEvent } from './safetyLayer';
 import { scheduleFollowUp } from './followUpScheduler';
 import { nvidiaChat } from './aiService';
+import { shouldBlockFollowUp } from './labelDetector';
 
 const getSupabase = () => {
     const client = getSupabaseClient();
@@ -536,6 +537,17 @@ export async function triggerIntuitionFollowUp(conversationId) {
             return {
                 success: false,
                 reason: safety.blockReason,
+                scheduled: false
+            };
+        }
+
+        // Check if label blocks follow-ups
+        const labelBlock = await shouldBlockFollowUp(conversationId);
+        if (labelBlock.blocked) {
+            console.log(`[INTUITION] Follow-up blocked by label: ${labelBlock.label} for ${conversationId}`);
+            return {
+                success: false,
+                reason: labelBlock.reason,
                 scheduled: false
             };
         }

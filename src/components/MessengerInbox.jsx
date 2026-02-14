@@ -5,6 +5,7 @@ import { facebookService } from "../services/facebookService";
 import AIControlPanel from "./AIControlPanel";
 import AIChatbotSettings from "./AIChatbotSettings";
 import BestTimesOverview from "./BestTimesOverview";
+import { LABELS } from "../services/labelDetector";
 import {
   extractContactDetails,
   generateNotes,
@@ -2037,6 +2038,23 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                               }
                             </span>
                           )}
+                          {/* AI Label Badge */}
+                          {conv.ai_label && LABELS[conv.ai_label] && (
+                            <span
+                              style={{
+                                fontSize: "0.55rem",
+                                padding: "0.1rem 0.35rem",
+                                borderRadius: "999px",
+                                background: `${LABELS[conv.ai_label].color}22`,
+                                color: LABELS[conv.ai_label].color,
+                                fontWeight: "500",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={LABELS[conv.ai_label].display}
+                            >
+                              {LABELS[conv.ai_label].icon} {LABELS[conv.ai_label].display}
+                            </span>
+                          )}
                         </div>
                         <div
                           style={{
@@ -2250,6 +2268,23 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                                 LEAD_STATUS_CONFIG[conv.lead_status || "intake"]
                                   .icon
                               }
+                            </span>
+                          )}
+                          {/* AI Label Badge (mobile) */}
+                          {conv.ai_label && LABELS[conv.ai_label] && (
+                            <span
+                              style={{
+                                fontSize: "0.5rem",
+                                padding: "0.1rem 0.3rem",
+                                borderRadius: "999px",
+                                background: `${LABELS[conv.ai_label].color}22`,
+                                color: LABELS[conv.ai_label].color,
+                                fontWeight: "500",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={LABELS[conv.ai_label].display}
+                            >
+                              {LABELS[conv.ai_label].icon}
                             </span>
                           )}
                           <span
@@ -2477,6 +2512,24 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     >
                       🔗 Linked to{" "}
                       {selectedConversation.linked_client.client_name}
+                    </div>
+                  )}
+                  {/* AI Label in chat header */}
+                  {selectedConversation.ai_label && LABELS[selectedConversation.ai_label] && (
+                    <div
+                      style={{
+                        fontSize: "0.7rem",
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "999px",
+                        background: `${LABELS[selectedConversation.ai_label].color}22`,
+                        color: LABELS[selectedConversation.ai_label].color,
+                        fontWeight: "500",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                      }}
+                    >
+                      {LABELS[selectedConversation.ai_label].icon} {LABELS[selectedConversation.ai_label].display}
                     </div>
                   )}
                 </div>

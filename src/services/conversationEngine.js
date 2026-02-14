@@ -8,6 +8,7 @@ import { getSupabaseClient } from './supabase';
 import { nvidiaChat } from './aiService';
 import { shapePromptForGoal, getActiveGoal, evaluateGoalProgress, updateGoalProgress } from './goalController';
 import { checkSafetyStatus, evaluateConfidence, updateConfidence, setCooldown, logSafetyEvent } from './safetyLayer';
+import { detectLabel, applyLabel, getLabelPromptContext } from './labelDetector';
 
 const getSupabase = () => {
     const client = getSupabaseClient();
@@ -77,11 +78,20 @@ export async function generateResponse(conversationId, options = {}) {
 
         const recentMessages = (messages || []).reverse();
 
+        // Auto-detect label from recent inbound messages
+        const labelResult = detectLabel(recentMessages);
+        if (labelResult.label) {
+            await applyLabel(conversationId, labelResult.label, 'system', `Keyword detected: "${labelResult.matchedKeyword}"`);
+        }
+
         // Get active goal
         const activeGoal = await getActiveGoal(conversationId);
 
+        // Get current safety status for label context
+        const currentSafety = await checkSafetyStatus(conversationId);
+
         // Build the system prompt
-        let systemPrompt = await buildSystemPrompt(conversation, activeGoal, ragContext);
+        let systemPrompt = await buildSystemPrompt(conversation, activeGoal, ragContext, currentSafety);
 
         // Apply goal shaping
         if (activeGoal) {
@@ -201,7 +211,7 @@ async function getAdminConfig() {
 /**
  * Build the system prompt for the AI
  */
-async function buildSystemPrompt(conversation, activeGoal, ragContext) {
+async function buildSystemPrompt(conversation, activeGoal, ragContext, safetyStatus = null) {
     const adminConfig = await getAdminConfig();
 
     // Use admin-configured system prompt or default
@@ -325,9 +335,9 @@ Booking URL: ${adminConfig.booking_url}
     if (conversation.pipeline_stage) {
         prompt += `
 ## Customer Pipeline Stage: ${conversation.pipeline_stage}
-${conversation.pipeline_stage === 'booked' || conversation.pipeline_stage === 'converted' 
-    ? 'Customer has already booked/converted. Focus on providing excellent service.'
-    : 'Customer has NOT booked yet - prioritize booking a meeting!'}
+${conversation.pipeline_stage === 'booked' || conversation.pipeline_stage === 'converted'
+                ? 'Customer has already booked/converted. Focus on providing excellent service.'
+                : 'Customer has NOT booked yet - prioritize booking a meeting!'}
 `;
     }
 
@@ -338,6 +348,24 @@ ${conversation.pipeline_stage === 'booked' || conversation.pipeline_stage === 'c
 - Refer to previous conversation context when relevant.
 - Keep responses concise - this is chat, not email.
 `;
+
+    // Add label-specific instructions
+    const labelContext = getLabelPromptContext(safetyStatus?.aiLabel || conversation.ai_label);
+    if (labelContext) {
+        prompt += `\n${labelContext}\n`;
+    }
+
+    // If label is FAQ-only, add strong constraint
+    if (safetyStatus?.labelFaqOnly) {
+        prompt += `\n## FAQ-ONLY MODE ACTIVE
+You are in FAQ-only mode. ONLY answer direct questions. Do NOT:
+- Initiate sales conversations
+- Schedule follow-ups
+- Push for bookings
+- Make proactive outreach
+Simply answer what is asked, nothing more.
+`;
+    }
 
     return prompt;
 }
@@ -687,8 +715,8 @@ export async function sendAIMessage(conversationId, pageId, options = {}) {
         const bookingUrl = config.booking_url;
 
         // Determine if we should add booking quick reply
-        const shouldAddBookingButton = bookingUrl && 
-            conv.pipeline_stage !== 'booked' && 
+        const shouldAddBookingButton = bookingUrl &&
+            conv.pipeline_stage !== 'booked' &&
             conv.pipeline_stage !== 'converted';
 
         const sentMessages = [];

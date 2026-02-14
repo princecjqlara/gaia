@@ -3,6 +3,7 @@ import { getSupabaseClient } from '../services/supabase';
 import { checkSafetyStatus, toggleAI, activateHumanTakeover, deactivateTakeover } from '../services/safetyLayer';
 import { getActiveGoal, setConversationGoal, abandonGoal, GOAL_TYPES, getGoalTemplates } from '../services/goalController';
 import { getScheduledFollowUps, cancelFollowUp, scheduleFollowUp, calculateBestTimeToContact } from '../services/followUpScheduler';
+import { LABELS, applyLabel, getLabelBehavior } from '../services/labelDetector';
 
 /**
  * AI Control Panel Component
@@ -534,6 +535,68 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                     Reason: {safetyStatus.blockReason.replace('_', ' ')}
                                 </div>
                             )}
+                        </div>
+
+                        {/* AI Label Section */}
+                        <div style={styles.statusCard}>
+                            <div style={styles.statusRow}>
+                                <span>AI Label</span>
+                                {safetyStatus?.aiLabel && LABELS[safetyStatus.aiLabel] ? (
+                                    <span style={{
+                                        ...styles.badge,
+                                        background: `${LABELS[safetyStatus.aiLabel].color}22`,
+                                        color: LABELS[safetyStatus.aiLabel].color
+                                    }}>
+                                        {LABELS[safetyStatus.aiLabel].icon} {LABELS[safetyStatus.aiLabel].display}
+                                    </span>
+                                ) : (
+                                    <span style={{ ...styles.badge, background: 'rgba(107,114,128,0.2)', color: '#9ca3af' }}>
+                                        No Label
+                                    </span>
+                                )}
+                            </div>
+                            {safetyStatus?.aiLabel && LABELS[safetyStatus.aiLabel] && (
+                                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+                                    {LABELS[safetyStatus.aiLabel].stopsFollowUps ? '🚫 Follow-ups blocked' : '✅ Follow-ups allowed'}
+                                    {' · '}
+                                    {LABELS[safetyStatus.aiLabel].aiMode === 'silent' ? '🔇 AI silent' :
+                                        LABELS[safetyStatus.aiLabel].aiMode === 'none' ? '🚫 No outreach' :
+                                            LABELS[safetyStatus.aiLabel].aiMode === 'faq_only' ? '❓ FAQ only' : '💬 Normal mode'}
+                                </div>
+                            )}
+                            <div style={{ marginTop: '8px' }}>
+                                <select
+                                    value={safetyStatus?.aiLabel || ''}
+                                    onChange={async (e) => {
+                                        const newLabel = e.target.value || null;
+                                        if (newLabel) {
+                                            await applyLabel(conversationId, newLabel, 'admin', 'Manual override from AI Control Panel');
+                                        } else {
+                                            // Clear label
+                                            const db = getSupabaseClient();
+                                            await db.from('facebook_conversations')
+                                                .update({ ai_label: null, ai_label_set_at: new Date().toISOString(), ai_label_set_by: 'admin' })
+                                                .eq('conversation_id', conversationId);
+                                        }
+                                        loadAllData();
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #2d2d44',
+                                        background: '#1a1a2e',
+                                        color: '#e5e7eb',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="">— No Label —</option>
+                                    {Object.entries(LABELS).map(([key, def]) => (
+                                        <option key={key} value={key}>{def.icon} {def.display}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         {/* AI Messaging Toggle */}

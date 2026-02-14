@@ -7,6 +7,7 @@
 import { getSupabaseClient } from './supabase';
 import { checkSafetyStatus, logSafetyEvent } from './safetyLayer';
 import { getActiveGoal } from './goalController';
+import { shouldBlockFollowUp } from './labelDetector';
 
 const getSupabase = () => {
     const client = getSupabaseClient();
@@ -281,6 +282,17 @@ export async function scheduleFollowUp(conversationId, options = {}) {
                 success: false,
                 error: 'Contact has opted out',
                 reason: 'opted_out'
+            };
+        }
+
+        // Check if label blocks follow-ups
+        const labelBlock = await shouldBlockFollowUp(conversationId);
+        if (labelBlock.blocked) {
+            console.log(`[SCHEDULER] Follow-up blocked by label: ${labelBlock.label} for ${conversationId}`);
+            return {
+                success: false,
+                error: labelBlock.reason,
+                reason: 'label_blocked'
             };
         }
 
