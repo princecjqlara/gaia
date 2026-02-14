@@ -1734,42 +1734,48 @@ async function handleIncomingMessage(pageId, event) {
       console.log(`[WEBHOOK] Message ${message.mid} saved!`);
     }
 
-    // Track engagement + cancel follow-ups in parallel (non-blocking)
+    // Track engagement + cancel follow-ups in parallel (await to keep Vercel alive)
     if (!isFromPage) {
       const msgDate = new Date(timestamp);
-      Promise.all([
-        db.from("contact_engagement").insert({
-          conversation_id: conversationId,
-          page_id: pageId,
-          message_direction: "inbound",
-          day_of_week: msgDate.getDay(),
-          hour_of_day: msgDate.getHours(),
-          engagement_score: 1,
-          message_timestamp: msgDate.toISOString(),
-        }),
-        db.from("ai_followup_schedule")
-          .update({ status: "cancelled", completed_at: new Date().toISOString() })
-          .eq("conversation_id", conversationId)
-          .eq("status", "pending"),
-      ]).then(([engRes, followRes]) => {
+      try {
+        const [, followRes] = await Promise.all([
+          db.from("contact_engagement").insert({
+            conversation_id: conversationId,
+            page_id: pageId,
+            message_direction: "inbound",
+            day_of_week: msgDate.getDay(),
+            hour_of_day: msgDate.getHours(),
+            engagement_score: 1,
+            message_timestamp: msgDate.toISOString(),
+          }),
+          db.from("ai_followup_schedule")
+            .update({ status: "cancelled", completed_at: new Date().toISOString() })
+            .eq("conversation_id", conversationId)
+            .eq("status", "pending"),
+        ]);
         if (followRes.data?.length > 0) {
           console.log(`[WEBHOOK] Cancelled ${followRes.data.length} pending follow-ups`);
         }
-      }).catch(err => console.error("[WEBHOOK] Engagement/followup error:", err.message));
-
+      } catch (err) {
+        console.error("[WEBHOOK] Engagement/followup error:", err.message);
+      }
     }
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
     if (!isFromPage && message.text) {
-      // Fire-and-forget: don't await AI response so message saving isn't blocked
-      console.log("[WEBHOOK] Triggering AI response (fire-and-forget)...");
-      triggerAIResponse(db, conversationId, pageId, existingConv || conversationData)
-        .then(() => console.log("[WEBHOOK] AI response completed"))
-        .catch((err) => console.error("[WEBHOOK] AI response error:", err.message));
+      // MUST await: Vercel kills unawaited promises when handler returns.
+      // This is safe because we already sent 200 to Facebook before processing.
+      console.log("[WEBHOOK] Triggering AI response (awaited)...");
+      try {
+        await triggerAIResponse(db, conversationId, pageId, existingConv || conversationData);
+        console.log("[WEBHOOK] AI response completed");
+      } catch (err) {
+        console.error("[WEBHOOK] AI response error:", err.message);
+      }
 
       // AI AUTO-LABELING: Apply labels based on conversation content
-      // Run in background to not block response
-      (async () => {
+      // Must await to prevent Vercel from killing the function
+      await (async () => {
         try {
           const { data: aiSettings } = await db
             .from("settings")
