@@ -308,13 +308,19 @@ export const autoLabelConversation = async (messages, existingTags = [], labelin
         .map(m => `${m.is_from_page ? 'Agent' : 'Customer'}: ${m.message_text}`)
         .join('\n');
 
-    // Default rules if admin hasn't set any
+    // Default rules if admin hasn't set any — keys match ai_label column values
     const defaultRules = `
-QUALIFIED: Customer mentions budget, asks about pricing/properties, shows buying intent
-UNQUALIFIED: Customer explicitly says not interested, wrong fit, or no budget
-HOT_LEAD: Customer wants to book immediately, mentions urgency, ready to proceed
-FOLLOW_UP_NEEDED: Customer requested callback, said "later", or asked to be contacted again
-INTERESTED: Customer is asking questions, showing curiosity about the service
+HOT_LEAD: Customer wants to book immediately, mentions urgency, ready to proceed, asking "how do I pay", "take my money", "let's get started"
+INTERESTED: Customer is asking questions, showing curiosity, requesting more info, saying "tell me more", "sounds good", "sign me up"
+COLD_LEAD: Customer has low engagement, short replies, not responsive, unclear intent
+NEEDS_INFO: Customer is asking specific questions about services, pricing, or features
+PRICE_SENSITIVE: Customer mentions budget concerns, asks for discounts, says "too expensive"
+NOT_INTERESTED: Customer explicitly says not interested, "no thanks", "pass", "not for me"
+FOLLOW_UP_NEEDED: Customer requested callback, said "later", "next week", or asked to be contacted again
+BOOKED: Customer has confirmed a meeting, appointment, or booking
+CONVERTED: Customer has completed purchase, paid, or confirmed a deal
+DO_NOT_MESSAGE: Customer explicitly asked to stop receiving messages, "unsubscribe", "stop messaging"
+ALREADY_BOUGHT: Customer says they already purchased or are already a customer
 `;
 
     const rulesText = labelingRules?.trim() || defaultRules;

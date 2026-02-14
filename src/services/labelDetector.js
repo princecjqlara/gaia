@@ -217,7 +217,7 @@ export function detectLabel(messages) {
 
     // Combine recent inbound text for matching
     const combinedText = inboundMessages
-        .map(m => (m.message || '').toLowerCase().trim())
+        .map(m => (m.message_text || m.message || '').toLowerCase().trim())
         .join(' ');
 
     if (!combinedText) {

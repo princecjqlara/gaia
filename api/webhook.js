@@ -2092,6 +2092,86 @@ async function handleIncomingMessage(pageId, event) {
                       .eq("tag_id", tagToRemove.id);
                   }
                 }
+
+                // ============================================
+                // MAP AI LABELS → ai_label COLUMN (powers the label dropdown)
+                // ============================================
+                const AI_LABEL_MAP = {
+                  'HOT_LEAD': 'hot_lead',
+                  'HOT LEAD': 'hot_lead',
+                  'INTERESTED': 'interested',
+                  'QUALIFIED': 'interested',
+                  'NOT_INTERESTED': 'not_interested',
+                  'NOT INTERESTED': 'not_interested',
+                  'UNQUALIFIED': 'not_interested',
+                  'FOLLOW_UP_NEEDED': 'message_later',
+                  'FOLLOW UP NEEDED': 'message_later',
+                  'MESSAGE_LATER': 'message_later',
+                  'BOOKED': 'booked',
+                  'CONVERTED': 'converted',
+                  'COLD_LEAD': 'cold_lead',
+                  'COLD LEAD': 'cold_lead',
+                  'PRICE_SENSITIVE': 'price_sensitive',
+                  'PRICE SENSITIVE': 'price_sensitive',
+                  'NEEDS_INFO': 'needs_info',
+                  'NEEDS INFO': 'needs_info',
+                  'DO_NOT_MESSAGE': 'do_not_message',
+                  'DO NOT MESSAGE': 'do_not_message',
+                  'ALREADY_BOUGHT': 'already_bought',
+                  'ALREADY BOUGHT': 'already_bought',
+                  'NO_RESPONSE': 'no_response',
+                  'NO RESPONSE': 'no_response',
+                };
+
+                // Find highest-priority matching label from new + existing tags
+                const allLabelNames = [
+                  ...(result.labelsToAdd || []),
+                  ...existingTagNames,
+                ];
+                let bestAiLabel = null;
+                for (const name of allLabelNames) {
+                  const mapped =
+                    AI_LABEL_MAP[name.toUpperCase().trim()];
+                  if (mapped) {
+                    bestAiLabel = mapped;
+                    break;
+                  }
+                }
+
+                if (bestAiLabel) {
+                  // Respect critical labels — don't auto-downgrade
+                  const { data: currentConv } = await db
+                    .from("facebook_conversations")
+                    .select("ai_label")
+                    .eq("conversation_id", conversationId)
+                    .single();
+
+                  const criticalLabels = [
+                    "do_not_message",
+                    "not_interested",
+                    "already_bought",
+                  ];
+                  const currentLabel = currentConv?.ai_label;
+                  const shouldUpdate =
+                    !criticalLabels.includes(currentLabel) ||
+                    criticalLabels.includes(bestAiLabel);
+
+                  if (shouldUpdate && currentLabel !== bestAiLabel) {
+                    await db
+                      .from("facebook_conversations")
+                      .update({
+                        ai_label: bestAiLabel,
+                        ai_label_set_at: new Date().toISOString(),
+                        ai_label_set_by: "system",
+                        updated_at: new Date().toISOString(),
+                      })
+                      .eq("conversation_id", conversationId);
+
+                    console.log(
+                      `[WEBHOOK] 🏷️ ai_label updated: ${currentLabel || "none"} → ${bestAiLabel}`,
+                    );
+                  }
+                }
               }
             }
           }
