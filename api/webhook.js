@@ -925,6 +925,11 @@ export default async function handler(req, res) {
       }
 
       if (body.object === "page") {
+        // CRITICAL: Return 200 to Facebook IMMEDIATELY to avoid Vercel timeout
+        // Facebook requires a fast 200 response; AI processing continues after
+        res.status(200).send("EVENT_RECEIVED");
+
+        // Process messages asynchronously after returning 200
         for (const entry of body.entry || []) {
           const pageId = entry.id;
           for (const event of (entry.messaging || [])) {
@@ -946,7 +951,7 @@ export default async function handler(req, res) {
             }
           }
         }
-        return res.status(200).send("EVENT_RECEIVED");
+        return;
       }
 
       return res.status(200).send("OK");
@@ -1786,13 +1791,11 @@ async function handleIncomingMessage(pageId, event) {
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
     if (!isFromPage && message.text) {
-      console.log("[WEBHOOK] Calling triggerAIResponse inline...");
-      try {
-        await triggerAIResponse(db, conversationId, pageId, existingConv);
-        console.log("[WEBHOOK] triggerAIResponse completed");
-      } catch (aiErr) {
-        console.error("[WEBHOOK] triggerAIResponse ERROR:", aiErr.message);
-      }
+      // Fire-and-forget: don't await AI response so message saving isn't blocked
+      console.log("[WEBHOOK] Triggering AI response (fire-and-forget)...");
+      triggerAIResponse(db, conversationId, pageId, existingConv || conversationData)
+        .then(() => console.log("[WEBHOOK] AI response completed"))
+        .catch((err) => console.error("[WEBHOOK] AI response error:", err.message));
 
       // AI AUTO-LABELING: Apply labels based on conversation content
       // Run in background to not block response
