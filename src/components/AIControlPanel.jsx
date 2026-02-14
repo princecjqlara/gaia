@@ -810,13 +810,27 @@ export default function AIControlPanel({ conversationId, participantName, onClos
                                                     0
                                                 );
 
-                                                return bestTime.bestSlots.map((slot, idx) => {
+                                                // Categorize all slots by confidence level
+                                                const categorized = bestTime.bestSlots.map(slot => ({
+                                                    ...slot,
+                                                    confidenceLevel: (slot.count ?? 0) >= 8 ? 'High' : (slot.count ?? 0) >= 4 ? 'Medium' : 'Low'
+                                                }));
+
+                                                // Filter: only Medium and High confidence
+                                                const mediumHighSlots = categorized.filter(s => s.confidenceLevel === 'High' || s.confidenceLevel === 'Medium');
+
+                                                // If no Medium or High exist, show top 5 Low confidence
+                                                const displaySlots = mediumHighSlots.length > 0
+                                                    ? mediumHighSlots
+                                                    : categorized.filter(s => s.confidenceLevel === 'Low').slice(0, 5);
+
+                                                return displaySlots.map((slot, idx) => {
                                                     const hour = slot.hourOfDay;
                                                     const displayHour = hour > 12 ? hour - 12 : hour || 12;
                                                     const ampm = hour >= 12 ? 'PM' : 'AM';
                                                     const messageCount = slot.count ?? 0;
                                                     const scoreRatio = maxScore > 0 ? (slot.score || 0) / maxScore : 0;
-                                                    const confidenceLevel = messageCount >= 8 ? 'High' : messageCount >= 4 ? 'Medium' : 'Low';
+                                                    const confidenceLevel = slot.confidenceLevel;
                                                     const engagementNote = messageCount === 0
                                                         ? 'No message history'
                                                         : scoreRatio >= 0.7
