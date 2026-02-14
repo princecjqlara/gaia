@@ -1870,125 +1870,76 @@ async function handleIncomingMessage(pageId, event) {
 async function triggerAIResponse(db, conversationId, pageId, conversation) {
   try {
     console.log("[WEBHOOK] === AI AUTO-RESPONSE ===");
+    const startTime = Date.now();
 
-    // Skip database logging to avoid errors
-    console.log("[WEBHOOK] Conversation:", conversationId, "Page:", pageId);
-
-    // Get AI config from settings
-    const { data: settings } = await db
-      .from("settings")
-      .select("value")
-      .eq("key", "ai_chatbot_config")
-      .single();
-
-    const config = settings?.value || {};
-
-    console.log("[WEBHOOK] AI Config check:", {
-      global_bot_enabled: config.global_bot_enabled,
-      auto_respond: config.auto_respond_to_new_messages,
-      conv_ai_enabled: conversation?.ai_enabled,
-      human_takeover: conversation?.human_takeover,
-      cooldown_until: conversation?.cooldown_until,
-    });
-
-    if (config.global_bot_enabled === false) {
-      console.log("[WEBHOOK] Global bot disabled - skipping AI response");
-      return;
-    }
-
-    // Check admin settings - respect all configurations
-    if (config.auto_respond_to_new_messages === false) {
-      console.log("[WEBHOOK] AI auto-respond disabled in admin settings");
-      return;
-    }
-
-    // Check conversation-level AI settings
+    // FAST CHECKS first (no DB needed)
     if (conversation?.ai_enabled === false) {
       console.log("[WEBHOOK] AI disabled for this conversation");
       return;
     }
-
-    // Check if human has taken over
     if (conversation?.human_takeover === true) {
       console.log("[WEBHOOK] Human takeover active - AI skipping");
       return;
     }
-
-    // SPAM PREVENTION: Check if we already sent the last message
-    // If AI/page sent the last message, don't respond again until customer replies
-    const { data: lastMessages } = await db
-      .from("facebook_messages")
-      .select("is_from_page, timestamp")
-      .eq("conversation_id", conversationId)
-      .order("timestamp", { ascending: false })
-      .limit(3);
-
-    if (lastMessages && lastMessages.length >= 2) {
-      // Count consecutive messages from page
-      let consecutivePageMessages = 0;
-      for (const msg of lastMessages) {
-        if (msg.is_from_page) {
-          consecutivePageMessages++;
-        } else {
-          break;
-        }
-      }
-
-      // If we already sent 2+ consecutive messages, wait for customer to reply
-      if (consecutivePageMessages >= 2) {
-        console.log(
-          `[WEBHOOK] AI already sent ${consecutivePageMessages} consecutive messages - waiting for customer reply`,
-        );
-        return;
-      }
-    }
-
     // COOLDOWN: Don't respond if we responded in the last 30 seconds
     if (conversation?.last_ai_response_at) {
-      const lastResponse = new Date(conversation.last_ai_response_at);
-      const secondsSinceLastResponse =
-        (Date.now() - lastResponse.getTime()) / 1000;
-      if (secondsSinceLastResponse < 30) {
-        console.log(
-          `[WEBHOOK] AI cooling down - last response ${secondsSinceLastResponse}s ago`,
-        );
+      const secondsSince = (Date.now() - new Date(conversation.last_ai_response_at).getTime()) / 1000;
+      if (secondsSince < 30) {
+        console.log(`[WEBHOOK] AI cooling down - ${secondsSince}s ago`);
         return;
       }
     }
 
-    console.log("[WEBHOOK] All checks passed - proceeding with AI response");
+    // PARALLEL: Fetch settings + spam check at the same time
+    const [settingsResult, spamCheckResult] = await Promise.all([
+      db.from("settings").select("value").eq("key", "ai_chatbot_config").single(),
+      db.from("facebook_messages").select("is_from_page").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(3),
+    ]);
 
-    // Get page access token
-    const { data: page } = await db
-      .from("facebook_pages")
-      .select("page_access_token")
-      .eq("page_id", pageId)
-      .single();
+    const config = settingsResult.data?.value || {};
+
+    if (config.global_bot_enabled === false) {
+      console.log("[WEBHOOK] Global bot disabled");
+      return;
+    }
+    if (config.auto_respond_to_new_messages === false) {
+      console.log("[WEBHOOK] AI auto-respond disabled");
+      return;
+    }
+
+    // Spam check
+    const lastMessages = spamCheckResult.data;
+    if (lastMessages && lastMessages.length >= 2) {
+      let consecutivePageMessages = 0;
+      for (const msg of lastMessages) {
+        if (msg.is_from_page) consecutivePageMessages++;
+        else break;
+      }
+      if (consecutivePageMessages >= 2) {
+        console.log(`[WEBHOOK] Spam prevention - ${consecutivePageMessages} consecutive page messages`);
+        return;
+      }
+    }
+
+    console.log(`[WEBHOOK] Checks passed in ${Date.now() - startTime}ms - loading data...`);
+
+    // PARALLEL: Fetch page token, properties, and messages all at once
+    const [pageResult, propertiesResult, messagesResult] = await Promise.all([
+      db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single(),
+      db.from("properties").select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images").eq("status", "For Sale").order("created_at", { ascending: false }).limit(10),
+      db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(15),
+    ]);
+
+    const page = pageResult.data;
+    const properties = propertiesResult.data;
+    const recentMessages = (messagesResult.data || []).reverse();
 
     if (!page?.page_access_token) {
       console.error("[WEBHOOK] No page access token");
       return;
     }
 
-    // Get available properties from database for AI context
-    const { data: properties } = await db
-      .from("properties")
-      .select("*")
-      .eq("status", "For Sale")
-      .order("created_at", { ascending: false })
-      .limit(15);
-
-    console.log("[WEBHOOK] Loaded", properties?.length || 0, "properties for AI context");
-
-    // Get recent messages - increased to 30 for better context retention
-    const { data: messages } = await db
-      .from("facebook_messages")
-      .select("*")
-      .eq("conversation_id", conversationId)
-      .order("timestamp", { ascending: false })
-      .limit(30);
-
-    const recentMessages = (messages || []).reverse();
+    console.log(`[WEBHOOK] Data loaded in ${Date.now() - startTime}ms - ${properties?.length || 0} properties, ${recentMessages.length} messages`);
 
     // Build AI prompt with Taglish as default language
     const systemPrompt =
@@ -2057,113 +2008,12 @@ Every response should move the conversation closer to achieving this goal.
 
     const customGoals = config.custom_goals?.trim();
     if (customGoals) {
-      aiPrompt += `
-## Additional Goals to Achieve
-${customGoals}
-`;
+      aiPrompt += `\n## Additional Goals\n${customGoals}\n`;
     }
 
-    // Add calendar availability for booking goals
+    // Booking context (simplified - no calendar DB queries)
     if (activeGoal === "booking" || config.booking_url) {
-      try {
-        // Get booking settings from database
-        const { data: bookingSettings } = await db
-          .from("booking_settings")
-          .select("*")
-          .eq("page_id", pageId)
-          .single();
-
-        // Use settings or defaults
-        const startTime = bookingSettings?.start_time || "09:00";
-        const endTime = bookingSettings?.end_time || "17:00";
-        const availableDays = bookingSettings?.available_days || [
-          1, 2, 3, 4, 5,
-        ]; // 0=Sun, 1=Mon, etc.
-        const slotDuration = bookingSettings?.slot_duration || 60;
-
-        console.log("[WEBHOOK] Using booking settings:", {
-          startTime,
-          endTime,
-          availableDays,
-          slotDuration,
-        });
-
-        // Parse start/end hours
-        const startHour = parseInt(startTime.split(":")[0]);
-        const endHour = parseInt(endTime.split(":")[0]);
-
-        // Get next 7 days of available slots
-        const now = new Date();
-        const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-        // Get existing calendar events to find conflicts
-        const { data: existingEvents } = await db
-          .from("calendar_events")
-          .select("start_time, end_time")
-          .gte("start_time", now.toISOString())
-          .lte("start_time", weekFromNow.toISOString())
-          .eq("status", "scheduled");
-
-        // Generate available slots based on settings
-        const availableSlots = [];
-        for (let d = 1; d <= 7; d++) {
-          const dayDate = new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
-          const dayOfWeek = dayDate.getDay();
-
-          // Skip if not in available days
-          if (!availableDays.includes(dayOfWeek)) continue;
-
-          // Check slots based on configured hours
-          for (let hour = startHour; hour < endHour; hour++) {
-            const slotStart = new Date(dayDate);
-            slotStart.setHours(hour, 0, 0, 0);
-
-            // Check for conflicts
-            const hasConflict = (existingEvents || []).some((e) => {
-              const eventStart = new Date(e.start_time);
-              const eventEnd = new Date(e.end_time);
-              return slotStart >= eventStart && slotStart < eventEnd;
-            });
-
-            if (!hasConflict) {
-              const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-                dayOfWeek
-              ];
-              const dateStr = dayDate.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              });
-              const timeStr =
-                hour > 12
-                  ? `${hour - 12}:00 PM`
-                  : hour === 12
-                    ? "12:00 PM"
-                    : `${hour}:00 AM`;
-              availableSlots.push(`${dayName} ${dateStr}, ${timeStr} `);
-            }
-          }
-        }
-
-        if (availableSlots.length > 0) {
-          aiPrompt += `
-## 📅 AVAILABLE BOOKING SLOTS (Use these when customer wants to schedule)
-${availableSlots.slice(0, 15).join("\n")}
-
-When customer wants to book, suggest one of these times. If they confirm a time, respond with:
-"BOOKING_CONFIRMED: [DATE] [TIME] - [CUSTOMER_NAME] - [PHONE_NUMBER if available]"
-`;
-          console.log(
-            "[WEBHOOK] Added",
-            availableSlots.length,
-            "available slots to prompt",
-          );
-        }
-      } catch (calErr) {
-        console.log(
-          "[WEBHOOK] Calendar check error (non-fatal):",
-          calErr.message,
-        );
-      }
+      aiPrompt += `\n## 📅 BOOKING\nWhen customer wants to book, suggest weekday times (Mon-Fri 9AM-5PM).\nIf they confirm, add this marker at the END of your response:\nBOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber\n`;
     }
 
     // Add Knowledge Base (company info, services, etc.)
@@ -2182,135 +2032,35 @@ ${faqContent}
 `;
     }
 
-    // Add bot rules with stronger emphasis
+    // Add bot rules
     if (config.bot_rules_dos) {
-      aiPrompt += `
-## ✅ STRICT RULES - DO's (YOU MUST FOLLOW THESE)
-${config.bot_rules_dos}
-`;
+      aiPrompt += `\n## ✅ DO's\n${config.bot_rules_dos}\n`;
     }
     if (config.bot_rules_donts) {
-      aiPrompt += `
-## ❌ STRICT RULES - DON'Ts (NEVER DO THESE)
-${config.bot_rules_donts}
-`;
+      aiPrompt += `\n## ❌ DON'Ts\n${config.bot_rules_donts}\n`;
     }
 
-    // Add properties information to AI context
+    // Add properties (compact format)
     if (properties && properties.length > 0) {
-      const propertyList = properties.map((p, idx) => {
-        return `Property ${idx + 1} (ID: ${p.id}):
-🏠 Title: ${p.title}
-📍 Location: ${p.address}
-💰 Price: ₱${parseInt(p.price || 0).toLocaleString()}
-🛏️ Bedrooms: ${p.bedrooms || 'N/A'}
-🚿 Bathrooms: ${p.bathrooms || 'N/A'}
-📐 Floor Area: ${p.floor_area || 'N/A'} sqm
-📝 Description: ${(p.description || '').substring(0, 200)}...
-${p.images && p.images.length > 0 ? `🖼️ Image: ${p.images[0]}` : ''}
----`;
-      }).join('\n');
+      const propertyList = properties.map((p) =>
+        `- ID:${p.id} | ${p.title} | ${p.address} | ₱${parseInt(p.price || 0).toLocaleString()} | ${p.bedrooms || '?'}BR/${p.bathrooms || '?'}BA | ${p.floor_area || '?'}sqm${p.images?.[0] ? ` | img:${p.images[0]}` : ''}`
+      ).join('\n');
 
-      aiPrompt += `
-## 🏠 AVAILABLE PROPERTIES (YOU CAN RECOMMEND THESE)
-Use this information to suggest properties to customers. When they ask about properties, you can:
-1. Recommend properties based on their preferences (budget, location, bedrooms, etc.)
-2. Send property cards using the format below
-
-${propertyList}
-
-## 🔹 HOW TO SEND PROPERTY CARDS
-When you want to show a property to the customer, use this EXACT format at the start of your response:
-
-SEND_PROPERTY_CARD: [property_id here]
-
-Examples:
-- "SEND_PROPERTY_CARD: ${properties[0]?.id}"
-- "SEND_PROPERTY_CARD: ${properties[1]?.id}"
-
-The system will automatically format it as a beautiful property card with images in Messenger.
-ALWAYS use the exact property ID from the list above.
-
-Rules for recommending properties:
-- Ask about their budget first
-- Ask about their preferred location
-- Ask about how many bedrooms they need
-- Match properties to their criteria
-- Only send up to 3 properties at once (don't overwhelm them)
-`;
-    } else {
-      aiPrompt += `
-## 🏠 AVAILABLE PROPERTIES
-No properties are currently listed for sale.
-`;
+      aiPrompt += `\n## 🏠 PROPERTIES FOR SALE\n${propertyList}\n\nTo show a property card: SEND_PROPERTY_CARD: [property_id]\nAsk about budget/location/bedrooms first. Max 3 cards at once.\n`;
     }
 
-    // Debug: Log all config being used
-    console.log("[WEBHOOK] AI Config Applied:", {
-      hasSystemPrompt: !!config.system_prompt,
-      hasKnowledgeBase: !!knowledgeBase,
-      hasFaq: !!faqContent,
-      hasDos: !!config.bot_rules_dos,
-      hasDonts: !!config.bot_rules_donts,
-      hasBookingUrl: !!config.booking_url,
-      activeGoal: activeGoal,
-      language: language,
-    });
-
-    // Add booking info if configured
     if (config.booking_url) {
-      aiPrompt += `
-## Booking Link
-When customer wants to schedule/book, share this: ${config.booking_url}
-`;
+      aiPrompt += `\nBooking link: ${config.booking_url}\n`;
     }
 
     aiPrompt += `
-## Important Guidelines
-- Use Taglish naturally - mix English and Tagalog as Filipinos do
-- Be friendly but professional
-- If unsure about something, say you'll have a team member follow up
-- If user sends an image, describe what you see and respond appropriately
-
-## ⚠️ CRITICAL: NAME RULES (MUST FOLLOW)
-- The customer's name is: "${conversation?.participant_name || "NOT PROVIDED"}"
-- If name is "NOT PROVIDED" or "Customer", DO NOT use any name at all
-- NEVER invent, assume, or make up a customer name
-- NEVER use names like "Jeff", "John", or any other name unless it was explicitly provided above
-- Instead of using a name, use "po" for respect (e.g., "Kumusta po?" instead of "Kumusta Jeff?")
-- If the customer mentions a name in the conversation, you MAY acknowledge it but do NOT assume that's their name
-
-## ⚠️ MESSAGE SPLITTING RULES (VERY IMPORTANT - FOLLOW STRICTLY)
-- ALWAYS split your response into multiple messages for better chat experience
-- Use ||| to separate each message part
-- Each part should be 1-2 sentences MAX (like real texting)
-- EVERY response with more than 2 sentences MUST be split
-- Example: "Hi! 😊 ||| We have some great properties available right now. ||| One is a 3-bedroom condo in Makati for ₱8M. ||| It includes: ||| - 85 sqm floor area ||| - City views ||| - Pool & gym access ||| Would you like to see more details?"
-- Another example: "Hello po! ||| I'd be happy to help. ||| What specific service are you interested in?"
-
-## 📅 BOOKING CONFIRMATION — MANDATORY SYSTEM MARKER (YOU MUST DO THIS)
-⚠️ THIS IS REQUIRED - THE SYSTEM CANNOT CREATE CALENDAR EVENTS WITHOUT THIS MARKER ⚠️
-
-When a customer confirms/agrees to a specific date and time for a booking or meeting:
-
-STEP 1: Confirm the booking in your message to them (in Taglish)
-STEP 2: ALWAYS add this marker at the VERY END (this is for the SYSTEM, customer won't see it):
-
-BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber
-
-EXAMPLE CONVERSATION:
-Customer: "okay"
-Your response: "Noted po! ✅ ||| I've scheduled your consultation for January 17, 2026 at 6:00 PM. ||| See you there!
-BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
-
-⚠️ CRITICAL RULES:
-- You MUST add BOOKING_CONFIRMED even if you just say "Noted po!" - if they confirmed a booking, ADD THE MARKER
-- Use 24-hour format: 18:00 (not 6pm), 14:00 (not 2pm)
-- Use PIPE | as separator, NOT dash -
-- If phone was mentioned in conversation, include it
-- If customer name is known (from conversation), include it
-- This marker MUST be on its own line at the very end
-- The marker is invisible to the customer - it's processed by the system
+## RULES
+- Customer name: "${conversation?.participant_name || "NOT PROVIDED"}" (if NOT PROVIDED, use "po" instead)
+- NEVER invent names. Use "po" for respect.
+- Split responses with ||| (1-2 sentences per part, like texting)
+- Example: "Hello po! ||| I'd be happy to help. ||| What are you looking for?"
+- When booking confirmed, add at END: BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | Name | Phone
+- Use 24h format (18:00 not 6pm), PIPE | separator
 `;
 
     // Build messages array, handling images for vision models
@@ -2358,35 +2108,24 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
 
     console.log("[WEBHOOK] Has images:", hasImages);
 
-    // Call NVIDIA AI with model rotation
-    const NVIDIA_API_KEY =
-      process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+    // Call NVIDIA AI — reduced model list for speed
+    const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
     if (!NVIDIA_API_KEY) {
       console.error("[WEBHOOK] NVIDIA API key not set");
       return;
     }
 
-    // Model rotation - try each model until one works
-    // Use vision models if images are present, otherwise text models
     let MODELS;
     if (hasImages) {
-      // Vision-capable models on NVIDIA API - prioritized by stability
       MODELS = [
-        "meta/llama-3.2-11b-vision-instruct", // Llama 3.2 Vision - most reliable
-        "nvidia/vila", // NVIDIA VILA vision model
-        "liuhaotian/llava-v1.6-mistral-7b", // LLaVA vision model
-        "adept/fuyu-8b", // Fuyu vision model
+        "meta/llama-3.2-11b-vision-instruct",
+        "nvidia/vila",
       ];
-      console.log("[WEBHOOK] Using VISION models for image analysis");
     } else {
-      // Text-only models
+      // Only 2 fast, reliable models
       MODELS = [
-        "meta/llama-3.1-405b-instruct",
         "meta/llama-3.1-70b-instruct",
         "mistralai/mixtral-8x22b-instruct-v0.1",
-        "mistralai/mistral-7b-instruct-v0.3",
-        "google/gemma-2-27b-it",
-        "microsoft/phi-3-medium-128k-instruct",
       ];
     }
 
@@ -2472,14 +2211,10 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
         }
       }
 
-      // Retry with text-only models
+      // Retry with text-only models (reduced list)
       MODELS = [
-        "meta/llama-3.1-405b-instruct",
         "meta/llama-3.1-70b-instruct",
         "mistralai/mixtral-8x22b-instruct-v0.1",
-        "mistralai/mistral-7b-instruct-v0.3",
-        "google/gemma-2-27b-it",
-        "microsoft/phi-3-medium-128k-instruct",
       ];
 
       for (const model of MODELS) {
@@ -3247,21 +2982,11 @@ BOOKING_CONFIRMED: 2026-01-17 18:00 | Prince | 09944465847"
 
     console.log("[WEBHOOK] AI reply sent successfully!");
 
-    // INTELLIGENT FOLLOW-UP: Analyze conversation to schedule smart follow-up
-    try {
-      await analyzeAndScheduleFollowUp(
-        db,
-        conversationId,
-        pageId,
-        conversation,
-        recentMessages,
-      );
-    } catch (followUpErr) {
-      console.log(
-        "[WEBHOOK] Follow-up analysis error (non-fatal):",
-        followUpErr.message,
-      );
-    }
+    console.log(`[WEBHOOK] AI reply sent! Total time: ${Date.now() - startTime}ms`);
+
+    // FIRE-AND-FORGET: Schedule follow-up in background (don't await)
+    analyzeAndScheduleFollowUp(db, conversationId, pageId, conversation, recentMessages)
+      .catch(err => console.log("[WEBHOOK] Follow-up error (non-fatal):", err.message));
   } catch (error) {
     console.error("[WEBHOOK] AI Error:", error);
   }
