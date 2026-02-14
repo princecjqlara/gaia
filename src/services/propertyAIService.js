@@ -11,7 +11,7 @@ const nvidiaChat = async (messages, options = {}) => {
             },
             body: JSON.stringify({
                 action: 'ai_chat',
-                model: options.model || 'nvidia/llama-3.1-nemotron-70b-instruct',
+                model: options.model || 'meta/llama-3.1-70b-instruct',
                 messages,
                 temperature: options.temperature || 0.7,
                 max_tokens: options.maxTokens || 1024,
