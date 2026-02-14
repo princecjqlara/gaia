@@ -1,18 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-const LoginModal = ({ onLogin, onSignUp, isSignUpMode = false, onClose }) => {
+const LoginModal = ({ onLogin, onSignUp, isSignUpMode = false, onClose, onValidateInviteCode }) => {
   const [isSignUp, setIsSignUp] = useState(isSignUpMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteStatus, setInviteStatus] = useState(null); // null | 'checking' | 'valid' | 'invalid'
+  const [inviteTeamName, setInviteTeamName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const validateTimer = useRef(null);
 
   // Sync with prop
   useEffect(() => {
     setIsSignUp(isSignUpMode);
   }, [isSignUpMode]);
+
+  // Debounced invite code validation
+  useEffect(() => {
+    if (!isSignUp || !inviteCode || inviteCode.trim().length < 3) {
+      setInviteStatus(null);
+      setInviteTeamName('');
+      return;
+    }
+
+    setInviteStatus('checking');
+    if (validateTimer.current) clearTimeout(validateTimer.current);
+
+    validateTimer.current = setTimeout(async () => {
+      if (onValidateInviteCode) {
+        const result = await onValidateInviteCode(inviteCode);
+        setInviteStatus(result.valid ? 'valid' : 'invalid');
+        setInviteTeamName(result.valid ? result.teamName : '');
+      }
+    }, 600);
+
+    return () => {
+      if (validateTimer.current) clearTimeout(validateTimer.current);
+    };
+  }, [inviteCode, isSignUp, onValidateInviteCode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,7 +55,12 @@ const LoginModal = ({ onLogin, onSignUp, isSignUpMode = false, onClose }) => {
           setLoading(false);
           return;
         }
-        await onSignUp(email, password, name);
+        if (!inviteCode.trim()) {
+          setError('Please enter an invite code to join a team');
+          setLoading(false);
+          return;
+        }
+        await onSignUp(email, password, name, inviteCode.trim().toUpperCase());
         setSuccess('Account created successfully! Please check your email to confirm your account.');
         // Auto switch to login after 2 seconds
         setTimeout(() => {
@@ -97,17 +130,62 @@ const LoginModal = ({ onLogin, onSignUp, isSignUpMode = false, onClose }) => {
 
           <form id="loginForm" onSubmit={handleSubmit}>
             {isSignUp && (
-              <div className="form-group">
-                <label className="form-label">Full Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  required={isSignUp}
-                  placeholder="Your Name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
+              <>
+                <div className="form-group">
+                  <label className="form-label">Full Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    required={isSignUp}
+                    placeholder="Your Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    🔑 Invite Code
+                    {inviteStatus === 'checking' && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Checking...</span>
+                    )}
+                    {inviteStatus === 'valid' && (
+                      <span style={{ fontSize: '0.75rem', color: '#10b981' }}>✅ Valid</span>
+                    )}
+                    {inviteStatus === 'invalid' && (
+                      <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>❌ Invalid</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    required={isSignUp}
+                    placeholder="Enter invite code from your admin"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    style={{
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.15em',
+                      fontWeight: '600',
+                      borderColor: inviteStatus === 'valid' ? '#10b981' : inviteStatus === 'invalid' ? '#ef4444' : undefined
+                    }}
+                  />
+                  {inviteStatus === 'valid' && inviteTeamName && (
+                    <small style={{ color: '#10b981', fontSize: '0.75rem' }}>
+                      You'll join: {inviteTeamName}
+                    </small>
+                  )}
+                  {inviteStatus === 'invalid' && inviteCode.length >= 3 && (
+                    <small style={{ color: '#ef4444', fontSize: '0.75rem' }}>
+                      Code not found or expired. Ask your admin for a valid code.
+                    </small>
+                  )}
+                  {!inviteStatus && (
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Get this code from your team admin
+                    </small>
+                  )}
+                </div>
+              </>
             )}
             <div className="form-group">
               <label className="form-label">Email</label>
@@ -163,4 +241,3 @@ const LoginModal = ({ onLogin, onSignUp, isSignUpMode = false, onClose }) => {
 };
 
 export default LoginModal;
-

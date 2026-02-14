@@ -142,7 +142,7 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                         marginBottom: '2rem',
                         lineHeight: 1.6
                     }}>
-                        GAIA helps real estate professionals track clients, manage properties, 
+                        GAIA helps real estate professionals track clients, manage properties,
                         and close deals faster with AI-powered insights and seamless Facebook integration.
                     </p>
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
@@ -169,7 +169,7 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                                 e.target.style.boxShadow = '0 4px 20px rgba(99, 102, 241, 0.4)';
                             }}
                         >
-                            Start Free Trial →
+                            Get Started →
                         </button>
                         <button
                             onClick={onLogin}
@@ -196,7 +196,7 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                             Sign In
                         </button>
                     </div>
-                    
+
                     {/* Stats */}
                     <div style={{ display: 'flex', gap: '2rem' }}>
                         <div>
@@ -215,9 +215,9 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                 </div>
 
                 {/* Right Content - Floating Cards */}
-                <div style={{ 
-                    position: 'relative', 
-                    width: '500px', 
+                <div style={{
+                    position: 'relative',
+                    width: '500px',
                     height: '500px',
                     display: isMobile() ? 'none' : 'block'
                 }}>
@@ -334,9 +334,9 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                         Powerful tools designed specifically for real estate professionals
                     </p>
                 </div>
-                
-                <div style={{ 
-                    display: 'grid', 
+
+                <div style={{
+                    display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
                     gap: '2rem',
                     maxWidth: '1200px',
@@ -358,14 +358,14 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                             transition: 'all 0.3s',
                             cursor: 'default'
                         }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                            e.currentTarget.style.transform = 'translateY(-5px)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                        }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                            }}
                         >
                             <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>{feature.icon}</div>
                             <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>{feature.title}</h3>
@@ -376,8 +376,8 @@ const LandingPage = ({ onLogin, onSignUp }) => {
             </section>
 
             {/* CTA Section */}
-            <section style={{ 
-                padding: '6rem 4rem', 
+            <section style={{
+                padding: '6rem 4rem',
                 textAlign: 'center',
                 background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))'
             }}>
@@ -408,13 +408,13 @@ const LandingPage = ({ onLogin, onSignUp }) => {
                         e.target.style.transform = 'translateY(0) scale(1)';
                     }}
                 >
-                    Get Started for Free
+                    Get Started Now
                 </button>
             </section>
 
             {/* Footer */}
-            <footer style={{ 
-                padding: '3rem 4rem', 
+            <footer style={{
+                padding: '3rem 4rem',
                 borderTop: '1px solid rgba(255, 255, 255, 0.1)',
                 textAlign: 'center',
                 color: '#6b7280'

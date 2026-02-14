@@ -130,9 +130,21 @@ export const useSupabase = () => {
     return data;
   };
 
-  const signUp = async (email, password, name) => {
+  const signUp = async (email, password, name, inviteCode = null) => {
     const client = getSupabaseClient();
     if (!client) throw new Error("Supabase not initialized");
+
+    // If invite code provided, validate it first before creating the auth user
+    let inviteData = null;
+    if (inviteCode && inviteCode.trim()) {
+      const { data: validation, error: valError } = await client.rpc('validate_invite_code', {
+        invite_code: inviteCode.trim().toUpperCase()
+      });
+      if (valError || !validation || !validation[0]?.valid) {
+        throw new Error('Invalid or expired invite code. Please check the code and try again.');
+      }
+      inviteData = validation[0];
+    }
 
     // Create auth user
     const { data: authData, error: authError } = await client.auth.signUp({
@@ -140,7 +152,7 @@ export const useSupabase = () => {
       password,
       options: {
         data: {
-          name: name || email.split("@")[0], // Use name from form or email prefix
+          name: name || email.split("@")[0],
         },
       },
     });
@@ -153,11 +165,45 @@ export const useSupabase = () => {
       setCurrentUser(authData.user);
       // Wait a bit for the trigger to complete
       await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // If invite code was valid, redeem it and assign user to team
+      if (inviteData && inviteCode) {
+        const { data: redeemResult, error: redeemError } = await client.rpc('redeem_invite_code', {
+          invite_code: inviteCode.trim().toUpperCase()
+        });
+
+        if (!redeemError && redeemResult && redeemResult[0]?.success) {
+          // Update user profile with team and organization
+          await client
+            .from('users')
+            .update({
+              team_id: redeemResult[0].team_id,
+              organization_id: redeemResult[0].organization_id,
+            })
+            .eq('id', authData.user.id);
+        }
+      }
+
       await loadUserProfile(authData.user.id);
       setIsOnlineMode(true);
     }
 
     return authData;
+  };
+
+  const validateInviteCode = async (code) => {
+    const client = getSupabaseClient();
+    if (!client || !code || code.trim().length < 3) return { valid: false };
+
+    try {
+      const { data, error } = await client.rpc('validate_invite_code', {
+        invite_code: code.trim().toUpperCase()
+      });
+      if (error || !data || !data[0]?.valid) return { valid: false };
+      return { valid: true, teamName: data[0].team_name };
+    } catch {
+      return { valid: false };
+    }
   };
 
   const signOut = async () => {
@@ -215,7 +261,7 @@ export const useSupabase = () => {
     // Fallback to localStorage
     return JSON.parse(
       localStorage.getItem("gaia_expenses") ||
-        '{"basic": 500, "star": 800, "fire": 1000, "crown": 1500, "coaching": 0, "custom": 0}',
+      '{"basic": 500, "star": 800, "fire": 1000, "crown": 1500, "coaching": 0, "custom": 0}',
     );
   };
 
@@ -238,7 +284,7 @@ export const useSupabase = () => {
     // Fallback to localStorage
     return JSON.parse(
       localStorage.getItem("gaia_ai_prompts") ||
-        '{"adType": "Analyze the business niche \'{niche}\' and target audience \'{audience}\'. Suggest the top 3 most effective Facebook ad formats.", "campaignStructure": "For a local service business in niche \'{niche}\' with a budget of ₱150-300/day, outline a recommended campaign structure."}',
+      '{"adType": "Analyze the business niche \'{niche}\' and target audience \'{audience}\'. Suggest the top 3 most effective Facebook ad formats.", "campaignStructure": "For a local service business in niche \'{niche}\' with a budget of ₱150-300/day, outline a recommended campaign structure."}',
     );
   };
 
@@ -378,10 +424,46 @@ export const useSupabase = () => {
     if (!client) return [];
 
     try {
-      const { data, error } = await client
+      let teamId = currentUserProfile?.team_id || null;
+      let organizationId = currentUserProfile?.organization_id || null;
+      let userId = currentUser?.id || null;
+
+      if (!userId) {
+        const { data: { user } } = await client.auth.getUser();
+        userId = user?.id || null;
+      }
+
+      if ((!teamId || !organizationId) && userId) {
+        const { data: orgData, error: orgError } = await client
+          .from("users")
+          .select("organization_id, team_id")
+          .eq("id", userId)
+          .single();
+
+        if (orgError) {
+          console.error("Error loading organization for users:", orgError);
+        }
+
+        organizationId = orgData?.organization_id || organizationId || null;
+        teamId = orgData?.team_id || teamId || null;
+      }
+
+      if (!teamId && !organizationId) {
+        return [];
+      }
+
+      let query = client
         .from("users")
         .select("*")
         .order("name");
+
+      if (teamId) {
+        query = query.eq("team_id", teamId);
+      } else {
+        query = query.eq("organization_id", organizationId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Error loading users:", error);
@@ -656,6 +738,7 @@ export const useSupabase = () => {
     getSession,
     signIn,
     signUp,
+    validateInviteCode,
     signOut,
     isAdmin,
     getUserName,

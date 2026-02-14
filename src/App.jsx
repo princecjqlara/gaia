@@ -72,12 +72,12 @@ function App() {
     return settings.viewMode || "kanban";
   }); // 'kanban' or 'table'
 
-    // Check for /room/:slug or /book/:pageId URL on load
-    const [showBookingPage, setShowBookingPage] = useState(false);
-    const [showPublicProperties, setShowPublicProperties] = useState(false);
-    const [showPropertyDemo, setShowPropertyDemo] = useState(false);
-    const [showTeamProfile, setShowTeamProfile] = useState(false);
-    const [profileTeamId, setProfileTeamId] = useState(null);
+  // Check for /room/:slug or /book/:pageId URL on load
+  const [showBookingPage, setShowBookingPage] = useState(false);
+  const [showPublicProperties, setShowPublicProperties] = useState(false);
+  const [showPropertyDemo, setShowPropertyDemo] = useState(false);
+  const [showTeamProfile, setShowTeamProfile] = useState(false);
+  const [profileTeamId, setProfileTeamId] = useState(null);
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -108,14 +108,14 @@ function App() {
     // Team Profile Route - Instagram style profile page
     // Only match if path has content after / (e.g., /team-id but not /)
     const teamProfileMatch = path.match(/^\/([a-zA-Z0-9-]{3,})$/);
-    if (teamProfileMatch && 
-        teamProfileMatch[1] !== 'room' && 
-        teamProfileMatch[1] !== 'book' && 
-        teamProfileMatch[1] !== 'booking' && 
-        teamProfileMatch[1] !== 'properties' && 
-        teamProfileMatch[1] !== 'demo' && 
-        teamProfileMatch[1] !== 'u' &&
-        teamProfileMatch[1] !== 'api') {
+    if (teamProfileMatch &&
+      teamProfileMatch[1] !== 'room' &&
+      teamProfileMatch[1] !== 'book' &&
+      teamProfileMatch[1] !== 'booking' &&
+      teamProfileMatch[1] !== 'properties' &&
+      teamProfileMatch[1] !== 'demo' &&
+      teamProfileMatch[1] !== 'u' &&
+      teamProfileMatch[1] !== 'api') {
       setProfileTeamId(teamProfileMatch[1]);
       setShowTeamProfile(true);
       return;
@@ -152,12 +152,12 @@ function App() {
         newPath === "/booking" || newPath.startsWith("/booking");
       const isPropertyDemo = newPath === "/demo/property-showcase";
       const matchTeamProfile = newPath.match(/^\/([a-zA-Z0-9-]{3,})$/);
-      const isTeamProfile = matchTeamProfile && 
-        matchTeamProfile[1] !== 'room' && 
-        matchTeamProfile[1] !== 'book' && 
-        matchTeamProfile[1] !== 'booking' && 
-        matchTeamProfile[1] !== 'properties' && 
-        matchTeamProfile[1] !== 'demo' && 
+      const isTeamProfile = matchTeamProfile &&
+        matchTeamProfile[1] !== 'room' &&
+        matchTeamProfile[1] !== 'book' &&
+        matchTeamProfile[1] !== 'booking' &&
+        matchTeamProfile[1] !== 'properties' &&
+        matchTeamProfile[1] !== 'demo' &&
         matchTeamProfile[1] !== 'u' &&
         matchTeamProfile[1] !== 'api';
 
@@ -307,6 +307,7 @@ function App() {
     initSupabase,
     signIn,
     signUp,
+    validateInviteCode,
     signOut,
     getSession,
     isAdmin,
@@ -474,9 +475,9 @@ function App() {
     }
   };
 
-  const handleSignUp = async (email, password, name) => {
+  const handleSignUp = async (email, password, name, inviteCode = null) => {
     try {
-      await signUp(email, password, name);
+      await signUp(email, password, name, inviteCode);
       // Don't close modal immediately - show success message
       // User will need to confirm email first
     } catch (error) {
@@ -813,7 +814,7 @@ function App() {
 
               <PhasesContainer
                 clients={clients}
-                 filters={{
+                filters={{
                   searchTerm,
                   filterPhase,
                   filterAssignedTo,
@@ -837,22 +838,22 @@ function App() {
 
           {/* Messenger Tab Content */}
           {activeMainTab === "messenger" && (
-              <div style={{ padding: "0 1.5rem" }}>
-                {/* Contacts with Phone Numbers Panel */}
-                <div style={{ marginBottom: "1rem" }}>
-                  <ContactsWithPhonePanel
-                    onViewContact={(conversationId) => {
-                      // Could navigate to the conversation in MessengerInbox
-                      console.log("View contact:", conversationId);
-                    }}
-                  />
-                </div>
-                <MessengerInbox
-                  clients={clients}
-                  users={allUsers}
-                  currentUserId={currentUser?.id}
+            <div style={{ padding: "0 1.5rem" }}>
+              {/* Contacts with Phone Numbers Panel */}
+              <div style={{ marginBottom: "1rem" }}>
+                <ContactsWithPhonePanel
+                  onViewContact={(conversationId) => {
+                    // Could navigate to the conversation in MessengerInbox
+                    console.log("View contact:", conversationId);
+                  }}
                 />
               </div>
+              <MessengerInbox
+                clients={clients}
+                users={allUsers}
+                currentUserId={currentUser?.id}
+              />
+            </div>
           )}
 
           {/* Properties Tab Content */}
@@ -1106,11 +1107,12 @@ function App() {
             setShowLoginModal(false);
             setShowLandingPage(false);
           }}
-          onSignUp={async (email, password, name) => {
-            await handleSignUp(email, password, name);
+          onSignUp={async (email, password, name, inviteCode) => {
+            await handleSignUp(email, password, name, inviteCode);
           }}
           isSignUpMode={isSignUpMode}
           onClose={() => setShowLoginModal(false)}
+          onValidateInviteCode={validateInviteCode}
         />
       )}
 

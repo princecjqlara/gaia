@@ -5,9 +5,15 @@ import facebookService from '../services/facebookService';
 
 const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, onTeamPerformance }) => {
   const [showTagManagement, setShowTagManagement] = useState(false);
-  const [activeMainTab, setActiveMainTab] = useState('facebook'); // facebook, booking, aichatbot, stages
+  const [activeMainTab, setActiveMainTab] = useState('facebook'); // facebook, booking, aichatbot, stages, invitecodes
+
+  // Invite Codes State
+  const [inviteCodes, setInviteCodes] = useState([]);
+  const [loadingInviteCodes, setLoadingInviteCodes] = useState(false);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState(null);
   const [activePageId, setActivePageId] = useState('default'); // Will be set from connected pages
-  
+
   // Stages Management State
   const [customStages, setCustomStages] = useState([]);
   const [newStageName, setNewStageName] = useState('');
@@ -675,6 +681,126 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     }
   };
 
+  // ==========================================
+  // INVITE CODES FUNCTIONS
+  // ==========================================
+  const generateInviteCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1 to avoid confusion
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
+  const loadInviteCodes = async () => {
+    try {
+      setLoadingInviteCodes(true);
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const db = createClient(supabaseUrl, supabaseKey);
+
+      const { data, error } = await db
+        .from('invite_codes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setInviteCodes(data || []);
+    } catch (err) {
+      console.error('Error loading invite codes:', err);
+    } finally {
+      setLoadingInviteCodes(false);
+    }
+  };
+
+  const handleGenerateInviteCode = async () => {
+    try {
+      setGeneratingCode(true);
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const db = createClient(supabaseUrl, supabaseKey);
+
+      // Get current user's team_id
+      const { data: { user } } = await db.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: profile } = await db
+        .from('users')
+        .select('team_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.team_id) throw new Error('No team found. Please ensure you are assigned to a team.');
+
+      const code = generateInviteCode();
+      const { data, error } = await db
+        .from('invite_codes')
+        .insert({
+          code,
+          team_id: profile.team_id,
+          created_by: user.id,
+          max_uses: 10,
+          uses: 0,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setInviteCodes(prev => [data, ...prev]);
+
+      // Auto-copy
+      try {
+        await navigator.clipboard.writeText(code);
+        setCopiedCodeId(data.id);
+        setTimeout(() => setCopiedCodeId(null), 2000);
+      } catch { /* clipboard may not be available */ }
+    } catch (err) {
+      console.error('Error generating invite code:', err);
+      alert('Failed to generate code: ' + err.message);
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const handleCopyCode = async (code, id) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCodeId(id);
+      setTimeout(() => setCopiedCodeId(null), 2000);
+    } catch {
+      alert('Code: ' + code);
+    }
+  };
+
+  const handleDeactivateCode = async (codeId) => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const db = createClient(supabaseUrl, supabaseKey);
+
+      await db
+        .from('invite_codes')
+        .update({ is_active: false })
+        .eq('id', codeId);
+
+      setInviteCodes(prev => prev.map(c => c.id === codeId ? { ...c, is_active: false } : c));
+    } catch (err) {
+      console.error('Error deactivating code:', err);
+    }
+  };
+
+  // Load invite codes when tab is opened
+  useEffect(() => {
+    if (activeMainTab === 'invitecodes') {
+      loadInviteCodes();
+    }
+  }, [activeMainTab]);
+
   // Load custom stages on mount
   useEffect(() => {
     loadCustomStages();
@@ -770,6 +896,21 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
               }}
             >
               📊 Stages Management
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('invitecodes')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: activeMainTab === 'invitecodes' ? '2px solid var(--primary)' : '2px solid transparent',
+                color: activeMainTab === 'invitecodes' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: activeMainTab === 'invitecodes' ? '600' : '400'
+              }}
+            >
+              🔑 Invite Codes
             </button>
           </div>
 
@@ -2534,6 +2675,97 @@ REFERRAL: Customer was referred by someone`}
             </div>
           )}
 
+          {activeMainTab === 'invitecodes' && (
+            <div>
+              <div style={{ marginBottom: '2rem' }}>
+                <h4 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>🔑 Invite Codes</h4>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                  Generate invite codes to share with team members. They'll use the code during signup to join your team.
+                </p>
+
+                <button
+                  onClick={handleGenerateInviteCode}
+                  disabled={generatingCode}
+                  className="btn btn-primary"
+                  style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  {generatingCode ? '⏳ Generating...' : '➕ Generate New Code'}
+                </button>
+
+                {loadingInviteCodes ? (
+                  <p style={{ color: 'var(--text-muted)' }}>Loading codes...</p>
+                ) : inviteCodes.length === 0 ? (
+                  <div style={{
+                    padding: '2rem',
+                    textAlign: 'center',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-muted)'
+                  }}>
+                    No invite codes yet. Generate one to invite team members.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {inviteCodes.map(ic => (
+                      <div key={ic.id} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '1rem 1.25rem',
+                        background: ic.is_active ? 'var(--bg-tertiary)' : 'rgba(127,127,127,0.1)',
+                        borderRadius: 'var(--radius-lg)',
+                        border: `1px solid ${ic.is_active ? 'var(--border-color)' : 'rgba(127,127,127,0.2)'}`,
+                        opacity: ic.is_active ? 1 : 0.6
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span style={{
+                            fontFamily: 'monospace',
+                            fontSize: '1.1rem',
+                            fontWeight: '700',
+                            letterSpacing: '0.15em',
+                            color: ic.is_active ? 'var(--primary)' : 'var(--text-muted)',
+                            background: ic.is_active ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '6px'
+                          }}>
+                            {ic.code}
+                          </span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {ic.uses}/{ic.max_uses} uses
+                          </span>
+                          {!ic.is_active && (
+                            <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: '600' }}>INACTIVE</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          {ic.is_active && (
+                            <>
+                              <button
+                                onClick={() => handleCopyCode(ic.code, ic.id)}
+                                className="btn btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                              >
+                                {copiedCodeId === ic.id ? '✅ Copied!' : '📋 Copy'}
+                              </button>
+                              <button
+                                onClick={() => handleDeactivateCode(ic.id)}
+                                className="btn btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#ef4444' }}
+                              >
+                                🚫 Deactivate
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeMainTab === 'stages' && (
             <div>
               <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📊 Stages Management</h4>
@@ -2642,7 +2874,7 @@ REFERRAL: Customer was referred by someone`}
               </div>
 
 
- {/* Add New Stage */}
+              {/* Add New Stage */}
               <div style={{
                 marginBottom: '1.5rem',
                 padding: '1.5rem',
