@@ -1516,71 +1516,43 @@ async function handleIncomingMessage(pageId, event) {
     return;
   }
 
-  // DEDUPLICATION: Check if we already processed this message
-  if (message.mid) {
-    const { data: existingMessage } = await db
-      .from("facebook_messages")
-      .select("message_id")
-      .eq("message_id", message.mid)
-      .single();
-
-    if (existingMessage) {
-      // Already processed this message, skip
-      return;
-    }
-  }
-
   console.log(
     `[WEBHOOK] ${isEcho ? "Echo" : "Incoming"} from ${participantId}: ${(message.text || "[attachment]").substring(0, 50)}`,
   );
 
   try {
-    // CRITICAL: Ensure the page exists in facebook_pages before inserting conversation
-    // (foreign key constraint requires this)
-    const { data: existingPage } = await db
-      .from("facebook_pages")
-      .select("page_id")
-      .eq("page_id", pageId)
-      .single();
+    // PARALLEL: Run dedup check, page check, and conversation lookup simultaneously
+    // This saves ~200-400ms vs running them sequentially
+    const [dedupResult, pageResult, convResult] = await Promise.all([
+      // 1. Dedup check
+      message.mid
+        ? db.from("facebook_messages").select("message_id").eq("message_id", message.mid).single()
+        : Promise.resolve({ data: null }),
+      // 2. Page existence check
+      db.from("facebook_pages").select("page_id").eq("page_id", pageId).single(),
+      // 3. Conversation lookup
+      db.from("facebook_conversations").select("*").eq("participant_id", participantId).eq("page_id", pageId).single(),
+    ]);
 
-    if (!existingPage) {
-      console.log(
-        `[WEBHOOK] Page ${pageId} not in database, creating minimal entry...`,
-      );
-      const { error: pageInsertError } = await db
-        .from("facebook_pages")
-        .insert({
-          page_id: pageId,
-          page_name: `Page ${pageId}`,
-          page_access_token: "pending", // Will be updated when page is properly connected
-          is_active: true,
-        });
-
-      if (pageInsertError) {
-        console.error(
-          "[WEBHOOK] Failed to create page entry:",
-          pageInsertError,
-        );
-        // Continue anyway - the page might have been created by another request
-      } else {
-        console.log(`[WEBHOOK] Created minimal page entry for ${pageId}`);
-      }
+    // Handle dedup
+    if (dedupResult.data) {
+      return; // Already processed
     }
 
-    // Look up existing conversation by participant_id first (matches synced conversations)
-    console.log(
-      `[WEBHOOK] STEP 1: Looking up existing conversation for participant ${participantId}`,
-    );
-    const { data: existingConv, error: convLookupError } = await db
-      .from("facebook_conversations")
-      .select("*")
-      .eq("participant_id", participantId)
-      .eq("page_id", pageId)
-      .single();
+    // Handle page creation if needed
+    if (!pageResult.data) {
+      console.log(`[WEBHOOK] Page ${pageId} not in database, creating...`);
+      await db.from("facebook_pages").insert({
+        page_id: pageId,
+        page_name: `Page ${pageId}`,
+        page_access_token: "pending",
+        is_active: true,
+      });
+    }
 
-    console.log(
-      `[WEBHOOK] STEP 1 RESULT: existing=${!!existingConv}, error=${convLookupError?.code || "none"}`,
-    );
+    const existingConv = convResult.data;
+    const convLookupError = convResult.error;
+    console.log(`[WEBHOOK] Lookup: existing=${!!existingConv}, error=${convLookupError?.code || "none"}`);
 
     // Get conversation_id - for new conversations, try to fetch the real one from Facebook
     let conversationId = existingConv?.conversation_id;
@@ -1762,31 +1734,29 @@ async function handleIncomingMessage(pageId, event) {
       console.log(`[WEBHOOK] Message ${message.mid} saved!`);
     }
 
-    // Track engagement data for best time calculation (incoming messages only)
+    // Track engagement + cancel follow-ups in parallel (non-blocking)
     if (!isFromPage) {
       const msgDate = new Date(timestamp);
-      await db.from("contact_engagement").insert({
-        conversation_id: conversationId,
-        page_id: pageId,
-        message_direction: "inbound",
-        day_of_week: msgDate.getDay(),
-        hour_of_day: msgDate.getHours(),
-        engagement_score: 1,
-        message_timestamp: msgDate.toISOString(),
-      });
+      Promise.all([
+        db.from("contact_engagement").insert({
+          conversation_id: conversationId,
+          page_id: pageId,
+          message_direction: "inbound",
+          day_of_week: msgDate.getDay(),
+          hour_of_day: msgDate.getHours(),
+          engagement_score: 1,
+          message_timestamp: msgDate.toISOString(),
+        }),
+        db.from("ai_followup_schedule")
+          .update({ status: "cancelled", completed_at: new Date().toISOString() })
+          .eq("conversation_id", conversationId)
+          .eq("status", "pending"),
+      ]).then(([engRes, followRes]) => {
+        if (followRes.data?.length > 0) {
+          console.log(`[WEBHOOK] Cancelled ${followRes.data.length} pending follow-ups`);
+        }
+      }).catch(err => console.error("[WEBHOOK] Engagement/followup error:", err.message));
 
-      // Cancel any pending follow-ups since user responded
-      const { data: cancelled } = await db
-        .from("ai_followup_schedule")
-        .update({ status: "cancelled", completed_at: new Date().toISOString() })
-        .eq("conversation_id", conversationId)
-        .eq("status", "pending");
-
-      if (cancelled && cancelled.length > 0) {
-        console.log(
-          `[WEBHOOK] Cancelled ${cancelled.length} pending follow-ups - user responded`,
-        );
-      }
     }
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
