@@ -1974,7 +1974,11 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     const recentMessages = (messagesResult.data || []).reverse();
 
     if (!page?.page_access_token) {
-      console.error("[WEBHOOK] No page access token");
+      console.error("[WEBHOOK] ❌ No page access token found for page:", pageId);
+      return;
+    }
+    if (page.page_access_token === "pending") {
+      console.error("[WEBHOOK] ❌ Page access token is 'pending' — page was auto-created but not properly connected. Go to Gaia settings and reconnect your Facebook page.");
       return;
     }
 
@@ -2990,9 +2994,9 @@ ${faqContent}
         const err = await sendResponse.text();
         console.error(`[WEBHOOK] Send part ${i + 1} failed:`, err);
 
-        // Try with ACCOUNT_UPDATE tag if 24h window issue
+        // Try with HUMAN_AGENT tag if 24h window issue (allows 7-day window)
         if (err.includes("allowed window") || err.includes("outside")) {
-          console.log("[WEBHOOK] Retrying with ACCOUNT_UPDATE tag...");
+          console.log("[WEBHOOK] Retrying with HUMAN_AGENT tag...");
           const retryResponse = await fetch(
             `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
             {
@@ -3000,9 +3004,9 @@ ${faqContent}
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 recipient: { id: participantId },
-                message: { text: part },
+                message: { text: part.content || part },
                 messaging_type: "MESSAGE_TAG",
-                tag: "ACCOUNT_UPDATE",
+                tag: "HUMAN_AGENT",
               }),
             },
           );
