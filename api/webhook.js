@@ -925,7 +925,11 @@ export default async function handler(req, res) {
       }
 
       if (body.object === "page") {
-        // Process messages synchronously (fast: just saves to DB, no AI)
+        // CRITICAL: Return 200 to Facebook IMMEDIATELY - before ANY processing
+        // Vercel keeps the function alive after res.send() until event queue drains or 10s timeout
+        res.status(200).send("EVENT_RECEIVED");
+
+        // Now process messages (function is still alive for ~9 more seconds)
         for (const entry of body.entry || []) {
           const pageId = entry.id;
           const messaging = entry.messaging || [];
@@ -935,10 +939,8 @@ export default async function handler(req, res) {
               if (event.message) {
                 await handleIncomingMessage(pageId, event);
               } else if (event.postback) {
-                console.log("[WEBHOOK] Postback received");
                 await handlePostbackEvent(pageId, event);
               } else if (event.referral) {
-                console.log("[WEBHOOK] Referral received");
                 await handleReferralEvent(pageId, event);
               }
             } catch (eventErr) {
@@ -946,21 +948,15 @@ export default async function handler(req, res) {
             }
           }
 
-          // Handle Facebook feed events
           const changes = entry.changes || [];
           for (const change of changes) {
             if (change.field === "feed" && change.value?.item === "comment") {
-              console.log("[WEBHOOK] Comment received on post");
-              try {
-                await handleCommentEvent(pageId, change.value);
-              } catch (commentErr) {
-                console.error("[WEBHOOK] Comment error:", commentErr.message);
-              }
+              try { await handleCommentEvent(pageId, change.value); } catch (e) { console.error(e.message); }
             }
           }
         }
 
-        return res.status(200).send("EVENT_RECEIVED");
+        return; // Already sent response above
       }
 
       return res.status(200).send("OK");
@@ -1598,28 +1594,9 @@ async function handleIncomingMessage(pageId, event) {
     );
 
     if (!conversationId) {
-      // Try to get the real Facebook conversation ID
-      console.log(
-        `[WEBHOOK] STEP 3: Fetching real conversation ID from Facebook...`,
-      );
-      try {
-        const result = await fetchRealConversationId(participantId, pageId);
-        if (result.conversationId) {
-          conversationId = result.conversationId;
-          console.log(
-            `[WEBHOOK] STEP 3 RESULT: Using real Facebook conversation ID: ${conversationId}`,
-          );
-        } else {
-          // Fallback to temporary ID only if we can't get the real one
-          conversationId = `t_${participantId}`;
-          console.log(
-            `[WEBHOOK] STEP 3 RESULT: Using temporary conversation ID: ${conversationId}`,
-          );
-        }
-      } catch (fetchErr) {
-        console.error(`[WEBHOOK] STEP 3 ERROR: ${fetchErr.message}`);
-        conversationId = `t_${participantId}`;
-      }
+      // Use temporary ID immediately - no slow Facebook API calls
+      conversationId = `t_${participantId}`;
+      console.log(`[WEBHOOK] Using conversation ID: ${conversationId}`);
     }
 
     // Only increment unread for messages FROM the user, not echoes
@@ -1645,106 +1622,13 @@ async function handleIncomingMessage(pageId, event) {
         participantName = senderNameFromEvent;
       }
 
-      // Source 2: Try to fetch from Facebook Graph API (direct profile lookup)
+      // FAST name lookup - only use event data, no slow API calls
       if (!participantName) {
-        console.log(
-          `[WEBHOOK] Fetching name from API for participant: ${participantId}`,
-        );
-        participantName = await fetchFacebookUserName(participantId, pageId);
+        const senderNameFromEvent =
+          event.sender?.name || event.recipient?.name || message.sender_name;
+        participantName = senderNameFromEvent || "Customer";
       }
-
-      // Source 3: Try conversation API with participants (this is how sync works!)
-      // If we have a temp ID, first try to get the real conversation ID
-      if (!participantName) {
-        let convIdForLookup = conversationId;
-
-        // For temporary IDs (t_xxx), try to get the real conversation ID first
-        if (conversationId.startsWith("t_")) {
-          console.log(
-            `[WEBHOOK] Temp ID detected, fetching real conversation ID for name lookup...`,
-          );
-          const result = await fetchRealConversationId(participantId, pageId);
-          if (result.conversationId) {
-            convIdForLookup = result.conversationId;
-            // Also update our conversationId so it's saved correctly
-            conversationId = result.conversationId;
-            console.log(
-              `[WEBHOOK] Updated to real conversation ID: ${result.conversationId}`,
-            );
-
-            // If we also got a name, use it!
-            if (result.name) {
-              participantName = result.name;
-              console.log(
-                `[WEBHOOK] ✅ Got name from conversation lookup: ${result.name}`,
-              );
-            }
-          }
-        }
-
-        // If still no name, try the fetchNameFromConversation method
-        if (
-          !participantName &&
-          convIdForLookup &&
-          !convIdForLookup.startsWith("t_")
-        ) {
-          console.log(
-            `[WEBHOOK] Trying conversation API for name (sync method)...`,
-          );
-          participantName = await fetchNameFromConversation(
-            convIdForLookup,
-            participantId,
-            pageId,
-          );
-        }
-      }
-
-      // Source 3: Try to extract name from message content using patterns
-      if (!participantName) {
-        // Check current message first
-        const currentMsgText = message.text || "";
-        const extractedFromCurrent = extractNameFromText(currentMsgText);
-        if (extractedFromCurrent) {
-          console.log(
-            `[WEBHOOK] Extracted name from current message: ${extractedFromCurrent}`,
-          );
-          participantName = extractedFromCurrent;
-        }
-
-        // If still no name, check existing messages from this conversation
-        if (!participantName && conversationId) {
-          try {
-            const { data: existingMsgs } = await db
-              .from("facebook_messages")
-              .select("message_text, is_from_page")
-              .eq("conversation_id", conversationId)
-              .eq("is_from_page", false)
-              .order("timestamp", { ascending: true })
-              .limit(10);
-
-            if (existingMsgs) {
-              for (const msg of existingMsgs) {
-                const extracted = extractNameFromText(msg.message_text || "");
-                if (extracted) {
-                  console.log(
-                    `[WEBHOOK] Extracted name from history: ${extracted}`,
-                  );
-                  participantName = extracted;
-                  break;
-                }
-              }
-            }
-          } catch (err) {
-            console.log("[WEBHOOK] Could not check message history for name");
-          }
-        }
-      }
-
-      if (participantName) {
-        console.log(`[WEBHOOK] Name resolved: ${participantName}`);
-      } else {
-        console.log(`[WEBHOOK] Could not resolve name for ${participantId}`);
-      }
+      console.log(`[WEBHOOK] Name: ${participantName}`);
     }
 
     const extractedPhone = !isFromPage
