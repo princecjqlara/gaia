@@ -2185,13 +2185,12 @@ ${faqContent}
     if (hasImages) {
       MODELS = [
         "meta/llama-3.2-11b-vision-instruct",
-        "nvidia/vila",
       ];
     } else {
-      // Only 2 fast, reliable models
+      // Use fast 8b model first (responds in ~2-3s), 70b as fallback
       MODELS = [
+        "meta/llama-3.1-8b-instruct",
         "meta/llama-3.1-70b-instruct",
-        "mistralai/mixtral-8x22b-instruct-v0.1",
       ];
     }
 
@@ -2201,6 +2200,8 @@ ${faqContent}
     for (const model of MODELS) {
       try {
         console.log(`[WEBHOOK] Trying model: ${model}, hasImages: ${hasImages}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout per model attempt
         const aiResponse = await fetch(
           "https://integrate.api.nvidia.com/v1/chat/completions",
           {
@@ -2213,10 +2214,12 @@ ${faqContent}
               model: model,
               messages: aiMessages,
               temperature: 0.7,
-              max_tokens: 400, // AI controls message splitting via ||| delimiter
+              max_tokens: 300,
             }),
+            signal: controller.signal,
           },
         );
+        clearTimeout(timeoutId);
 
         if (!aiResponse.ok) {
           const errorText = await aiResponse.text();
@@ -2277,10 +2280,9 @@ ${faqContent}
         }
       }
 
-      // Retry with text-only models (reduced list)
+      // Retry with text-only models (fast 8b first)
       MODELS = [
-        "meta/llama-3.1-70b-instruct",
-        "mistralai/mixtral-8x22b-instruct-v0.1",
+        "meta/llama-3.1-8b-instruct",
       ];
 
       for (const model of MODELS) {
