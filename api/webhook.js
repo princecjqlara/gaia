@@ -2400,10 +2400,27 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
         .single();
       const threshold = thresholdSetting?.value?.percentage || 70;
 
-      // 2. Calculate base progress using goalController
-      const { evaluateGoalProgress } = await import("../src/services/goalController.js");
-      // Use 'qualify_lead' logic for evaluation gating
-      const baseProgress = evaluateGoalProgress(recentMessages, { goal_type: 'qualify_lead' });
+      // 2. Calculate progress INLINE (goalController.js can't be imported on Vercel)
+      const qualifyIndicators = ['budget confirmed', 'timeline known', 'decision maker', 'ready to proceed'];
+      const conversationText = recentMessages
+        .map(m => m.message_text || '')
+        .join(' ')
+        .toLowerCase();
+
+      let indicatorScore = 0;
+      for (const indicator of qualifyIndicators) {
+        if (conversationText.includes(indicator.toLowerCase())) indicatorScore++;
+      }
+      const indicatorProgress = qualifyIndicators.length > 0
+        ? (indicatorScore / qualifyIndicators.length) * 100 : 0;
+      const messageProgress = Math.min(recentMessages.length * 5, 30);
+      const positiveWords = ['yes', 'sure', 'okay', 'sounds good', 'interested', 'tell me more', 'great'];
+      let sentimentScore = 0;
+      for (const word of positiveWords) {
+        if (conversationText.includes(word)) sentimentScore += 5;
+      }
+      sentimentScore = Math.min(sentimentScore, 20);
+      const baseProgress = Math.min(indicatorProgress + messageProgress + sentimentScore, 100);
 
       // 3. Boost score based on extracted data (hard facts are most important)
       let dataScore = 0;
@@ -2416,10 +2433,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       if (details.bedrooms || analysis.bedrooms) dataScore += 10;
 
       // Final Score = Base (Action/Text) + Data (Facts)
-      // Base progress maxes at ~50% without specific keywords, so data fills the rest
-      evaluationScore = Math.min(100, normalizeProgress(baseProgress.progress) + dataScore);
-
-      function normalizeProgress(p) { return p || 0; }
+      evaluationScore = Math.min(100, Math.round(baseProgress) + dataScore);
 
       // 4. Determine status
       if (evaluationScore < threshold) {
@@ -4522,12 +4536,19 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
   if (!db) return false;
 
   try {
-    // 1. Get Booking URL
-    const { data: settings } = await db
-      .from("settings")
-      .select("value")
-      .eq("key", "ai_chatbot_config")
-      .single();
+    // 1. Get Booking URL + page token in parallel
+    const [settingsResult, pageResult] = await Promise.all([
+      db.from("settings").select("value").eq("key", "ai_chatbot_config").single(),
+      db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single()
+    ]);
+
+    const settings = settingsResult.data;
+    const pageToken = pageResult.data?.page_access_token;
+
+    if (!pageToken || pageToken === 'pending') {
+      console.error("[WEBHOOK] sendWelcomeMessage: No valid page token for", pageId);
+      return false;
+    }
 
     // 3. Get User Name (if available) & Generate Personalized Greeting
     let participantName = "Friend";
@@ -4567,7 +4588,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "meta/llama-3.1-405b-instruct",
+          model: "meta/llama-3.1-8b-instruct",
           messages: [{ role: "user", content: welcomePrompt }],
           temperature: 0.7,
           max_tokens: 100,
@@ -4612,7 +4633,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     };
 
     const resp = await fetch(
-      `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+      `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${pageToken}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
