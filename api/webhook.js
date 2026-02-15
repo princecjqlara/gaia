@@ -4144,7 +4144,6 @@ async function handlePostbackEvent(pageId, event) {
       updated_at: new Date().toISOString(),
       ai_enabled: existingConv?.ai_enabled ?? true,
       active_goal_id: existingConv?.active_goal_id || null,
-      source: referral?.source === "ADS" ? "ad" : "postback",
     };
 
     const { error: convError } = await db
