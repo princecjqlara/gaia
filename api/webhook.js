@@ -4398,22 +4398,59 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       .eq("key", "ai_chatbot_config")
       .single();
 
-    const bookingUrl = settings?.value?.booking_url;
+    // 3. Get User Name (if available) & Generate Personalized Greeting
+    let participantName = "Friend";
+    try {
+      const { data: conv } = await db
+        .from("facebook_conversations")
+        .select("participant_name")
+        .eq("conversation_id", conversationId)
+        .single();
+      if (conv?.participant_name) participantName = conv.participant_name;
+    } catch (e) { }
 
-    // 2. Get Page Token
-    const { data: page } = await db
-      .from("facebook_pages")
-      .select("page_access_token")
-      .eq("page_id", pageId)
-      .single();
+    // DEBUG: Log settings to find correct booking URL key
+    console.log("[WEBHOOK] Welcome Settings Dump:", JSON.stringify(settings?.value || {}, null, 2));
 
-    if (!page?.page_access_token) {
-      console.error("[WEBHOOK] Cannot send welcome - no page token");
-      return false;
+    // Try multiple keys for booking URL based on user feedback
+    const bookingUrl = settings?.value?.booking_url || settings?.value?.booking_link || settings?.value?.bookingLink;
+
+    // Generate PERSONALIZED Welcome via AI
+    const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
+    const welcomePrompt = `
+      ${systemPrompt}
+      
+      TASK: Generate a SHORT, friendly, and personalized welcome message for a new user named "${participantName}".
+      GOAL: Encourage them to book a consultation or view properties.
+      TONE: Warm, professional, enthusiastic.
+      LANGUAGE: Taglish (Filipino/English mix).
+      limit: 1-2 sentences max. NO hashtags.
+    `;
+
+    let welcomeText = "Hello! 👋 Welcome to Gaia. I'm your AI assistant. How can I help you today?";
+    try {
+      const completion = await fetch("https://api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "meta/llama-3.1-405b-instruct",
+          messages: [{ role: "user", content: welcomePrompt }],
+          temperature: 0.7,
+          max_tokens: 100,
+        }),
+      });
+      const data = await completion.json();
+      if (data.choices?.[0]?.message?.content) {
+        welcomeText = data.choices[0].message.content.replace(/[""]/g, "").trim();
+      }
+    } catch (aiErr) {
+      console.error("[WEBHOOK] Welcome AI Gen Failed:", aiErr.message);
     }
 
-    // 3. Construct Welcome Message
-    // Fallback if no booking URL: Just show "View Properties"
+    // 4. Construct Welcome Message with AI Text
     const buttons = [];
     if (bookingUrl) {
       buttons.push({
@@ -4436,7 +4473,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
           type: "template",
           payload: {
             template_type: "button",
-            text: "Hello! 👋 Welcome to Gaia. I'm your AI assistant. I can help you find properties or schedule a consultation.\n\nHow can I help you today?",
+            text: welcomeText,
             buttons: buttons
           }
         }
