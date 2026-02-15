@@ -3059,6 +3059,10 @@ REFERRAL: Customer was referred by someone`}
                                 config
                               })
                             });
+                            if (!resp.ok) {
+                              const errText = await resp.text();
+                              throw new Error(errText.startsWith('{') ? JSON.parse(errText).error || `Server error ${resp.status}` : `Server error ${resp.status}`);
+                            }
                             const data = await resp.json();
 
                             if (data.reply) {
@@ -3106,6 +3110,10 @@ REFERRAL: Customer was referred by someone`}
                               config
                             })
                           });
+                          if (!resp.ok) {
+                            const errText = await resp.text();
+                            throw new Error(errText.startsWith('{') ? JSON.parse(errText).error || `Server error ${resp.status}` : `Server error ${resp.status}`);
+                          }
                           const data = await resp.json();
 
                           if (data.reply) {

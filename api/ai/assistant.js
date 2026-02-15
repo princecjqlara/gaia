@@ -1,9 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
-);
+let supabase = null;
+function getSupabase() {
+    if (!supabase) {
+        const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        if (!url || !key) {
+            console.error('[AI Assistant] Supabase not configured:', { url: !!url, key: !!key });
+            return null;
+        }
+        supabase = createClient(url, key);
+    }
+    return supabase;
+}
 
 /**
  * AI Assistant API - Admin Only
