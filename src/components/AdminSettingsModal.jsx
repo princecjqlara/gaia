@@ -3319,6 +3319,199 @@ REFERRAL: Customer was referred by someone`}
                 </div>
               </div>
 
+              {/* ============ Welcome Message Customization ============ */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>👋 Welcome Message</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Customize the message and buttons shown to new contacts when they first message your page
+                </p>
+
+                {/* Welcome Text */}
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label className="form-label">Welcome Message Text</label>
+                  <textarea
+                    className="form-input"
+                    rows={3}
+                    placeholder="Hello! 👋 Welcome! I'm your AI assistant. How can I help you today?"
+                    defaultValue={(() => {
+                      try {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        return config.welcome_message_text || '';
+                      } catch { return ''; }
+                    })()}
+                    onChange={(e) => {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      config.welcome_message_text = e.target.value;
+                      localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                    }}
+                    style={{ resize: 'vertical', fontSize: '0.875rem' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    Leave empty to let AI generate a personalized greeting. Use <code>{'{{name}}'}</code> to insert the contact's name.
+                  </small>
+                </div>
+
+                {/* AI Generate toggle */}
+                <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                    <div>
+                      <span>🤖 AI-Generated Welcome</span>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Let AI create a unique, personalized greeting for each contact</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      defaultChecked={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.welcome_ai_generated !== false;
+                        } catch { return true; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.welcome_ai_generated = e.target.checked;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{ width: '20px', height: '20px', accentColor: '#6366f1', cursor: 'pointer' }}
+                    />
+                  </label>
+                </div>
+
+                {/* Buttons Configuration */}
+                <div style={{ padding: '1rem', background: 'rgba(99, 102, 241, 0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                  <div style={{ fontWeight: 500, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>🔘 Welcome Buttons</div>
+
+                  {/* Button 1 (Primary - Booking) */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Primary Button Label</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="📅 Book Now"
+                      defaultValue={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.welcome_button_label || '';
+                        } catch { return ''; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.welcome_button_label = e.target.value;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{ fontSize: '0.875rem' }}
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      This button links to your Booking URL set below. Default: "📅 Book Now"
+                    </small>
+                  </div>
+
+                  {/* Button 1 URL */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Primary Button URL</label>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="https://yoursite.com/book"
+                      defaultValue={(() => {
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          return config.welcome_button_url || config.booking_url || '';
+                        } catch { return ''; }
+                      })()}
+                      onChange={(e) => {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        config.welcome_button_url = e.target.value;
+                        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                      }}
+                      style={{ fontSize: '0.875rem' }}
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      Custom URL for the primary button. Falls back to Booking Link URL if empty.
+                    </small>
+                  </div>
+
+                  {/* Button 2 (Optional) */}
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: '0.75rem' }}>
+                      <div>
+                        <span style={{ fontWeight: 500 }}>➕ Add Second Button</span>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Optional second action button (up to 3 buttons max on Messenger)</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        defaultChecked={(() => {
+                          try {
+                            const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                            return config.welcome_button2_enabled === true;
+                          } catch { return false; }
+                        })()}
+                        onChange={(e) => {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          config.welcome_button2_enabled = e.target.checked;
+                          localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                          // Force re-render
+                          e.target.closest('div[style]').parentElement.querySelectorAll('[data-btn2]').forEach(el => {
+                            el.style.display = e.target.checked ? 'block' : 'none';
+                          });
+                        }}
+                        style={{ width: '18px', height: '18px', accentColor: '#6366f1', cursor: 'pointer' }}
+                      />
+                    </label>
+
+                    <div data-btn2 style={{ display: (() => { try { return JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}').welcome_button2_enabled ? 'block' : 'none'; } catch { return 'none'; } })() }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Button 2 Label</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="🏠 View Properties"
+                            defaultValue={(() => {
+                              try {
+                                const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                                return config.welcome_button2_label || '';
+                              } catch { return ''; }
+                            })()}
+                            onChange={(e) => {
+                              const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                              config.welcome_button2_label = e.target.value;
+                              localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                            }}
+                            style={{ fontSize: '0.875rem' }}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Button 2 URL</label>
+                          <input
+                            type="url"
+                            className="form-input"
+                            placeholder="https://yoursite.com/properties"
+                            defaultValue={(() => {
+                              try {
+                                const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                                return config.welcome_button2_url || '';
+                              } catch { return ''; }
+                            })()}
+                            onChange={(e) => {
+                              const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                              config.welcome_button2_url = e.target.value;
+                              localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+                            }}
+                            style={{ fontSize: '0.875rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(34, 197, 94, 0.1)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    💡 <strong>Remember:</strong> Click "💾 Save to Database" above for these settings to take effect on live messages.
+                  </div>
+                </div>
+              </div>
+
               {/* Booking & Calendar */}
               <div style={{ marginBottom: '2rem' }}>
                 <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>📅 Booking & Calendar</h5>

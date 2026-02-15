@@ -4564,59 +4564,105 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     // DEBUG: Log settings to find correct booking URL key
     console.log("[WEBHOOK] Welcome Settings Dump:", JSON.stringify(settings?.value || {}, null, 2));
 
-    // Try multiple keys for booking URL based on user feedback
-    const bookingUrl = settings?.value?.booking_url || settings?.value?.booking_link || settings?.value?.bookingLink;
+    // Try multiple keys for booking URL from ai_chatbot_config
+    let bookingUrl = settings?.value?.booking_url || settings?.value?.booking_link || settings?.value?.bookingLink;
 
-    // Generate PERSONALIZED Welcome via AI
-    const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
-    const welcomePrompt = `
-      ${systemPrompt}
-      
-      TASK: Generate a SHORT, friendly, and personalized welcome message for a new user named "${participantName}".
-      GOAL: Encourage them to book a consultation or view properties.
-      TONE: Warm, professional, enthusiastic.
-      LANGUAGE: Taglish (Filipino/English mix).
-      limit: 1-2 sentences max. NO hashtags.
-    `;
-
-    let welcomeText = "Hello! 👋 Welcome to Gaia. I'm your AI assistant. How can I help you today?";
-    try {
-      const completion = await fetch("https://api.nvidia.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "meta/llama-3.1-8b-instruct",
-          messages: [{ role: "user", content: welcomePrompt }],
-          temperature: 0.7,
-          max_tokens: 100,
-        }),
-      });
-      const data = await completion.json();
-      if (data.choices?.[0]?.message?.content) {
-        welcomeText = data.choices[0].message.content.replace(/[""]/g, "").trim();
+    // Also check booking_settings table if no URL found in ai_chatbot_config
+    if (!bookingUrl) {
+      try {
+        const { data: bookingSettingsData } = await db
+          .from("booking_settings")
+          .select("booking_url, booking_link")
+          .eq("page_id", pageId)
+          .single();
+        if (bookingSettingsData) {
+          bookingUrl = bookingSettingsData.booking_url || bookingSettingsData.booking_link;
+        }
+      } catch (bsErr) {
+        console.log("[WEBHOOK] booking_settings lookup (non-fatal):", bsErr.message);
       }
-    } catch (aiErr) {
-      console.error("[WEBHOOK] Welcome AI Gen Failed:", aiErr.message);
     }
 
-    // 4. Construct Welcome Message with AI Text
+    // Fallback: use the app's own booking page
+    if (!bookingUrl) {
+      const appHost = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.APP_URL || "https://gaia-app.vercel.app";
+      bookingUrl = `${appHost}/booking?pageId=${pageId}`;
+      console.log("[WEBHOOK] Using fallback booking URL:", bookingUrl);
+    }
+
+    console.log("[WEBHOOK] Final booking URL:", bookingUrl);
+
+    // Read custom welcome settings
+    const customWelcomeText = settings?.value?.welcome_message_text || "";
+    const aiGenEnabled = settings?.value?.welcome_ai_generated !== false; // default: true
+    const customButtonLabel = settings?.value?.welcome_button_label || "📅 Book Now";
+    const customButtonUrl = settings?.value?.welcome_button_url || bookingUrl;
+    const button2Enabled = settings?.value?.welcome_button2_enabled === true;
+    const button2Label = settings?.value?.welcome_button2_label || "";
+    const button2Url = settings?.value?.welcome_button2_url || "";
+
+    // Determine welcome text
+    let welcomeText = "Hello! 👋 Welcome to Gaia. I'm your AI assistant. How can I help you today?";
+
+    if (customWelcomeText) {
+      // Use user's custom text (replace {{name}} placeholder)
+      welcomeText = customWelcomeText.replace(/\{\{name\}\}/gi, participantName);
+    } else if (aiGenEnabled) {
+      // Generate PERSONALIZED Welcome via AI
+      const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
+      const welcomePrompt = `
+        ${systemPrompt}
+        
+        TASK: Generate a SHORT, friendly, and personalized welcome message for a new user named "${participantName}".
+        GOAL: Encourage them to book a consultation.
+        TONE: Warm, professional, enthusiastic.
+        LANGUAGE: Taglish (Filipino/English mix).
+        limit: 1-2 sentences max. NO hashtags.
+      `;
+
+      try {
+        const completion = await fetch("https://api.nvidia.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "meta/llama-3.1-8b-instruct",
+            messages: [{ role: "user", content: welcomePrompt }],
+            temperature: 0.7,
+            max_tokens: 100,
+          }),
+        });
+        const data = await completion.json();
+        if (data.choices?.[0]?.message?.content) {
+          welcomeText = data.choices[0].message.content.replace(/[""]/g, "").trim();
+        }
+      } catch (aiErr) {
+        console.error("[WEBHOOK] Welcome AI Gen Failed:", aiErr.message);
+      }
+    }
+
+    // 4. Construct Welcome Message with configurable buttons
     const buttons = [];
-    if (bookingUrl) {
+    buttons.push({
+      type: "web_url",
+      url: customButtonUrl,
+      title: customButtonLabel,
+      webview_height_ratio: "full"
+    });
+
+    // Optional second button
+    if (button2Enabled && button2Label && button2Url) {
       buttons.push({
         type: "web_url",
-        url: bookingUrl,
-        title: "📅 Book Consultation",
+        url: button2Url,
+        title: button2Label,
         webview_height_ratio: "full"
       });
     }
-    buttons.push({
-      type: "postback",
-      title: "🏠 View Properties",
-      payload: "VIEW_PROPERTIES_START"
-    });
 
     const welcomeMessage = {
       recipient: { id: recipientId },
@@ -4642,7 +4688,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     );
 
     if (resp.ok) {
-      console.log(`[WEBHOOK] Welcome message sent to ${recipientId} (Has booking URL: ${!!bookingUrl})`);
+      console.log(`[WEBHOOK] Welcome message sent to ${recipientId} (Booking URL: ${bookingUrl})`);
       // Log to DB if we have conversationId
       if (conversationId) {
         try {
