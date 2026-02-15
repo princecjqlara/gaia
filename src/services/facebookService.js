@@ -189,13 +189,31 @@ class FacebookService {
      */
     async connectPage(pageData, userId) {
         try {
+            // Support both field name formats:
+            // App.jsx passes: { page_id, page_name, page_access_token, picture_url }
+            // Direct FB SDK: { id, name, access_token, picture }
+            const resolvedPageId = pageData.page_id || pageData.id;
+            const resolvedName = pageData.page_name || pageData.name;
+            const resolvedToken = pageData.page_access_token || pageData.access_token;
+            const resolvedPicture = pageData.picture_url || pageData.page_picture_url || pageData.picture?.data?.url || null;
+
+            if (!resolvedPageId || !resolvedToken) {
+                throw new Error(`Missing required fields: page_id=${!!resolvedPageId}, token=${!!resolvedToken}`);
+            }
+
+            // First, deactivate any other pages (only one active page at a time)
+            await getSupabase()
+                .from('facebook_pages')
+                .update({ is_active: false, updated_at: new Date().toISOString() })
+                .neq('page_id', resolvedPageId);
+
             const { data, error } = await getSupabase()
                 .from('facebook_pages')
                 .upsert({
-                    page_id: pageData.id,
-                    page_name: pageData.name,
-                    page_access_token: pageData.access_token,
-                    page_picture_url: pageData.picture?.data?.url,
+                    page_id: resolvedPageId,
+                    page_name: resolvedName,
+                    page_access_token: resolvedToken,
+                    page_picture_url: resolvedPicture,
                     connected_by: userId,
                     is_active: true,
                     updated_at: new Date().toISOString()
@@ -204,6 +222,31 @@ class FacebookService {
                 .single();
 
             if (error) throw error;
+
+            // Auto-subscribe page to webhooks so it receives message events
+            try {
+                console.log(`[FB] Auto-subscribing page ${resolvedPageId} to webhooks...`);
+                const subscribeResp = await fetch(
+                    `${GRAPH_API_BASE}/${resolvedPageId}/subscribed_apps`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,feed',
+                            access_token: resolvedToken
+                        })
+                    }
+                );
+                const subscribeData = await subscribeResp.json();
+                if (subscribeData.success) {
+                    console.log(`[FB] ✅ Page ${resolvedPageId} subscribed to webhooks!`);
+                } else {
+                    console.warn(`[FB] ⚠️ Webhook subscription response:`, subscribeData);
+                }
+            } catch (subErr) {
+                console.error('[FB] Webhook subscription failed (non-fatal):', subErr.message);
+            }
+
             return data;
         } catch (error) {
             console.error('Error connecting Facebook page:', error);
