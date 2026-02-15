@@ -2477,15 +2477,9 @@ ${faqContent}
     }
 
     if (config.booking_url) {
-      aiPrompt += `\n## 📅 BOOKING LINK (CRITICAL - ALWAYS SHARE THIS)
+      aiPrompt += `\n## 📅 BOOKING
 Booking link: ${config.booking_url}
-
-**MANDATORY RULES for booking link:**
-1. On your VERY FIRST reply to ANY new customer, ALWAYS include this booking link. Say something like: "You can also book a consultation here: ${config.booking_url}"
-2. Whenever the customer shows interest (asks about price, availability, features, wants to see a property), INCLUDE the booking link again.
-3. Whenever you recommend a property, ALSO share the booking link for a viewing.
-4. If a customer seems like a hot lead, interested buyer, or asks detailed questions, ALWAYS resurface this link.
-5. NEVER let a conversation go 3+ messages without mentioning the booking link if the customer hasn't booked yet.
+NOTE: The system automatically sends a booking button card to the customer. Do NOT include the booking link as raw text in your messages. Only mention booking verbally (e.g. "you can book a consultation using the button above") when relevant.
 `;
     }
 
@@ -2498,9 +2492,10 @@ Booking link: ${config.booking_url}
 - NEVER invent names. Use "po" for respect.
 - Split responses with ||| (1-2 sentences per part, like texting)
 - Example: "Hello po! ||| I'd be happy to help. ||| What are you looking for?"
+- NEVER include raw URLs or links in your messages. The system sends buttons automatically.
 - When booking confirmed, add at END: BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | Name | Phone
 - Use 24h format (18:00 not 6pm), PIPE | separator
-${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great first impression! Include the booking link.' : ''}
+${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great first impression!' : ''}
 `;
 
     // Build messages array, handling images for vision models
@@ -3315,11 +3310,14 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
       conversation?.participant_id || conversationId.replace("t_", "");
     const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
 
-    // 🔔 RECURRING NOTIFICATION OPT-IN — send BEFORE AI reply so it's the first thing contact sees
+    // 🔔 OPT-IN BUTTON — send BEFORE AI reply so it's the first thing contact sees
+    // Uses button template (notification_messages was deprecated Feb 10, 2026)
     try {
       const optinStatus = conversation?.recurring_optin_status;
       if (!optinStatus) {
-        console.log("[WEBHOOK] 🔔 Sending recurring notification opt-in request (before AI reply)...");
+        // Build opt-in URL — link to booking page or property showcase
+        const optinUrl = config.booking_url || `${process.env.APP_URL || 'https://gaia-tech.vercel.app'}/book/${pageId}`;
+        console.log(`[WEBHOOK] 🔔 Sending opt-in button (before AI reply)... URL: ${optinUrl}`);
 
         const optinBody = {
           recipient: { id: participantId },
@@ -3327,13 +3325,16 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
             attachment: {
               type: "template",
               payload: {
-                template_type: "notification_messages",
-                title: "I saved a spot for you 🏠",
-                image_url: "https://i.imgur.com/8BXYEJE.png",
-                payload: "RECURRING_OPTIN_PROPERTIES",
-                notification_messages_frequency: "DAILY",
-                notification_messages_reoptin: "ENABLED",
-                notification_messages_timezone: "Asia/Manila"
+                template_type: "button",
+                text: "🏠 I saved a spot for you — click below so I can reach out pag may perfect property na!",
+                buttons: [
+                  {
+                    type: "web_url",
+                    url: optinUrl,
+                    title: "🏠 View Properties",
+                    webview_height_ratio: "full"
+                  }
+                ]
               }
             }
           },
@@ -3350,7 +3351,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
         );
 
         if (optinResp.ok) {
-          console.log("[WEBHOOK] ✅ Recurring notification opt-in sent!");
+          console.log("[WEBHOOK] ✅ Opt-in button sent!");
           await db.from("facebook_conversations").update({
             recurring_optin_status: "sent",
             updated_at: new Date().toISOString(),
@@ -3359,7 +3360,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           await new Promise(resolve => setTimeout(resolve, 500));
         } else {
           const optinErr = await optinResp.text();
-          console.log("[WEBHOOK] Opt-in send failed (non-fatal):", optinErr.substring(0, 150));
+          console.log("[WEBHOOK] Opt-in button failed:", optinErr.substring(0, 200));
         }
       } else {
         console.log(`[WEBHOOK] Opt-in already handled (status: ${optinStatus}), skipping`);
