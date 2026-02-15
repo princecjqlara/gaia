@@ -32,6 +32,7 @@ const createMockChain = (tableName) => {
         update: createSpy(`${tableName}.update`),
         delete: createSpy(`${tableName}.delete`),
         eq: createSpy(`${tableName}.eq`),
+        in: createSpy(`${tableName}.in`),
         single: createSpy(`${tableName}.single`),
         then: (resolve) => resolve({ data: [], error: null, count: 5 })
     };
@@ -42,6 +43,7 @@ const createMockChain = (tableName) => {
     chain.update.mockReturnValue(chain);
     chain.delete.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
+    chain.in.mockReturnValue(chain);
     // single returns the result directly (promise-like)
     chain.single.mockReturnValue(Promise.resolve({
         data: {
@@ -53,7 +55,7 @@ const createMockChain = (tableName) => {
     }));
 
     // Mock delete return value for simple calls
-    chain.delete.result = { error: null, count: 5 };
+    // chain.delete.result = { error: null, count: 5 };
 
     return chain;
 };
@@ -107,44 +109,36 @@ async function deleteConversation(conversationId) {
         const participantId = convData?.participant_id;
         const pageId = convData?.page_id;
 
-        // 2. Delete Messages
-        const { error: msgError, count: msgCount } = await db
-            .from('facebook_messages')
-            .delete({ count: 'exact' })
-            .eq('conversation_id', conversationId);
+        // For this test, we'll assume multiple conversation IDs for the same participant
+        const allConvIds = [conversationId, 'test-conv-456', 'test-conv-789'];
 
-        if (msgError) console.error('[DELETE] Error deleting messages:', msgError.message);
-        console.log(`[DELETE] Deleted ${msgCount} messages`);
+        // 3. Perform deletions for ALL conversation IDs
+        if (allConvIds.length > 0) {
+            // Delete Messages
+            const { error: msgError, count: msgCount } = await db
+                .from('facebook_messages')
+                .delete({ count: 'exact' })
+                .in('conversation_id', allConvIds);
+            if (msgError) console.error('[DELETE] Error deleting messages:', msgError.message);
 
-        // 3. Delete Tag Assignments
-        const { error: tagError } = await db
-            .from('conversation_tag_assignments')
-            .delete()
-            .eq('conversation_id', conversationId);
+            // Delete Tag Assignments
+            await db.from('conversation_tag_assignments').delete().in('conversation_id', allConvIds);
 
-        if (tagError) console.error('[DELETE] Error deleting tags:', tagError.message);
-
-        // 4. Delete Follow-up Schedules & Tokens
-        await db.from('ai_followup_schedule').delete().eq('conversation_id', conversationId);
-        await db.from('recurring_notification_tokens').delete().eq('conversation_id', conversationId);
-        await db.from('contact_engagement').delete().eq('conversation_id', conversationId);
-
-        // 5. Delete Calendar Events (linked to this conversation)
-        if (conversationId) {
-            await db.from('calendar_events').delete().eq('conversation_id', conversationId);
+            // Delete Follow-up Schedules & Tokens
+            await db.from('ai_followup_schedule').delete().in('conversation_id', allConvIds);
+            await db.from('recurring_notification_tokens').delete().in('conversation_id', allConvIds);
+            await db.from('contact_engagement').delete().in('conversation_id', allConvIds);
+            await db.from('ai_action_log').delete().in('conversation_id', allConvIds);
+            await db.from('calendar_events').delete().in('conversation_id', allConvIds);
         }
-        if (participantId) {
-            // Also delete by participant ID to be thorough
-            await db.from('calendar_events').delete().eq('contact_psid', participantId);
 
-            // Delete property views (associated with participant)
+        // 4. Participant-level cleanups (independent of conversation ID)
+        if (participantId) {
+            await db.from('calendar_events').delete().eq('contact_psid', participantId);
             await db.from('property_views').delete().eq('participant_id', participantId);
         }
 
-        // 6. Delete AI Action Logs
-        await db.from('ai_action_log').delete().eq('conversation_id', conversationId);
-
-        // 7. Delete Linked Client (CRM)
+        // 5. Delete Linked Client (CRM)
         if (linkedClientId) {
             const { error: clientError } = await db
                 .from('clients')
@@ -152,18 +146,17 @@ async function deleteConversation(conversationId) {
                 .eq('id', linkedClientId);
 
             if (clientError) console.error('[DELETE] Error deleting client:', clientError.message);
-            else console.log(`[DELETE] Deleted linked client: ${linkedClientId}`);
         }
 
-        // 8. Finally, delete the conversation
+        // 6. Finally, delete ALL conversation rows
         const { error: convError } = await db
             .from('facebook_conversations')
             .delete()
-            .eq('conversation_id', conversationId);
+            .eq('participant_id', participantId); // Delete by participant_id to catch everything
 
         if (convError) throw convError;
 
-        console.log(`[DELETE] Successfully deleted conversation ${conversationId}`);
+        console.log(`[DELETE] Successfully deleted all data for participant ${participantId}`);
         return { success: true, deletedClientId: linkedClientId };
 
     } catch (error) {
