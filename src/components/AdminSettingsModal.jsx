@@ -1889,6 +1889,43 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                 Configure automated messaging, follow-ups, and AI behavior for your chatbot
               </p>
 
+              {/* AUTO-SAVE: Debounced save to database on any config change */}
+              {(() => {
+                // Set up auto-save on mount
+                if (!window._aiConfigAutoSaveSetup) {
+                  window._aiConfigAutoSaveSetup = true;
+                  window._aiConfigSaveTimer = null;
+                  window._aiConfigAutoSave = async () => {
+                    clearTimeout(window._aiConfigSaveTimer);
+                    window._aiConfigSaveTimer = setTimeout(async () => {
+                      try {
+                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                        const { getSupabaseClient } = await import('../services/supabase');
+                        const db = getSupabaseClient();
+                        await db.from('settings').upsert({
+                          key: 'ai_chatbot_config',
+                          value: config,
+                          updated_at: new Date().toISOString()
+                        }, { onConflict: 'key' });
+                        console.log('[AutoSave] AI chatbot config saved to DB');
+                      } catch (err) {
+                        console.error('[AutoSave] Failed:', err.message);
+                      }
+                    }, 1500);
+                  };
+
+                  // Intercept localStorage.setItem for ai_chatbot_config to trigger auto-save
+                  const origSetItem = localStorage.setItem.bind(localStorage);
+                  localStorage.setItem = function (key, value) {
+                    origSetItem(key, value);
+                    if (key === 'ai_chatbot_config' && window._aiConfigAutoSave) {
+                      window._aiConfigAutoSave();
+                    }
+                  };
+                }
+                return null;
+              })()}
+
               {/* IMPORTANT: Save to Database Button */}
               <div style={{
                 marginBottom: '1.5rem',
