@@ -1737,11 +1737,39 @@ async function handleIncomingMessage(pageId, event) {
         participantName = senderNameFromEvent;
       }
 
-      // FAST name lookup - only use event data, no slow API calls
+      // Source 2: Fetch from Facebook Graph API if still no name
+      if (!participantName && !isFromPage) {
+        try {
+          // Get page access token for the API call
+          const { data: pageData } = await db
+            .from("facebook_pages")
+            .select("page_access_token")
+            .eq("page_id", pageId)
+            .eq("is_active", true)
+            .single();
+
+          if (pageData?.page_access_token) {
+            const profileResp = await fetch(
+              `https://graph.facebook.com/v21.0/${participantId}?fields=name,first_name,last_name&access_token=${pageData.page_access_token}`
+            );
+            if (profileResp.ok) {
+              const profileData = await profileResp.json();
+              participantName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+              if (participantName) {
+                console.log(`[WEBHOOK] Got name from Graph API: ${participantName}`);
+              }
+            } else {
+              console.log(`[WEBHOOK] Graph API name lookup unavailable (privacy restriction)`);
+            }
+          }
+        } catch (nameErr) {
+          console.log(`[WEBHOOK] Name lookup failed (non-fatal): ${nameErr.message}`);
+        }
+      }
+
+      // Fallback
       if (!participantName) {
-        const senderNameFromEvent =
-          event.sender?.name || event.recipient?.name || message.sender_name;
-        participantName = senderNameFromEvent || "Customer";
+        participantName = "Customer";
       }
       console.log(`[WEBHOOK] Name: ${participantName}`);
     }

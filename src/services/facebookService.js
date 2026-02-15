@@ -207,6 +207,17 @@ class FacebookService {
                 .update({ is_active: false, updated_at: new Date().toISOString() })
                 .neq('page_id', resolvedPageId);
 
+            // Archive conversations from old pages so they don't show in messenger
+            try {
+                await getSupabase()
+                    .from('facebook_conversations')
+                    .update({ is_archived: true, updated_at: new Date().toISOString() })
+                    .neq('page_id', resolvedPageId);
+                console.log(`[FB] Archived conversations from previous pages`);
+            } catch (archiveErr) {
+                console.warn('[FB] Could not archive old conversations (non-fatal):', archiveErr.message);
+            }
+
             const { data, error } = await getSupabase()
                 .from('facebook_pages')
                 .upsert({
