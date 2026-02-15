@@ -4638,7 +4638,9 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       `;
 
       try {
-        const completion = await fetch("https://api.nvidia.com/v1/chat/completions", {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+        const completion = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY}`,
@@ -4650,13 +4652,17 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
             temperature: 0.7,
             max_tokens: 100,
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         const data = await completion.json();
         if (data.choices?.[0]?.message?.content) {
           welcomeText = data.choices[0].message.content.replace(/[""]/g, "").trim();
         }
       } catch (aiErr) {
         console.error("[WEBHOOK] Welcome AI Gen Failed:", aiErr.message);
+        // Personalized static fallback
+        welcomeText = `Hello ${participantName !== "Friend" ? participantName : ""} po! 👋 Welcome! I'm your AI assistant — ready to help you find what you need. Let's get started!`;
       }
     }
 

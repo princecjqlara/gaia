@@ -1889,29 +1889,33 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                 Configure automated messaging, follow-ups, and AI behavior for your chatbot
               </p>
 
-              {/* AUTO-SAVE: Debounced save to database on any config change */}
+              {/* AUTO-SAVE: Save to database on tab load AND on any config change */}
               {(() => {
                 // Set up auto-save on mount
                 if (!window._aiConfigAutoSaveSetup) {
                   window._aiConfigAutoSaveSetup = true;
                   window._aiConfigSaveTimer = null;
-                  window._aiConfigAutoSave = async () => {
+
+                  // Save function (reusable)
+                  const saveConfigToDb = async () => {
+                    try {
+                      const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                      const { getSupabaseClient } = await import('../services/supabase');
+                      const db = getSupabaseClient();
+                      await db.from('settings').upsert({
+                        key: 'ai_chatbot_config',
+                        value: config,
+                        updated_at: new Date().toISOString()
+                      }, { onConflict: 'key' });
+                      console.log('[AutoSave] AI chatbot config saved to DB', Object.keys(config));
+                    } catch (err) {
+                      console.error('[AutoSave] Failed:', err.message);
+                    }
+                  };
+
+                  window._aiConfigAutoSave = () => {
                     clearTimeout(window._aiConfigSaveTimer);
-                    window._aiConfigSaveTimer = setTimeout(async () => {
-                      try {
-                        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                        const { getSupabaseClient } = await import('../services/supabase');
-                        const db = getSupabaseClient();
-                        await db.from('settings').upsert({
-                          key: 'ai_chatbot_config',
-                          value: config,
-                          updated_at: new Date().toISOString()
-                        }, { onConflict: 'key' });
-                        console.log('[AutoSave] AI chatbot config saved to DB');
-                      } catch (err) {
-                        console.error('[AutoSave] Failed:', err.message);
-                      }
-                    }, 1500);
+                    window._aiConfigSaveTimer = setTimeout(saveConfigToDb, 1500);
                   };
 
                   // Intercept localStorage.setItem for ai_chatbot_config to trigger auto-save
@@ -1922,6 +1926,9 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                       window._aiConfigAutoSave();
                     }
                   };
+
+                  // IMMEDIATE SAVE: sync current localStorage config to DB right now
+                  saveConfigToDb();
                 }
                 return null;
               })()}
