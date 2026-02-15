@@ -1076,6 +1076,8 @@ export default async function handler(req, res) {
                   await handleReadReceipt(pageId, event);
                 } else if (event.postback) {
                   await handlePostbackEvent(pageId, event);
+                } else if (event.optin) {
+                  await handleOptinEvent(pageId, event);
                 } else if (event.referral) {
                   await handleReferralEvent(pageId, event);
                 }
@@ -2367,8 +2369,29 @@ The above context was provided by a team member. Use this information to persona
       closing: "Close the deal - confirm property selection and arrange viewing.",
     };
 
+    // Check if contact has opted in to recurring notifications
+    const hasOptedIn = conversation?.recurring_optin_status === 'opted_in';
+
     aiPrompt += `
-## 🎯 YOUR CURRENT GOAL (CRITICAL - This is your PRIMARY objective)
+## 🎯 YOUR PRIORITIES (Follow this order)
+
+### Priority 1: ${hasOptedIn ? '✅ Opt-in secured!' : '🔔 Get Notification Opt-in (HIGHEST PRIORITY)'}
+${hasOptedIn
+        ? 'The customer has already opted in. Great! Focus on next priorities.'
+        : `The customer has NOT yet clicked the notification opt-in button below. Your TOP TASK is to naturally encourage them to click it.
+- NEVER say "updates", "notifications", or "subscribe". Make it feel personal and exclusive.
+- Say things like: "I saved a spot for you — click below so I can reach out pag may perfect property na!"
+- Or: "Click below po para ma-message kita pag may perfect match na!"
+- Or: "Quick question — are you still looking? Tap below so I can help you find it!"
+- Weave it naturally, don\'t be pushy but mention it in your first few messages until they opt in.`
+      }
+
+### Priority 2: 📞 Hop on a Call + Evaluation
+Encourage the customer to schedule a quick call for a personalized property evaluation.
+- Say: "Want me to do a quick evaluation para sa perfect property mo? We can hop on a call!"
+- Make it feel low-pressure and helpful.
+
+### Priority 3: 📅 Booking
 Goal: ${activeGoal.toUpperCase()}
 Instructions: ${goalDescriptions[activeGoal] || "Help the customer and guide them towards taking action."}
 Every response should move the conversation closer to achieving this goal.
@@ -3367,23 +3390,73 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
 
     console.log(`[WEBHOOK] AI reply sent! Total time: ${Date.now() - startTime}ms`);
 
-    // AUTO-SEND BOOKING BUTTON after first AI reply (or when customer is interested)
+    // AUTO-SEND RECURRING NOTIFICATION OPT-IN (Priority 1) then BOOKING BUTTON (Priority 3)
+    const participantId = conversation?.participant_id || conversationId.replace("t_", "");
+    const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
+
+    // 🔔 RECURRING NOTIFICATION OPT-IN — send on first reply if not yet opted in
+    try {
+      const optinStatus = conversation?.recurring_optin_status;
+      if (!optinStatus && pageReplies.length <= 1) {
+        console.log("[WEBHOOK] 🔔 Sending recurring notification opt-in request...");
+
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        const optinBody = {
+          recipient: { id: participantId },
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "notification_messages",
+                title: "I saved a spot for you 🏠",
+                image_url: "https://i.imgur.com/8BXYEJE.png",
+                payload: "RECURRING_OPTIN_PROPERTIES",
+                notification_messages_frequency: "DAILY",
+                notification_messages_reoptin: "ENABLED",
+                notification_messages_timezone: "Asia/Manila"
+              }
+            }
+          },
+          messaging_type: "RESPONSE"
+        };
+
+        const optinResp = await fetch(
+          `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(optinBody),
+          }
+        );
+
+        if (optinResp.ok) {
+          console.log("[WEBHOOK] ✅ Recurring notification opt-in sent!");
+          // Mark as sent so we don't spam it
+          await db.from("facebook_conversations").update({
+            recurring_optin_status: "sent",
+            updated_at: new Date().toISOString(),
+          }).eq("conversation_id", conversationId);
+        } else {
+          const optinErr = await optinResp.text();
+          console.log("[WEBHOOK] Opt-in send failed (non-fatal):", optinErr.substring(0, 150));
+        }
+      }
+    } catch (optinErr) {
+      console.log("[WEBHOOK] Opt-in error (non-fatal):", optinErr.message);
+    }
+
+    // 📅 BOOKING BUTTON — send after opt-in, on first reply or when interested
     try {
       const bookingUrl = config.booking_url;
       if (bookingUrl) {
-        // Check if this is the first page reply OR if AI label indicates interest
-        const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
         const aiLabel = conversation?.ai_label || '';
         const interestLabels = ['hot_lead', 'warm_lead', 'interested', 'needs_info', 'price_sensitive'];
         const isInterested = interestLabels.some(l => aiLabel.toLowerCase().includes(l));
 
-        // Send booking button on first reply OR when customer shows interest
         if (pageReplies.length <= 1 || isInterested) {
           console.log(`[WEBHOOK] 📅 Auto-sending booking button (firstReply: ${pageReplies.length <= 1}, interested: ${isInterested})`);
 
-          const participantId = conversation?.participant_id || conversationId.replace("t_", "");
-
-          // Small delay so it appears after the AI text messages
           await new Promise(resolve => setTimeout(resolve, 1000));
 
           const bookingBtnBody = {
@@ -3823,6 +3896,86 @@ async function handleBookingQuickReply(pageId, senderId, timestamp) {
     console.log(`[WEBHOOK] ✅ Updated conversation ${conversationId} to 'booked' stage`);
   } catch (error) {
     console.error("[WEBHOOK] handleBookingQuickReply error:", error.message);
+  }
+}
+
+/**
+ * Handle Facebook Optin events (Recurring Notification opt-ins)
+ * Triggered when a user clicks "Get Updates" on a recurring notification template
+ */
+async function handleOptinEvent(pageId, event) {
+  const senderId = event.sender?.id;
+  const optin = event.optin;
+
+  if (!senderId || !optin) {
+    console.log("[WEBHOOK] Invalid optin event - missing sender or optin data");
+    return;
+  }
+
+  try {
+    const db = getSupabase();
+    if (!db) return;
+
+    const token = optin.notification_messages_token;
+    const frequency = optin.notification_messages_frequency || "DAILY";
+    const payload = optin.payload || "";
+    const tokenExpiresAt = optin.token_expiry_timestamp
+      ? new Date(optin.token_expiry_timestamp * 1000).toISOString()
+      : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(); // 6 months default
+
+    console.log(`[WEBHOOK] 🔔 Optin received from ${senderId}: frequency=${frequency}, payload=${payload}, hasToken=${!!token}`);
+
+    if (!token) {
+      console.log("[WEBHOOK] No notification token in optin - user may have declined");
+      // User declined or notification_messages_status is "STOP_NOTIFICATIONS"
+      if (optin.notification_messages_status === "STOP_NOTIFICATIONS") {
+        await db.from("facebook_conversations").update({
+          recurring_optin_status: "declined",
+          updated_at: new Date().toISOString(),
+        }).eq("participant_id", senderId).eq("page_id", pageId);
+
+        // Mark any existing tokens as revoked
+        await db.from("recurring_notification_tokens").update({
+          token_status: "revoked",
+        }).eq("participant_id", senderId).eq("page_id", pageId).eq("token_status", "active");
+      }
+      return;
+    }
+
+    // Find the conversation for this sender
+    const { data: conv } = await db
+      .from("facebook_conversations")
+      .select("conversation_id")
+      .eq("participant_id", senderId)
+      .eq("page_id", pageId)
+      .single();
+
+    const conversationId = conv?.conversation_id || `t_${senderId}`;
+
+    // Store the notification token
+    await db.from("recurring_notification_tokens").upsert({
+      conversation_id: conversationId,
+      participant_id: senderId,
+      page_id: pageId,
+      token: token,
+      token_status: "active",
+      frequency: frequency,
+      opted_in_at: new Date().toISOString(),
+      expires_at: tokenExpiresAt,
+      followup_sent: false,
+    }, {
+      onConflict: "conversation_id",
+    });
+
+    // Update conversation status
+    await db.from("facebook_conversations").update({
+      recurring_optin_status: "opted_in",
+      updated_at: new Date().toISOString(),
+    }).eq("conversation_id", conversationId);
+
+    console.log(`[WEBHOOK] ✅ Recurring notification token stored for ${senderId} (${frequency})`);
+  } catch (error) {
+    console.error("[WEBHOOK] handleOptinEvent error:", error.message);
   }
 }
 
