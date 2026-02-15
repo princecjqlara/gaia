@@ -415,10 +415,11 @@ export default async function handler(req, res) {
                 .slice(0, 3);
         }
 
-        // 5. Get all other conversations for similarity matching
+        // 5. Get other conversations FROM THE SAME PAGE for similarity matching
         const { data: allConversations } = await db
             .from("facebook_conversations")
             .select("conversation_id, participant_name, participant_id, page_id, ai_label, pipeline_stage, lead_status, extracted_details, ai_analysis, ai_summary, last_message_time")
+            .eq("page_id", conversation.page_id)
             .neq("conversation_id", conversationId)
             .order("last_message_time", { ascending: false })
             .limit(200);
