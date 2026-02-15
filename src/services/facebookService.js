@@ -3413,6 +3413,91 @@ class FacebookService {
             return null;
         }
     }
+
+    /**
+     * Delete a conversation and all associated data (Cascade Delete)
+     * - Messages
+     * - Tag Assignments
+     * - Follow-ups
+     * - Calendar Events
+     * - Linked Clients (CRM)
+     * - The Conversation itself
+     */
+    async deleteConversation(conversationId) {
+        try {
+            console.log(`[DELETE] Starting cascade delete for conversation: ${conversationId}`);
+            const db = getSupabase();
+
+            // 1. Get stats before delete (for logging)
+            // Also get linked client ID to delete it later
+            const { data: convData } = await db
+                .from('facebook_conversations')
+                .select('linked_client_id, participant_id, page_id')
+                .eq('conversation_id', conversationId)
+                .single();
+
+            const linkedClientId = convData?.linked_client_id;
+            const participantId = convData?.participant_id;
+            const pageId = convData?.page_id;
+
+            // 2. Delete Messages
+            const { error: msgError, count: msgCount } = await db
+                .from('facebook_messages')
+                .delete({ count: 'exact' })
+                .eq('conversation_id', conversationId);
+
+            if (msgError) console.error('[DELETE] Error deleting messages:', msgError.message);
+            console.log(`[DELETE] Deleted ${msgCount} messages`);
+
+            // 3. Delete Tag Assignments
+            const { error: tagError } = await db
+                .from('conversation_tag_assignments')
+                .delete()
+                .eq('conversation_id', conversationId);
+
+            if (tagError) console.error('[DELETE] Error deleting tags:', tagError.message);
+
+            // 4. Delete Follow-up Schedules & Tokens
+            await db.from('ai_followup_schedule').delete().eq('conversation_id', conversationId);
+            await db.from('recurring_notification_tokens').delete().eq('conversation_id', conversationId);
+            await db.from('contact_engagement').delete().eq('conversation_id', conversationId);
+
+            // 5. Delete Calendar Events (linked to this conversation)
+            if (conversationId) {
+                await db.from('calendar_events').delete().eq('conversation_id', conversationId);
+            }
+            if (participantId) {
+                // Also delete by participant ID to be thorough
+                await db.from('calendar_events').delete().eq('contact_psid', participantId);
+            }
+
+            // 6. Delete Linked Client (CRM)
+            if (linkedClientId) {
+                const { error: clientError } = await db
+                    .from('clients')
+                    .delete()
+                    .eq('id', linkedClientId);
+
+                if (clientError) console.error('[DELETE] Error deleting client:', clientError.message);
+                else console.log(`[DELETE] Deleted linked client: ${linkedClientId}`);
+            }
+
+            // 7. Finally, delete the conversation
+            const { error: convError } = await db
+                .from('facebook_conversations')
+                .delete()
+                .eq('conversation_id', conversationId);
+
+            if (convError) throw convError;
+
+            console.log(`[DELETE] Successfully deleted conversation ${conversationId}`);
+            return { success: true, deletedClientId: linkedClientId };
+
+        } catch (error) {
+            console.error('Error deleting conversation:', error);
+            throw error;
+        }
+    }
 }
 
 export const facebookService = new FacebookService();

@@ -2415,11 +2415,12 @@ The above context was provided by a team member. Use this information to persona
 ${hasOptedIn
         ? 'The customer has already opted in. Great! Focus on next priorities.'
         : `The customer has NOT yet clicked the notification opt-in button below. Your TOP TASK is to naturally encourage them to click it.
-- NEVER say "updates", "notifications", or "subscribe". Make it feel personal and exclusive.
-- Say things like: "I saved a spot for you — click below so I can reach out pag may perfect property na!"
-- Or: "Click below po para ma-message kita pag may perfect match na!"
-- Or: "Quick question — are you still looking? Tap below so I can help you find it!"
-- Weave it naturally, don\'t be pushy but mention it in your first few messages until they opt in.`
+- START your response with this EXACT marker: OPTIN_HOOK: [Your short, catchy text here]
+- The system will use your text to create a button for them to click.
+- Create a catchy hook (max 20 words). Examples:
+  - "I saved a spot for you — click below so I can reach out pag may perfect property na!"
+  - "Click below po para ma-message kita pag may perfect match na!"
+  - "Quick question — are you still looking? Tap below so I can help you find it!"`
       }
 
 ### Priority 2: 📞 Hop on a Call + Evaluation
@@ -3270,6 +3271,25 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
     // Process SEND_PROPERTY_CARD markers - convert to property card attachments
     const processedMessages = [];
     for (const part of messageParts) {
+      // Check for OPTIN_HOOK marker (AI generated opt-in button)
+      const optinMatch = part.match(/^OPTIN_HOOK:\s*(.+)/i);
+
+      if (optinMatch) {
+        const hookText = optinMatch[1].trim();
+        console.log(`[WEBHOOK] 🔔 AI generated opt-in hook: "${hookText}"`);
+
+        // Create the opt-in button message
+        const optinUrl = config.booking_url || `${process.env.APP_URL || 'https://gaia-tech.vercel.app'}/book/${pageId}`;
+
+        // Add as a special message type
+        processedMessages.push({
+          type: "optin_button",
+          content: hookText,
+          url: optinUrl
+        });
+        continue; // Done with this part
+      }
+
       // Check for SEND_PROPERTY_CARD marker
       const propertyCardMatch = part.match(/^SEND_PROPERTY_CARD:\s*([a-zA-Z0-9\-]+)/i);
 
@@ -3292,8 +3312,12 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           // Skip or could send error message
         }
       } else {
-        // Regular text message, remove the marker if AI included it
-        const cleanedText = part.replace(/^SEND_PROPERTY_CARD:\s*[a-zA-Z0-9\-]+\s*/i, "").trim();
+        // Regular text message, remove the markers if AI included them inline
+        let cleanedText = part
+          .replace(/^SEND_PROPERTY_CARD:\s*[a-zA-Z0-9\-]+\s*/i, "")
+          .replace(/^OPTIN_HOOK:\s*.+/i, "") // Should have been caught above, but just in case
+          .trim();
+
         if (cleanedText.length > 0) {
           processedMessages.push({
             type: "text",
@@ -3310,64 +3334,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
       conversation?.participant_id || conversationId.replace("t_", "");
     const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
 
-    // 🔔 OPT-IN BUTTON — send BEFORE AI reply so it's the first thing contact sees
-    // Uses button template (notification_messages was deprecated Feb 10, 2026)
-    try {
-      const optinStatus = conversation?.recurring_optin_status;
-      if (!optinStatus) {
-        // Build opt-in URL — link to booking page or property showcase
-        const optinUrl = config.booking_url || `${process.env.APP_URL || 'https://gaia-tech.vercel.app'}/book/${pageId}`;
-        console.log(`[WEBHOOK] 🔔 Sending opt-in button (before AI reply)... URL: ${optinUrl}`);
-
-        const optinBody = {
-          recipient: { id: participantId },
-          message: {
-            attachment: {
-              type: "template",
-              payload: {
-                template_type: "button",
-                text: "🏠 I saved a spot for you — click below so I can reach out pag may perfect property na!",
-                buttons: [
-                  {
-                    type: "web_url",
-                    url: optinUrl,
-                    title: "🏠 View Properties",
-                    webview_height_ratio: "full"
-                  }
-                ]
-              }
-            }
-          },
-          messaging_type: "RESPONSE"
-        };
-
-        const optinResp = await fetch(
-          `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(optinBody),
-          }
-        );
-
-        if (optinResp.ok) {
-          console.log("[WEBHOOK] ✅ Opt-in button sent!");
-          await db.from("facebook_conversations").update({
-            recurring_optin_status: "sent",
-            updated_at: new Date().toISOString(),
-          }).eq("conversation_id", conversationId);
-          // Small delay before AI reply to maintain message order
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } else {
-          const optinErr = await optinResp.text();
-          console.log("[WEBHOOK] Opt-in button failed:", optinErr.substring(0, 200));
-        }
-      } else {
-        console.log(`[WEBHOOK] Opt-in already handled (status: ${optinStatus}), skipping`);
-      }
-    } catch (optinErr) {
-      console.log("[WEBHOOK] Opt-in error (non-fatal):", optinErr.message);
-    }
+    // 🔔 OPT-IN BUTTON (Removed pre-send, now handled via OPTIN_HOOK in loop below)
 
     for (let i = 0; i < processedMessages.length; i++) {
       const part = processedMessages[i];
@@ -3424,6 +3391,36 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           },
           messaging_type: "RESPONSE"
         };
+      } else if (part.type === "optin_button") {
+        // Send opt-in button with custom text
+        messageBody = {
+          recipient: { id: participantId },
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "button",
+                text: part.content || "Click below to view properties",
+                buttons: [
+                  {
+                    type: "web_url",
+                    url: part.url,
+                    title: "🏠 View Properties",
+                    webview_height_ratio: "full"
+                  }
+                ]
+              }
+            }
+          },
+          messaging_type: "RESPONSE"
+        };
+
+        // Mark as sent in DB
+        db.from("facebook_conversations").update({
+          recurring_optin_status: "sent",
+          updated_at: new Date().toISOString(),
+        }).eq("conversation_id", conversationId).then(() => { });
+
       } else {
         // Regular text message
         messageBody = {
