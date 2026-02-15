@@ -15,6 +15,7 @@ export function OrganizationProvider({ children }) {
     const [error, setError] = useState(null);
     const [isOrganizer, setIsOrganizer] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [teamId, setTeamId] = useState(null);
 
     // Load organization data on mount
     useEffect(() => {
@@ -48,19 +49,21 @@ export function OrganizationProvider({ children }) {
                 setMembers([]);
                 setIsOrganizer(false);
                 setIsAdmin(false);
+                setTeamId(null);
                 return;
             }
 
             // Get user's role and organization
             const { data: userData } = await supabase
                 .from('users')
-                .select('role, organization_id')
+                .select('role, organization_id, team_id')
                 .eq('id', user.id)
                 .single();
 
             if (userData) {
                 setIsOrganizer(userData.role === 'organizer');
                 setIsAdmin(userData.role === 'admin' || userData.role === 'organizer');
+                setTeamId(userData.team_id || null);
             }
 
             // Get organization details
@@ -100,6 +103,7 @@ export function OrganizationProvider({ children }) {
         error,
         isOrganizer,
         isAdmin,
+        teamId,
         refreshOrganization,
         refreshMembers,
         // Helper to check if user has organization

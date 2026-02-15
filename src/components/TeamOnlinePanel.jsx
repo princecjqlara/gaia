@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '../services/supabase';
 import AttendanceDashboard from './AttendanceDashboard';
+import { useOrganization } from '../hooks/useOrganization';
+import { addTeamMember } from '../services/teamService';
 
 /**
  * TeamOnlinePanel
@@ -13,6 +15,10 @@ const TeamOnlinePanel = ({ onClose }) => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('team'); // 'team' or 'attendance'
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [creatingMember, setCreatingMember] = useState(false);
+    const [newMember, setNewMember] = useState({ name: '', email: '', password: '', role: 'user' });
+    const { organizationId, teamId, loading: organizationLoading } = useOrganization();
 
     // Calculate duration from clock in time
     const calculateDuration = (clockInTime) => {
@@ -36,15 +42,31 @@ const TeamOnlinePanel = ({ onClose }) => {
     const loadData = useCallback(async () => {
         const supabase = getSupabaseClient();
         if (!supabase) return;
+        const scopeTeamId = teamId || null;
+        const scopeOrganizationId = organizationId || null;
+        if (!scopeTeamId && !scopeOrganizationId) {
+            setAllUsers([]);
+            setOnlineUsers([]);
+            setLoading(false);
+            return;
+        }
 
         try {
             setLoading(true);
 
             // Get all users
-            const { data: users, error: usersError } = await supabase
+            let query = supabase
                 .from('users')
                 .select('id, name, email, role, is_clocked_in, last_clock_in')
                 .order('name');
+
+            if (scopeTeamId) {
+                query = query.eq('team_id', scopeTeamId);
+            } else {
+                query = query.eq('organization_id', scopeOrganizationId);
+            }
+
+            const { data: users, error: usersError } = await query;
 
             if (usersError) throw usersError;
 
@@ -74,7 +96,7 @@ const TeamOnlinePanel = ({ onClose }) => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [organizationId, teamId]);
 
     // Toggle auto-assign
     const toggleAutoAssign = async () => {
@@ -109,12 +131,26 @@ const TeamOnlinePanel = ({ onClose }) => {
             alert('Database connection not available');
             return;
         }
+        const scopeTeamId = teamId || null;
+        const scopeOrganizationId = organizationId || null;
+        if (!scopeTeamId && !scopeOrganizationId) {
+            alert('No organization or team found for this account');
+            return;
+        }
 
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('users')
                 .update({ role: newRole })
                 .eq('id', userId);
+
+            if (scopeTeamId) {
+                query = query.eq('team_id', scopeTeamId);
+            } else {
+                query = query.eq('organization_id', scopeOrganizationId);
+            }
+
+            const { error } = await query;
 
             if (error) {
                 console.error('Supabase error:', error);
@@ -144,6 +180,12 @@ const TeamOnlinePanel = ({ onClose }) => {
             alert('Database connection not available');
             return;
         }
+        const scopeTeamId = teamId || null;
+        const scopeOrganizationId = organizationId || null;
+        if (!scopeTeamId && !scopeOrganizationId) {
+            alert('No organization or team found for this account');
+            return;
+        }
 
         // Confirmation dialog
         const confirmed = window.confirm(
@@ -153,10 +195,18 @@ const TeamOnlinePanel = ({ onClose }) => {
         if (!confirmed) return;
 
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('users')
                 .delete()
                 .eq('id', userId);
+
+            if (scopeTeamId) {
+                query = query.eq('team_id', scopeTeamId);
+            } else {
+                query = query.eq('organization_id', scopeOrganizationId);
+            }
+
+            const { error } = await query;
 
             if (error) {
                 console.error('Supabase error:', error);
@@ -176,12 +226,62 @@ const TeamOnlinePanel = ({ onClose }) => {
         }
     };
 
+    const handleAddMember = async (event) => {
+        event.preventDefault();
+        const scopeTeamId = teamId || null;
+
+        if (!scopeTeamId) {
+            alert('No team assigned to this account');
+            return;
+        }
+
+        if (!newMember.name || !newMember.email || !newMember.password) {
+            alert('Please fill in all fields');
+            return;
+        }
+
+        if (newMember.password.length < 6) {
+            alert('Password must be at least 6 characters');
+            return;
+        }
+
+        setCreatingMember(true);
+        try {
+            const { error } = await addTeamMember(
+                newMember.email,
+                newMember.name,
+                newMember.password,
+                newMember.role,
+                scopeTeamId
+            );
+
+            if (error) {
+                alert(`Failed to add member: ${error.message}`);
+                return;
+            }
+
+            setNewMember({ name: '', email: '', password: '', role: 'user' });
+            setShowAddForm(false);
+            await loadData();
+            alert('Team member added successfully');
+        } catch (err) {
+            alert(`Error: ${err.message}`);
+        } finally {
+            setCreatingMember(false);
+        }
+    };
+
     useEffect(() => {
+        if (organizationLoading) return;
         loadData();
         // Refresh every 30 seconds
-        const interval = setInterval(loadData, 30000);
+        const interval = setInterval(() => {
+            if (teamId || organizationId) {
+                loadData();
+            }
+        }, 30000);
         return () => clearInterval(interval);
-    }, [loadData]);
+    }, [loadData, teamId, organizationId, organizationLoading]);
 
     return (
         <div className="modal-overlay active" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
@@ -231,10 +331,14 @@ const TeamOnlinePanel = ({ onClose }) => {
 
                 <div className="modal-body" style={{ padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
                     {activeTab === 'attendance' ? (
-                        <AttendanceDashboard users={allUsers} />
+                        <AttendanceDashboard users={allUsers} organizationId={organizationId} teamId={teamId} />
                     ) : loading ? (
                         <div style={{ textAlign: 'center', padding: '2rem' }}>
                             Loading...
+                        </div>
+                    ) : !(teamId || organizationId) ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                            No team or organization found for this account
                         </div>
                     ) : (
                         <>
@@ -333,15 +437,149 @@ const TeamOnlinePanel = ({ onClose }) => {
 
                             {/* All Team Members */}
                             <div>
-                                <h3 style={{
-                                    margin: '0 0 1rem 0',
-                                    fontSize: '1rem',
+                                <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '0.5rem'
+                                    justifyContent: 'space-between',
+                                    margin: '0 0 1rem 0',
+                                    gap: '0.75rem'
                                 }}>
-                                    👤 All Team Members ({allUsers.length})
-                                </h3>
+                                    <h3 style={{
+                                        margin: 0,
+                                        fontSize: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        👤 All Team Members ({allUsers.length})
+                                    </h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAddForm((prev) => !prev)}
+                                        disabled={!teamId}
+                                        style={{
+                                            padding: '0.4rem 0.75rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-primary)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.8rem',
+                                            cursor: teamId ? 'pointer' : 'not-allowed',
+                                            opacity: teamId ? 1 : 0.6
+                                        }}
+                                    >
+                                        {showAddForm ? 'Cancel' : '+ Add Member'}
+                                    </button>
+                                </div>
+
+                                {showAddForm && (
+                                    <form
+                                        onSubmit={handleAddMember}
+                                        style={{
+                                            background: 'var(--bg-secondary)',
+                                            borderRadius: 'var(--radius-md)',
+                                            padding: '1rem',
+                                            marginBottom: '1rem',
+                                            border: '1px solid var(--border-color)'
+                                        }}
+                                    >
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                            gap: '0.75rem',
+                                            marginBottom: '0.75rem'
+                                        }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Full name"
+                                                value={newMember.name}
+                                                onChange={(e) => setNewMember(prev => ({ ...prev, name: e.target.value }))}
+                                                style={{
+                                                    padding: '0.5rem 0.75rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            />
+                                            <input
+                                                type="email"
+                                                placeholder="Email"
+                                                value={newMember.email}
+                                                onChange={(e) => setNewMember(prev => ({ ...prev, email: e.target.value }))}
+                                                style={{
+                                                    padding: '0.5rem 0.75rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            />
+                                            <input
+                                                type="password"
+                                                placeholder="Temporary password"
+                                                value={newMember.password}
+                                                onChange={(e) => setNewMember(prev => ({ ...prev, password: e.target.value }))}
+                                                style={{
+                                                    padding: '0.5rem 0.75rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            />
+                                            <select
+                                                value={newMember.role}
+                                                onChange={(e) => setNewMember(prev => ({ ...prev, role: e.target.value }))}
+                                                style={{
+                                                    padding: '0.5rem 0.75rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                <option value="user">User</option>
+                                                <option value="chat_support">Chat Support</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAddForm(false)}
+                                                style={{
+                                                    padding: '0.45rem 0.8rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'transparent',
+                                                    color: 'var(--text-secondary)',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={creatingMember}
+                                                style={{
+                                                    padding: '0.45rem 0.8rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: 'none',
+                                                    background: 'var(--primary)',
+                                                    color: 'white',
+                                                    cursor: creatingMember ? 'wait' : 'pointer'
+                                                }}
+                                            >
+                                                {creatingMember ? 'Adding...' : 'Add Member'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {allUsers.map(user => (

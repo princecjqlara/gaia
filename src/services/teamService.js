@@ -87,7 +87,7 @@ export async function getCurrentTeam() {
  */
 export async function createTeamWithAdmin(teamName, adminEmail, adminName, adminPassword) {
     // This should be done via API endpoint for proper auth user creation
-    const response = await fetch('/api/create-team-with-admin', {
+    const response = await fetch('/api/team?action=create-team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -170,17 +170,33 @@ export async function getTeamMembers(teamId) {
  * @param {string} email - User email
  * @param {string} name - User name
  * @param {string} password - User password
+ * @param {string} role - Role (user, admin, chat_support)
  * @param {string} teamId - Team ID
  * @returns {Promise<{data: object, error: object}>}
  */
-export async function addTeamMember(email, name, password, teamId) {
-    const response = await fetch('/api/create-team-member', {
+export async function addTeamMember(email, name, password, role = 'user', teamId = null) {
+    const supabase = getSupabase();
+    if (!supabase) {
+        return { data: null, error: { message: 'Supabase not initialized' } };
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+        return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const response = await fetch('/api/team?action=create-member', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+        },
         body: JSON.stringify({
             email,
             name,
             password,
+            role,
             team_id: teamId
         })
     });

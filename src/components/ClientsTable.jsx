@@ -178,6 +178,7 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
   // Modal states
   const [showCustomColumnModal, setShowCustomColumnModal] = useState(false);
   const [editingColumn, setEditingColumn] = useState(null);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   // Save column preferences to localStorage
   useEffect(() => {
@@ -492,21 +493,46 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
     <div className="clients-table-container">
       {/* Column Management Toolbar */}
       <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         marginBottom: '1rem',
         padding: '0.75rem',
         background: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border-color)'
       }}>
-        <div style={{ fontWeight: '500', fontSize: '0.875rem' }}>
-          Columns: {filteredColumns.length} visible
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '0.75rem',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ fontWeight: '500', fontSize: '0.875rem' }}>
+            Columns: {filteredColumns.length} visible
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setColumnsOpen(prev => !prev)}
+              aria-expanded={columnsOpen}
+              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+            >
+              {columnsOpen ? 'Hide columns' : 'Show columns'}
+            </button>
+            <button
+              className="btn btn-sm btn-success"
+              onClick={() => {
+                setEditingColumn(null);
+                setShowCustomColumnModal(true);
+              }}
+              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+            >
+              ➕ Add Custom
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {/* Column Toggles */}
-          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+
+        {columnsOpen && (
+          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
             {allColumns.map(col => (
               <button
                 key={col.id}
@@ -526,21 +552,7 @@ const ClientsTable = ({ clients, filters, onViewClient, onEditClient, onMoveClie
               </button>
             ))}
           </div>
-
-          {/* Custom Column Actions */}
-          <div style={{ display: 'flex', gap: '0.25rem', marginLeft: '0.5rem' }}>
-            <button
-              className="btn btn-sm btn-success"
-              onClick={() => {
-                setEditingColumn(null);
-                setShowCustomColumnModal(true);
-              }}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-            >
-              ➕ Add Custom
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Custom Columns List */}

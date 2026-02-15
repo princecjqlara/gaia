@@ -3,6 +3,7 @@ import TagSelector from './TagSelector';
 import { getSupabaseClient } from '../services/supabase';
 import { getPackages, formatPrice } from '../utils/clients';
 import { showToast } from '../utils/toast';
+import { useOrganization } from '../hooks/useOrganization';
 
 const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   const [activeTab, setActiveTab] = useState('basic');
@@ -10,6 +11,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   const [notesMedia, setNotesMedia] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
+  const { organizationId, teamId, loading: organizationLoading } = useOrganization();
   const [formData, setFormData] = useState({
     clientName: '',
     businessName: '',
@@ -34,10 +36,25 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
   // Load available users
   useEffect(() => {
     const loadUsers = async () => {
+      if (organizationLoading) {
+        return;
+      }
+
+      const scopeTeamId = teamId || null;
+      const scopeOrganizationId = organizationId || null;
+
+      if (!scopeTeamId && !scopeOrganizationId) {
+        setAvailableUsers([]);
+        return;
+      }
+
       const client = getSupabaseClient();
+      const cacheKey = scopeTeamId
+        ? `gaia_users_cache_team_${scopeTeamId}`
+        : `gaia_users_cache_org_${scopeOrganizationId}`;
 
       // Try localStorage first as fallback
-      const cachedUsers = localStorage.getItem('gaia_users_cache');
+      const cachedUsers = localStorage.getItem(cacheKey);
       if (cachedUsers) {
         try {
           const parsed = JSON.parse(cachedUsers);
@@ -55,10 +72,18 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
       }
 
       try {
-        const { data, error } = await client
+        let query = client
           .from('users')
           .select('id, name, email, role')
           .order('name');
+
+        if (scopeTeamId) {
+          query = query.eq('team_id', scopeTeamId);
+        } else {
+          query = query.eq('organization_id', scopeOrganizationId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Error loading users:', error);
@@ -73,7 +98,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
         if (data && data.length > 0) {
           setAvailableUsers(data);
           // Cache to localStorage for offline access
-          localStorage.setItem('gaia_users_cache', JSON.stringify(data));
+          localStorage.setItem(cacheKey, JSON.stringify(data));
         }
       } catch (err) {
         console.error('Exception loading users:', err);
@@ -81,7 +106,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
     };
 
     loadUsers();
-  }, []);
+  }, [organizationId, teamId, organizationLoading]);
 
   useEffect(() => {
     if (client) {

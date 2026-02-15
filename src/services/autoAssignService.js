@@ -4,6 +4,26 @@ import { getSupabaseClient } from './supabase';
  * Auto-Assign Service
  * Handles round-robin assignment to clocked-in chat support users
  */
+const getUserScope = async (supabase) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('organization_id, team_id')
+        .eq('id', user.id)
+        .single();
+
+    if (error) {
+        console.error('[AutoAssign] Error loading organization:', error);
+        return null;
+    }
+
+    return {
+        organizationId: data?.organization_id || null,
+        teamId: data?.team_id || null
+    };
+};
 export const autoAssignService = {
     /**
      * Get the next available chat support user using round-robin
@@ -26,13 +46,29 @@ export const autoAssignService = {
                 return null;
             }
 
+            const scope = await getUserScope(supabase);
+            const scopeTeamId = scope?.teamId || null;
+            const scopeOrganizationId = scope?.organizationId || null;
+            if (!scopeTeamId && !scopeOrganizationId) {
+                console.log('[AutoAssign] No team or organization found');
+                return null;
+            }
+
             // Get all clocked-in users with 'user' role (NOT admin or chat_support)
-            const { data: onlineUsers, error: usersError } = await supabase
+            let query = supabase
                 .from('users')
                 .select('id, name, email')
                 .eq('is_clocked_in', true)
                 .eq('role', 'user')
                 .order('name');
+
+            if (scopeTeamId) {
+                query = query.eq('team_id', scopeTeamId);
+            } else {
+                query = query.eq('organization_id', scopeOrganizationId);
+            }
+
+            const { data: onlineUsers, error: usersError } = await query;
 
             if (usersError || !onlineUsers || onlineUsers.length === 0) {
                 console.log('[AutoAssign] No clocked-in users available');

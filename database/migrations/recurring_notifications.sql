@@ -31,7 +31,8 @@ ALTER TABLE facebook_conversations
 ALTER TABLE recurring_notification_tokens ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role full access
-CREATE POLICY IF NOT EXISTS "Service role full access" ON recurring_notification_tokens
+DROP POLICY IF EXISTS "Service role full access" ON recurring_notification_tokens;
+CREATE POLICY "Service role full access" ON recurring_notification_tokens
   FOR ALL USING (true) WITH CHECK (true);
 
 SELECT 'Recurring notification tokens table created successfully!' as result;

@@ -5,7 +5,7 @@ import { getSupabaseClient } from '../services/supabase';
  * Attendance Dashboard Component
  * Shows team member attendance with daily/hourly breakdown
  */
-const AttendanceDashboard = ({ users = [] }) => {
+const AttendanceDashboard = ({ users = [], organizationId = null, teamId = null }) => {
     const [shifts, setShifts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(() => {
@@ -44,12 +44,20 @@ const AttendanceDashboard = ({ users = [] }) => {
         try {
             const { start, end } = getDateRange();
 
-            const { data, error } = await supabase
+            let query = supabase
                 .from('user_shifts')
-                .select('*, user:user_id(id, name, email, role)')
+                .select('*, user:user_id(id, name, email, role, organization_id, team_id)')
                 .gte('clock_in', start.toISOString())
                 .lte('clock_in', end.toISOString())
                 .order('clock_in', { ascending: false });
+
+            if (teamId) {
+                query = query.eq('user.team_id', teamId);
+            } else if (organizationId) {
+                query = query.eq('user.organization_id', organizationId);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             setShifts(data || []);
@@ -58,7 +66,7 @@ const AttendanceDashboard = ({ users = [] }) => {
         } finally {
             setLoading(false);
         }
-    }, [getDateRange]);
+    }, [getDateRange, organizationId, teamId]);
 
     useEffect(() => {
         loadShifts();

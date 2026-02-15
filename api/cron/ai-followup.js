@@ -324,6 +324,7 @@ export default async function handler(req, res) {
                         conversation_id: conv.conversation_id,
                         page_id: conv.page_id,
                         scheduled_at: scheduledAt.toISOString(),
+                        scheduled_for: scheduledAt.toISOString(),
                         follow_up_type: followUpType,
                         reason: reason,
                         status: 'pending'
