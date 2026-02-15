@@ -3049,11 +3049,11 @@ REFERRAL: Customer was referred by someone`}
                             // Remove the last user message (it's sent separately)
                             historyForAPI.pop();
 
-                            const resp = await fetch('/api/webhook', {
+                            const resp = await fetch('/api/ai/assistant', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
-                                action: 'test_chat',
+                                mode: 'test_chat',
                                 message: userMsg,
                                 conversation_history: historyForAPI,
                                 config
@@ -3096,11 +3096,11 @@ REFERRAL: Customer was referred by someone`}
                           }));
                           historyForAPI.pop();
 
-                          const resp = await fetch('/api/webhook', {
+                          const resp = await fetch('/api/ai/assistant', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                              action: 'test_chat',
+                              mode: 'test_chat',
                               message: userMsg,
                               conversation_history: historyForAPI,
                               config
