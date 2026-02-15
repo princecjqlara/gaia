@@ -12,12 +12,44 @@ function getSupabase() {
 }
 
 /**
+ * Analyze contact message timestamps to find the hour they're most active.
+ * Returns the best hour (0-23) in Asia/Manila timezone.
+ */
+function getBestContactHour(messages) {
+    if (!messages || messages.length === 0) return 10; // Default: 10 AM
+
+    const hourCounts = new Array(24).fill(0);
+
+    for (const msg of messages) {
+        try {
+            const manilaTime = new Date(
+                new Date(msg.timestamp).toLocaleString("en-US", { timeZone: "Asia/Manila" })
+            );
+            hourCounts[manilaTime.getHours()]++;
+        } catch { /* skip bad timestamps */ }
+    }
+
+    // Find the hour with the most messages
+    let bestHour = 10;
+    let maxCount = 0;
+    for (let h = 0; h < 24; h++) {
+        if (hourCounts[h] > maxCount) {
+            maxCount = hourCounts[h];
+            bestHour = h;
+        }
+    }
+
+    return bestHour;
+}
+
+/**
  * Recurring Notification Follow-up Cron
  * 
  * Runs daily. For contacts who:
  * 1. Have an active recurring notification token
  * 2. Haven't received a follow-up yet
  * 3. Have been silent for 7+ days
+ * 4. Current time matches their best contact hour (±1h)
  * 
  * Sends exactly 1 personalized follow-up hook message, then marks as sent.
  */
@@ -86,6 +118,31 @@ export default async function handler(req, res) {
                     skippedCount++;
                     continue;
                 }
+
+                // BEST TIME TO CONTACT: Analyze contact's message hours
+                const { data: contactMsgs } = await db
+                    .from("facebook_messages")
+                    .select("timestamp")
+                    .eq("conversation_id", tokenRecord.conversation_id)
+                    .eq("is_from_page", false)
+                    .order("timestamp", { ascending: false })
+                    .limit(50);
+
+                const bestHour = getBestContactHour(contactMsgs || []);
+                const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+                const currentHour = nowManila.getHours();
+
+                // Only send if we're within ±1 hour of their best contact time
+                const hourDiff = Math.abs(currentHour - bestHour);
+                const withinWindow = hourDiff <= 1 || hourDiff >= 23; // handle wrap-around (e.g. 23 vs 0)
+
+                if (!withinWindow) {
+                    console.log(`[RECURRING-FOLLOWUP] ⏰ Skipping ${tokenRecord.conversation_id} - best hour: ${bestHour}:00, current: ${currentHour}:00`);
+                    skippedCount++;
+                    continue;
+                }
+
+                console.log(`[RECURRING-FOLLOWUP] ⏰ Best time match! Sending to ${tokenRecord.conversation_id} at ${currentHour}:00 (best: ${bestHour}:00)`);
 
                 // Get conversation details for personalization
                 const { data: conv } = await db
