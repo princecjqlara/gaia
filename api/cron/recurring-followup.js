@@ -16,7 +16,7 @@ function getSupabase() {
  * Returns the best hour (0-23) in Asia/Manila timezone.
  */
 function getBestContactHour(messages) {
-    if (!messages || messages.length === 0) return 10; // Default: 10 AM
+    if (!messages || messages.length === 0) return null; // No data — caller should use neighbors
 
     const hourCounts = new Array(24).fill(0);
 
@@ -29,8 +29,7 @@ function getBestContactHour(messages) {
         } catch { /* skip bad timestamps */ }
     }
 
-    // Find the hour with the most messages
-    let bestHour = 10;
+    let bestHour = null;
     let maxCount = 0;
     for (let h = 0; h < 24; h++) {
         if (hourCounts[h] > maxCount) {
@@ -128,7 +127,25 @@ export default async function handler(req, res) {
                     .order("timestamp", { ascending: false })
                     .limit(50);
 
-                const bestHour = getBestContactHour(contactMsgs || []);
+                let bestHour = getBestContactHour(contactMsgs || []);
+
+                // FALLBACK: If no message history, use neighbors (all contacts on same page)
+                if (bestHour === null) {
+                    const { data: neighborMsgs } = await db
+                        .from("facebook_messages")
+                        .select("timestamp")
+                        .eq("page_id", tokenRecord.page_id)
+                        .eq("is_from_page", false)
+                        .order("timestamp", { ascending: false })
+                        .limit(200);
+
+                    bestHour = getBestContactHour(neighborMsgs || []);
+                    if (bestHour !== null) {
+                        console.log(`[RECURRING-FOLLOWUP] Using neighbor best hour: ${bestHour}:00`);
+                    } else {
+                        bestHour = 10; // Last resort fallback
+                    }
+                }
                 const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
                 const currentHour = nowManila.getHours();
 
