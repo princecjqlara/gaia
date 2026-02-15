@@ -49,6 +49,13 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   const [loadingSequences, setLoadingSequences] = useState(false);
   const [savingSequence, setSavingSequence] = useState(false);
   const [expandedSequenceId, setExpandedSequenceId] = useState(null);
+  const [rawPrompts, setRawPrompts] = useState(['']);
+  const [generatingSequences, setGeneratingSequences] = useState(false);
+
+  // Test Chat State
+  const [testMessages, setTestMessages] = useState([]);
+  const [testInput, setTestInput] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
 
   // Fetch connected pages on mount
   useEffect(() => {
@@ -464,37 +471,135 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     }
   };
 
-  const addSequence = async () => {
+  const generateSequences = async (prompts) => {
+    const validPrompts = prompts.filter(p => p.trim());
+    if (validPrompts.length < 2) {
+      alert('Please enter at least 2 message prompts to generate sequences.');
+      return;
+    }
+
     try {
+      setGeneratingSequences(true);
       setSavingSequence(true);
       const db = await getDb();
-      const { data, error } = await db
-        .from('message_sequences')
-        .insert({ label: 'New Sequence', is_active: true })
-        .select()
-        .single();
-      if (error) throw error;
-      setSequences(prev => [...prev, data]);
-      setExpandedSequenceId(data.id);
-      // Add first empty step automatically
-      const { data: step, error: stepErr } = await db
-        .from('message_prompts')
-        .insert({
-          prompt_text: '',
-          label: 'Step 1',
-          sequence_id: data.id,
-          sequence_position: 1,
-          is_active: true
-        })
-        .select()
-        .single();
-      if (!stepErr && step) {
-        setMessagePrompts(prev => [...prev, step]);
+
+      // Helper: extract "hook" (first sentence) from a prompt
+      const getHook = (text) => {
+        const match = text.match(/^[^.!?]+[.!?]/);
+        return match ? match[0].trim() : text.substring(0, Math.min(80, text.length)).trim();
+      };
+
+      // Helper: shuffle array (Fisher-Yates)
+      const shuffle = (arr) => {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      };
+
+      // Build variation plans
+      const variations = [];
+
+      // 1. Original order
+      variations.push({
+        label: '📋 Original Order',
+        steps: validPrompts.map((p, i) => ({ text: p, label: `Step ${i + 1}` }))
+      });
+
+      // 2. Hook-First — first step is hook-only, rest are full
+      const hookFirst = [
+        { text: getHook(validPrompts[0]), label: 'Step 1 (Hook)' },
+        ...validPrompts.slice(1).map((p, i) => ({ text: p, label: `Step ${i + 2}` }))
+      ];
+      variations.push({ label: '🎣 Hook-First', steps: hookFirst });
+
+      // 3. Hook + Full Message — hook as step 1, then full version as step 2, then rest
+      if (validPrompts.length >= 2) {
+        const hookFull = [
+          { text: getHook(validPrompts[0]), label: 'Step 1 (Hook)' },
+          { text: validPrompts[0], label: 'Step 2 (Full)' },
+          ...validPrompts.slice(1).map((p, i) => ({ text: p, label: `Step ${i + 3}` }))
+        ];
+        variations.push({ label: '🎣📝 Hook + Full Message', steps: hookFull });
       }
+
+      // 4. Reversed order
+      const reversed = [...validPrompts].reverse();
+      variations.push({
+        label: '🔄 Reversed Order',
+        steps: reversed.map((p, i) => ({ text: p, label: `Step ${i + 1}` }))
+      });
+
+      // 5. Shuffled — random order
+      const shuffled = shuffle(validPrompts);
+      // Ensure shuffled is actually different from original
+      const isDifferent = shuffled.some((p, i) => p !== validPrompts[i]);
+      if (isDifferent) {
+        variations.push({
+          label: '🔀 Shuffled',
+          steps: shuffled.map((p, i) => ({ text: p, label: `Step ${i + 1}` }))
+        });
+      }
+
+      // 6. Aggressive (skip middle steps — first + last only)
+      if (validPrompts.length >= 3) {
+        variations.push({
+          label: '⚡ Aggressive (Skip Middle)',
+          steps: [
+            { text: validPrompts[0], label: 'Step 1' },
+            { text: validPrompts[validPrompts.length - 1], label: 'Step 2' }
+          ]
+        });
+      }
+
+      // Insert all variations into DB
+      const newSequences = [];
+      const newPrompts = [];
+
+      for (const variation of variations) {
+        const { data: seq, error: seqErr } = await db
+          .from('message_sequences')
+          .insert({ label: variation.label, is_active: true })
+          .select()
+          .single();
+        if (seqErr) {
+          console.error('Error creating sequence:', seqErr);
+          continue;
+        }
+        newSequences.push(seq);
+
+        for (let i = 0; i < variation.steps.length; i++) {
+          const { data: step, error: stepErr } = await db
+            .from('message_prompts')
+            .insert({
+              prompt_text: variation.steps[i].text,
+              label: variation.steps[i].label,
+              sequence_id: seq.id,
+              sequence_position: i + 1,
+              is_active: true
+            })
+            .select()
+            .single();
+          if (!stepErr && step) {
+            newPrompts.push(step);
+          }
+        }
+      }
+
+      setSequences(prev => [...prev, ...newSequences]);
+      setMessagePrompts(prev => [...prev, ...newPrompts]);
+      if (newSequences.length > 0) {
+        setExpandedSequenceId(newSequences[0].id);
+      }
+
+      alert(`✅ Generated ${newSequences.length} sequence variations from ${validPrompts.length} prompts!`);
     } catch (err) {
-      console.error('Error adding sequence:', err);
-      alert('Failed to add sequence: ' + err.message);
+      console.error('Error generating sequences:', err);
+      alert('Failed to generate sequences: ' + err.message);
     } finally {
+      setGeneratingSequences(false);
       setSavingSequence(false);
     }
   };
@@ -2499,32 +2604,143 @@ REFERRAL: Customer was referred by someone`}
               <div style={{ marginBottom: '2rem' }}>
                 <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🧪 Follow-up Sequences & A/B Testing</h5>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Create multiple follow-up sequences. Each sequence is an ordered chain of prompts (Step 1 → Step 2 → Step 3...). The AI tests different sequences and automatically shifts traffic to the one that converts best.
+                  Enter your follow-up message prompts below. The system will auto-generate different sequence orderings and A/B test them to find the highest-converting combination.
                 </p>
 
                 <div style={{ padding: '0.75rem 1rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
                   <span style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>
-                    🎰 <strong>Thompson Sampling:</strong> The system tests different sequences, learning which ordered combination of prompts gets the most replies. Higher-performing sequences get more traffic automatically.
+                    🎰 <strong>Thompson Sampling:</strong> The system tests variations like hook-first, hook+full, reversed, and shuffled orders. Higher-performing sequences get more traffic automatically.
                   </span>
                 </div>
 
-                {/* Sequences List */}
+                {/* ============ Prompt Input Area ============ */}
+                <div style={{
+                  background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)', padding: '1rem', marginBottom: '1.5rem'
+                }}>
+                  <div style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+                    ✏️ Message Prompts
+                    <span style={{ fontWeight: '400', fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                      (Enter at least 2 — these are instructions the AI uses to write follow-ups)
+                    </span>
+                  </div>
+
+                  {rawPrompts.map((prompt, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                      <div style={{
+                        minWidth: '28px', height: '28px', borderRadius: '50%',
+                        background: 'var(--primary)', color: 'white',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.75rem', fontWeight: '700', marginTop: '6px'
+                      }}>
+                        {idx + 1}
+                      </div>
+                      <textarea
+                        className="form-input"
+                        rows={2}
+                        placeholder={
+                          idx === 0 ? 'e.g. Check in warmly, reference the property they asked about'
+                            : idx === 1 ? 'e.g. Share a success story, ask if they want to see similar properties'
+                              : 'e.g. Create gentle urgency — mention limited availability'
+                        }
+                        value={prompt}
+                        onChange={(e) => {
+                          const updated = [...rawPrompts];
+                          updated[idx] = e.target.value;
+                          setRawPrompts(updated);
+                        }}
+                        style={{ flex: 1, resize: 'vertical', fontSize: '0.85rem' }}
+                      />
+                      {rawPrompts.length > 1 && (
+                        <button
+                          onClick={() => setRawPrompts(rawPrompts.filter((_, i) => i !== idx))}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: '0.9rem', padding: '4px', color: '#ef4444', marginTop: '6px'
+                          }}
+                          title="Remove prompt"
+                        >✕</button>
+                      )}
+                    </div>
+                  ))}
+
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button
+                      onClick={() => setRawPrompts([...rawPrompts, ''])}
+                      style={{
+                        flex: 1, padding: '8px', background: 'transparent',
+                        border: '1px dashed rgba(99, 102, 241, 0.4)', borderRadius: 'var(--radius-md)',
+                        color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500'
+                      }}
+                    >
+                      + Add Another Prompt
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => generateSequences(rawPrompts)}
+                    disabled={generatingSequences || rawPrompts.filter(p => p.trim()).length < 2}
+                    style={{
+                      width: '100%', padding: '12px', marginTop: '0.75rem',
+                      background: rawPrompts.filter(p => p.trim()).length >= 2
+                        ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(100,100,100,0.2)',
+                      border: 'none', borderRadius: 'var(--radius-md)',
+                      color: 'white', cursor: rawPrompts.filter(p => p.trim()).length >= 2 ? 'pointer' : 'not-allowed',
+                      fontSize: '0.9rem', fontWeight: '700',
+                      opacity: generatingSequences ? 0.6 : 1,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {generatingSequences ? '⏳ Generating Variations...' : `🧪 Generate Sequences (${rawPrompts.filter(p => p.trim()).length} prompts)`}
+                  </button>
+                </div>
+
+                {/* ============ Sequences Dashboard ============ */}
                 {loadingSequences ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading sequences...</div>
+                ) : sequences.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                    No sequences yet. Enter your message prompts above and click "Generate Sequences" to get started!
+                  </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                    {sequences.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
-                        No sequences yet. Click "Add Sequence" below to create your first follow-up chain!
-                      </div>
-                    )}
-                    {sequences.map((seq, seqIdx) => {
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
+                    {/* Overall Stats Bar */}
+                    {(() => {
+                      const totalSent = sequences.reduce((s, seq) => s + (seq.total_sent || 0), 0);
+                      const totalReplies = sequences.reduce((s, seq) => s + (seq.total_replies || 0), 0);
+                      const overallRate = totalSent > 0 ? ((totalReplies / totalSent) * 100).toFixed(1) : '0';
+                      return totalSent > 0 ? (
+                        <div style={{
+                          display: 'flex', gap: '1.5rem', padding: '0.75rem 1rem',
+                          background: 'rgba(99, 102, 241, 0.08)', borderRadius: 'var(--radius-md)',
+                          border: '1px solid rgba(99, 102, 241, 0.15)', fontSize: '0.8rem',
+                          color: 'var(--text-secondary)', flexWrap: 'wrap', justifyContent: 'center'
+                        }}>
+                          <span>📤 <strong>{totalSent}</strong> total sent</span>
+                          <span>💬 <strong>{totalReplies}</strong> total replies</span>
+                          <span>📊 <strong>{overallRate}%</strong> overall reply rate</span>
+                          <span>🧪 <strong>{sequences.filter(s => s.is_active).length}</strong> active sequences</span>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Sequence Cards */}
+                    {sequences.map((seq) => {
                       const steps = messagePrompts
                         .filter(p => p.sequence_id === seq.id)
                         .sort((a, b) => a.sequence_position - b.sequence_position);
                       const perf = sequencePerformance.find(p => p.sequence_id === seq.id);
                       const isChampion = sequencePerformance.length > 0 && sequencePerformance[0]?.sequence_id === seq.id && (perf?.total_sent || 0) >= 5;
                       const isExpanded = expandedSequenceId === seq.id;
+
+                      // Calculate metrics from seq data
+                      const sent = seq.total_sent || perf?.total_sent || 0;
+                      const replies = seq.total_replies || perf?.total_replies || 0;
+                      const replyRate = sent > 0 ? ((replies / sent) * 100).toFixed(1) : '0';
+                      const totalAllSent = sequences.reduce((s, sq) => s + (sq.total_sent || 0), 0);
+                      const trafficPct = totalAllSent > 0 ? ((sent / totalAllSent) * 100).toFixed(0) : '0';
+                      const confidence = sent >= 20 ? 'high' : sent >= 5 ? 'medium' : sent > 0 ? 'low' : 'none';
+                      const avgScore = perf?.avg_conversion_score ? Number(perf.avg_conversion_score).toFixed(1) : '—';
 
                       return (
                         <div
@@ -2534,8 +2750,7 @@ REFERRAL: Customer was referred by someone`}
                             borderRadius: 'var(--radius-lg)',
                             border: isChampion ? '2px solid #22c55e' : '1px solid var(--border-color)',
                             opacity: seq.is_active ? 1 : 0.6,
-                            overflow: 'hidden',
-                            transition: 'all 0.2s ease'
+                            overflow: 'hidden', transition: 'all 0.2s ease'
                           }}
                         >
                           {/* Sequence Header */}
@@ -2578,6 +2793,16 @@ REFERRAL: Customer was referred by someone`}
                                 }}>Paused</span>
                               )}
                             </div>
+                            {/* Mini metrics in header */}
+                            {sent > 0 && (
+                              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: '0.5rem' }} onClick={(e) => e.stopPropagation()}>
+                                <span>📤 {sent}</span>
+                                <span style={{ color: Number(replyRate) >= 30 ? '#22c55e' : Number(replyRate) >= 15 ? '#f59e0b' : '#ef4444' }}>
+                                  💬 {replyRate}%
+                                </span>
+                                <span>📊 {trafficPct}%</span>
+                              </div>
+                            )}
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={() => toggleSequenceActive(seq.id, seq.is_active)}
@@ -2596,34 +2821,38 @@ REFERRAL: Customer was referred by someone`}
                             </div>
                           </div>
 
-                          {/* Expanded: Steps + Performance */}
+                          {/* Expanded: Metrics + Steps */}
                           {isExpanded && (
                             <div style={{ padding: '1rem' }}>
-                              {/* Performance bar */}
-                              {perf && (perf.total_sent || 0) > 0 && (
+                              {/* Metrics Dashboard */}
+                              {sent > 0 && (
                                 <div style={{
-                                  display: 'flex', gap: '1rem', padding: '0.5rem 0.75rem',
-                                  background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-md)',
-                                  fontSize: '0.75rem', color: 'var(--text-secondary)', flexWrap: 'wrap',
-                                  marginBottom: '1rem'
+                                  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                                  gap: '0.5rem', marginBottom: '1rem'
                                 }}>
-                                  <span>📤 <strong>{perf.total_sent}</strong> sent</span>
-                                  <span>💬 <strong>{perf.total_replies}</strong> replies</span>
-                                  <span>📊 <strong>{perf.reply_rate}%</strong> reply rate</span>
-                                  <span>⚡ Avg: <strong>{Number(perf.avg_conversion_score).toFixed(1)}</strong></span>
-                                  <span style={{
-                                    color: perf.confidence === 'high' ? '#22c55e' :
-                                      perf.confidence === 'medium' ? '#f59e0b' :
-                                        perf.confidence === 'low' ? '#ef4444' : '#6b7280'
-                                  }}>
-                                    🎯 {perf.confidence}
-                                  </span>
+                                  {[
+                                    { label: 'Contacts', value: sent, icon: '👥', color: '#6366f1' },
+                                    { label: 'Replies', value: replies, icon: '💬', color: '#22c55e' },
+                                    { label: 'Reply Rate', value: `${replyRate}%`, icon: '📊', color: Number(replyRate) >= 30 ? '#22c55e' : Number(replyRate) >= 15 ? '#f59e0b' : '#ef4444' },
+                                    { label: 'Avg Score', value: avgScore, icon: '⚡', color: '#f59e0b' },
+                                    { label: 'Traffic', value: `${trafficPct}%`, icon: '🎯', color: '#8b5cf6' },
+                                    { label: 'Confidence', value: confidence, icon: '🔬', color: confidence === 'high' ? '#22c55e' : confidence === 'medium' ? '#f59e0b' : '#ef4444' }
+                                  ].map((m, i) => (
+                                    <div key={i} style={{
+                                      padding: '0.5rem', background: 'rgba(0,0,0,0.15)',
+                                      borderRadius: 'var(--radius-md)', textAlign: 'center',
+                                      borderBottom: `2px solid ${m.color}`
+                                    }}>
+                                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>{m.icon} {m.label}</div>
+                                      <div style={{ fontSize: '1rem', fontWeight: '700', color: m.color }}>{m.value}</div>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
 
                               {/* Steps list */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                {steps.map((step, stepIdx) => (
+                                {steps.map((step) => (
                                   <div key={step.id} style={{
                                     display: 'flex', gap: '0.5rem', alignItems: 'flex-start',
                                     padding: '0.5rem', background: 'rgba(0,0,0,0.08)', borderRadius: 'var(--radius-md)'
@@ -2639,7 +2868,7 @@ REFERRAL: Customer was referred by someone`}
                                     <textarea
                                       className="form-input"
                                       rows={2}
-                                      placeholder={`e.g. ${stepIdx === 0 ? 'Check in warmly, reference the conversation' : stepIdx === 1 ? 'Offer specific value or answer questions' : 'Create gentle urgency or provide social proof'}`}
+                                      placeholder="Prompt instruction for this step..."
                                       defaultValue={step.prompt_text}
                                       onBlur={(e) => {
                                         if (e.target.value !== step.prompt_text) {
@@ -2648,6 +2877,11 @@ REFERRAL: Customer was referred by someone`}
                                       }}
                                       style={{ flex: 1, resize: 'vertical', fontSize: '0.85rem' }}
                                     />
+                                    {step.total_sent > 0 && (
+                                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', minWidth: '50px', textAlign: 'right', marginTop: '6px' }}>
+                                        📤{step.total_sent} 💬{step.total_replies || 0}
+                                      </div>
+                                    )}
                                     {steps.length > 1 && (
                                       <button
                                         onClick={() => removeStep(step.id, seq.id)}
@@ -2684,24 +2918,6 @@ REFERRAL: Customer was referred by someone`}
                   </div>
                 )}
 
-                {/* Add New Sequence Button */}
-                <button
-                  onClick={addSequence}
-                  disabled={savingSequence}
-                  style={{
-                    width: '100%', padding: '12px',
-                    background: 'var(--bg-secondary)',
-                    border: '2px dashed rgba(99, 102, 241, 0.3)', borderRadius: 'var(--radius-lg)',
-                    color: 'var(--primary)', cursor: 'pointer', fontSize: '0.9rem',
-                    fontWeight: '600', transition: 'all 0.2s ease',
-                    opacity: savingSequence ? 0.6 : 1
-                  }}
-                  onMouseOver={(e) => e.target.style.borderColor = 'var(--primary)'}
-                  onMouseOut={(e) => e.target.style.borderColor = 'rgba(99, 102, 241, 0.3)'}
-                >
-                  {savingSequence ? 'Creating...' : '➕ Add New Sequence'}
-                </button>
-
                 {/* How it works */}
                 <div style={{
                   marginTop: '1rem', padding: '0.75rem 1rem',
@@ -2710,11 +2926,213 @@ REFERRAL: Customer was referred by someone`}
                 }}>
                   <div style={{ fontWeight: '600', fontSize: '0.8rem', color: '#22c55e', marginBottom: '0.25rem' }}>📊 How It Works</div>
                   <ul style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, paddingLeft: '1.25rem' }}>
-                    <li>Each contact is assigned to one sequence</li>
-                    <li>Steps fire in order (Step 1 first, then Step 2, etc.) at the follow-up intervals you set</li>
-                    <li>The system tests all active sequences and shifts traffic to the one with the highest reply rate</li>
-                    <li>Scoring: +30 reply, +20 fast reply (&lt;1h), +10 medium (&lt;6h)</li>
+                    <li>Enter your message prompts → click "Generate Sequences" → system creates variations</li>
+                    <li>Variations include: original order, hook-first, hook + full message, reversed, shuffled, aggressive</li>
+                    <li>Each new contact is assigned to a sequence via Thompson Sampling (best performers get more traffic)</li>
+                    <li>Steps fire in order at follow-up intervals. Scoring: +30 reply, +20 fast (&lt;1h), +10 medium (&lt;6h)</li>
+                    <li>You can still edit, pause, or delete any generated sequence</li>
                   </ul>
+                </div>
+              </div>
+
+              {/* ============ Test Chat Panel ============ */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>💬 Test Your AI Chatbot</h5>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Send test messages to see how your AI chatbot responds using your current configuration. Messages are NOT sent to Facebook.
+                </p>
+
+                {/* Chat Window */}
+                <div style={{
+                  background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border-color)', overflow: 'hidden'
+                }}>
+                  {/* Chat Header */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '0.75rem 1rem',
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: 'white'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '1.2rem' }}>🤖</span>
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>AI Chatbot — Test Mode</div>
+                        <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>Messages stay here. Not sent to contacts.</div>
+                      </div>
+                    </div>
+                    {testMessages.length > 0 && (
+                      <button
+                        onClick={() => setTestMessages([])}
+                        style={{
+                          background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px',
+                          color: 'white', cursor: 'pointer', padding: '4px 10px', fontSize: '0.75rem'
+                        }}
+                      >🗑️ Clear</button>
+                    )}
+                  </div>
+
+                  {/* Messages Area */}
+                  <div style={{
+                    minHeight: '200px', maxHeight: '400px', overflowY: 'auto',
+                    padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem'
+                  }}>
+                    {testMessages.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>👋</div>
+                        <div style={{ fontSize: '0.85rem' }}>Send a message to test your AI chatbot</div>
+                        <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Try: "Hi, I'm interested in your services"</div>
+                      </div>
+                    )}
+
+                    {testMessages.map((msg, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex',
+                        justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'
+                      }}>
+                        <div style={{
+                          maxWidth: '75%', padding: '0.6rem 0.85rem',
+                          borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                          background: msg.role === 'user'
+                            ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                            : 'var(--bg-tertiary)',
+                          color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
+                          fontSize: '0.85rem', lineHeight: '1.4',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                        }}>
+                          {msg.content}
+                        </div>
+                      </div>
+                    ))}
+
+                    {testLoading && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                        <div style={{
+                          padding: '0.6rem 1rem', borderRadius: '18px 18px 18px 4px',
+                          background: 'var(--bg-tertiary)', color: 'var(--text-muted)',
+                          fontSize: '0.85rem'
+                        }}>
+                          <span style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>●</span>
+                          <span style={{ animation: 'pulse 1.5s ease-in-out infinite 0.3s' }}> ●</span>
+                          <span style={{ animation: 'pulse 1.5s ease-in-out infinite 0.6s' }}> ●</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Input Area */}
+                  <div style={{
+                    display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem',
+                    borderTop: '1px solid var(--border-color)', background: 'var(--bg-secondary)'
+                  }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Type a test message..."
+                      value={testInput}
+                      onChange={(e) => setTestInput(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && testInput.trim() && !testLoading) {
+                          e.preventDefault();
+                          const userMsg = testInput.trim();
+                          setTestInput('');
+                          const newMsgs = [...testMessages, { role: 'user', content: userMsg }];
+                          setTestMessages(newMsgs);
+                          setTestLoading(true);
+
+                          try {
+                            const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                            const historyForAPI = newMsgs.slice(-10).map(m => ({
+                              role: m.role === 'user' ? 'user' : 'assistant',
+                              content: m.content
+                            }));
+                            // Remove the last user message (it's sent separately)
+                            historyForAPI.pop();
+
+                            const resp = await fetch('/api/webhook', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                action: 'test_chat',
+                                message: userMsg,
+                                conversation_history: historyForAPI,
+                                config
+                              })
+                            });
+                            const data = await resp.json();
+
+                            if (data.reply) {
+                              // Split on ||| (chatbot message splitting convention)
+                              const parts = data.reply.split('|||').map(p => p.trim()).filter(Boolean);
+                              const aiMsgs = parts.map(p => ({ role: 'assistant', content: p }));
+                              setTestMessages(prev => [...prev, ...aiMsgs]);
+                            } else {
+                              setTestMessages(prev => [...prev, { role: 'assistant', content: data.error || 'No response received' }]);
+                            }
+                          } catch (err) {
+                            setTestMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${err.message}` }]);
+                          } finally {
+                            setTestLoading(false);
+                          }
+                        }
+                      }}
+                      disabled={testLoading}
+                      style={{ flex: 1, borderRadius: '20px', fontSize: '0.85rem' }}
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!testInput.trim() || testLoading) return;
+                        const userMsg = testInput.trim();
+                        setTestInput('');
+                        const newMsgs = [...testMessages, { role: 'user', content: userMsg }];
+                        setTestMessages(newMsgs);
+                        setTestLoading(true);
+
+                        try {
+                          const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+                          const historyForAPI = newMsgs.slice(-10).map(m => ({
+                            role: m.role === 'user' ? 'user' : 'assistant',
+                            content: m.content
+                          }));
+                          historyForAPI.pop();
+
+                          const resp = await fetch('/api/webhook', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'test_chat',
+                              message: userMsg,
+                              conversation_history: historyForAPI,
+                              config
+                            })
+                          });
+                          const data = await resp.json();
+
+                          if (data.reply) {
+                            const parts = data.reply.split('|||').map(p => p.trim()).filter(Boolean);
+                            const aiMsgs = parts.map(p => ({ role: 'assistant', content: p }));
+                            setTestMessages(prev => [...prev, ...aiMsgs]);
+                          } else {
+                            setTestMessages(prev => [...prev, { role: 'assistant', content: data.error || 'No response received' }]);
+                          }
+                        } catch (err) {
+                          setTestMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${err.message}` }]);
+                        } finally {
+                          setTestLoading(false);
+                        }
+                      }}
+                      disabled={testLoading || !testInput.trim()}
+                      style={{
+                        width: '40px', height: '40px', borderRadius: '50%',
+                        background: testInput.trim() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--bg-tertiary)',
+                        border: 'none', cursor: testInput.trim() ? 'pointer' : 'not-allowed',
+                        color: 'white', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      ➤
+                    </button>
+                  </div>
                 </div>
               </div>
 
