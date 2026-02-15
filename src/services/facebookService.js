@@ -458,6 +458,14 @@ class FacebookService {
 
             if (pageId) {
                 query = query.eq('page_id', pageId);
+            } else {
+                try {
+                    const { data: activePages } = await getSupabase()
+                        .from('facebook_pages').select('page_id').eq('is_active', true);
+                    if (activePages && activePages.length > 0) {
+                        query = query.in('page_id', activePages.map(p => p.page_id));
+                    }
+                } catch (e) { /* fallback: show all */ }
             }
 
             const { data, error } = await query;
@@ -489,6 +497,21 @@ class FacebookService {
 
             if (pageId) {
                 query = query.eq('page_id', pageId);
+            } else {
+                // Filter to only show conversations from currently connected (active) pages
+                try {
+                    const { data: activePages } = await getSupabase()
+                        .from('facebook_pages')
+                        .select('page_id')
+                        .eq('is_active', true);
+
+                    if (activePages && activePages.length > 0) {
+                        const activePageIds = activePages.map(p => p.page_id);
+                        query = query.in('page_id', activePageIds);
+                    }
+                } catch (e) {
+                    console.warn('Could not filter by active pages:', e.message);
+                }
             }
 
             const { data, error, count } = await query;
@@ -545,6 +568,14 @@ class FacebookService {
 
             if (pageId) {
                 query = query.eq('page_id', pageId);
+            } else {
+                try {
+                    const { data: activePages } = await getSupabase()
+                        .from('facebook_pages').select('page_id').eq('is_active', true);
+                    if (activePages && activePages.length > 0) {
+                        query = query.in('page_id', activePages.map(p => p.page_id));
+                    }
+                } catch (e) { /* fallback: show all */ }
             }
 
             const { data, error, count } = await query;
