@@ -2007,6 +2007,24 @@ async function handleIncomingMessage(pageId, event) {
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
     if (!isFromPage && message.text) {
+      // FOR NEW CONVERSATIONS: Send Welcome Message + Booking Button instead of AI text
+      if (isNewConversation) {
+        console.log("[WEBHOOK] New conversation detected - sending Welcome Message with Booking Button...");
+        const welcomeSent = await sendWelcomeMessage(pageId, participantId, conversationId);
+        if (welcomeSent) {
+          // Reset recurring notification follow-up timer (7-day countdown restarts)
+          db.from("recurring_notification_tokens")
+            .update({ followup_sent: false })
+            .eq("conversation_id", conversationId)
+            .eq("token_status", "active")
+            .then(() => { })
+            .catch(() => { });
+          return; // Stop here, don't trigger AI text response
+        }
+        // If welcome fail (e.g. no booking URL), fall through to AI
+        console.log("[WEBHOOK] Welcome message failed (missing config?) - falling back to AI.");
+      }
+
       // Reset recurring notification follow-up timer (7-day countdown restarts)
       db.from("recurring_notification_tokens")
         .update({ followup_sent: false })
@@ -4050,76 +4068,8 @@ async function handlePostbackEvent(pageId, event) {
     // Handle GET_STARTED payload
     if (payload === "GET_STARTED" || payload === "START") {
       console.log(`[WEBHOOK] Handling GET_STARTED for ${senderId}`);
-
-      // 1. Get Booking URL
-      const { data: settings } = await db
-        .from("settings")
-        .select("value")
-        .eq("key", "ai_chatbot_config")
-        .single();
-
-      const bookingUrl = settings?.value?.booking_url;
-
-      // 2. Get Page Token
-      const { data: page } = await db
-        .from("facebook_pages")
-        .select("page_access_token")
-        .eq("page_id", pageId)
-        .single();
-
-      if (bookingUrl && page?.page_access_token) {
-        // 3. Send Welcome Message + Booking Button
-        const welcomeMessage = {
-          recipient: { id: senderId },
-          message: {
-            attachment: {
-              type: "template",
-              payload: {
-                template_type: "button",
-                text: "Hello! 👋 Welcome to Gaia. I'm your AI assistant. I can help you find properties or schedule a consultation.\n\nReady to get started?",
-                buttons: [
-                  {
-                    type: "web_url",
-                    url: bookingUrl,
-                    title: "📅 Book Consultation",
-                    webview_height_ratio: "full"
-                  },
-                  {
-                    type: "postback",
-                    title: "View Properties",
-                    payload: "VIEW_PROPERTIES_START"
-                  }
-                ]
-              }
-            }
-          }
-        };
-
-        await fetch(
-          `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(welcomeMessage),
-          }
-        );
-
-        // 4. Save the message to DB to prevent "first message" AI triggers later
-        const messageId = `welcome_${senderId}_${Date.now()}`;
-        await db.from("facebook_messages").upsert({
-          message_id: messageId,
-          conversation_id: `t_${senderId}`, // Use temp ID if strict not available yet
-          sender_id: pageId,
-          message_text: "Hello! Welcome to Gaia...",
-          timestamp: new Date().toISOString(),
-          is_from_page: true,
-          is_read: true,
-          sent_source: "app"
-        }, { onConflict: "message_id" });
-
-        // Skip the generic AI response at the end
-        return;
-      }
+      await sendWelcomeMessage(pageId, senderId, null); // passing null as conversationId, function should handle
+      return; // Skip further processing for GET_STARTED
     }
 
     // Check for referral data in the postback (ad clicks include this)
@@ -4425,6 +4375,96 @@ async function handleReferralEvent(pageId, event) {
     }
   } catch (error) {
     console.error("[WEBHOOK] Referral handler error:", error.message);
+  }
+}
+
+/**
+ * Send the welcome message with booking button
+ */
+async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
+  const db = getSupabase();
+  if (!db) return false;
+
+  try {
+    // 1. Get Booking URL
+    const { data: settings } = await db
+      .from("settings")
+      .select("value")
+      .eq("key", "ai_chatbot_config")
+      .single();
+
+    const bookingUrl = settings?.value?.booking_url;
+
+    // 2. Get Page Token
+    const { data: page } = await db
+      .from("facebook_pages")
+      .select("page_access_token")
+      .eq("page_id", pageId)
+      .single();
+
+    if (bookingUrl && page?.page_access_token) {
+      // 3. Send Welcome Message + Booking Button
+      const welcomeMessage = {
+        recipient: { id: recipientId },
+        message: {
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "button",
+              text: "Hello! 👋 Welcome to Gaia. I'm your AI assistant. I can help you find properties or schedule a consultation.\n\nReady to get started?",
+              buttons: [
+                {
+                  type: "web_url",
+                  url: bookingUrl,
+                  title: "📅 Book Consultation",
+                  webview_height_ratio: "full"
+                },
+                {
+                  type: "postback",
+                  title: "View Properties",
+                  payload: "VIEW_PROPERTIES_START"
+                }
+              ]
+            }
+          }
+        }
+      };
+
+      const resp = await fetch(
+        `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(welcomeMessage),
+        },
+      );
+
+      if (resp.ok) {
+        console.log(`[WEBHOOK] Welcome message sent to ${recipientId}`);
+        // Log to DB if we have conversationId
+        if (conversationId) {
+          try {
+            await db.from("facebook_messages").insert({
+              message_id: `welcome_${recipientId}_${Date.now()}`,
+              conversation_id: conversationId,
+              sender_id: pageId,
+              message_text: "Hello! 👋 Welcome to Gaia. I'm your AI assistant. I can help you find properties or schedule a consultation.\n\nReady to get started?",
+              is_from_page: true,
+              timestamp: new Date().toISOString(),
+              sent_source: "app"
+            });
+          } catch (e) { console.warn("Failed to log welcome msg", e); }
+        }
+        return true;
+      } else {
+        const errorData = await resp.json();
+        console.error("[WEBHOOK] FB Send Error:", errorData);
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error(`[WEBHOOK] Failed to send welcome message: ${error.message}`);
+    return false;
   }
 }
 
