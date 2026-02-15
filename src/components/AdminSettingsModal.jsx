@@ -302,7 +302,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
           // Also try API using the currentPageId variable (not state!)
           try {
             console.log('Loading booking settings for page:', currentPageId);
-            const response = await fetch(`/api/booking/settings?pageId=${currentPageId}`);
+            const response = await fetch(`/api/booking?action=settings&pageId=${currentPageId}`);
             if (response.ok) {
               const data = await response.json();
               console.log('API booking settings response:', data);
@@ -391,7 +391,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         console.log('Saved to localStorage');
 
         // Also try API
-        const bookingResponse = await fetch(`/api/booking/settings?pageId=${getActivePageId()}`, {
+        const bookingResponse = await fetch(`/api/booking?action=settings&pageId=${getActivePageId()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bookingSettings)

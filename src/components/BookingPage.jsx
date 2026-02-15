@@ -118,7 +118,7 @@ const BookingPage = () => {
             // For public booking pages, try API FIRST (admin settings are stored in database)
             // localStorage is only used as fallback or for admin preview
             try {
-                const response = await fetch(`/api/booking/settings?pageId=${pageId}`);
+                const response = await fetch(`/api/booking?action=settings&pageId=${pageId}`);
                 if (response.ok) {
                     const data = await response.json();
                     console.log('API response:', data);
@@ -167,7 +167,7 @@ const BookingPage = () => {
                 slot_duration: settings?.slot_duration || 60,
                 min_advance_hours: settings?.min_advance_hours || 1
             });
-            const response = await fetch(`/api/booking/available?${params}`);
+            const response = await fetch(`/api/booking?action=available&${params}`);
             if (!response.ok) throw new Error('Failed to load slots');
             const data = await response.json();
             setAvailableSlots(data.slots || []);
@@ -188,7 +188,7 @@ const BookingPage = () => {
         setError(null);
 
         try {
-            const response = await fetch('/api/booking/create', {
+            const response = await fetch('/api/booking', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
