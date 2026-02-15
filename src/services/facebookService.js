@@ -2334,30 +2334,7 @@ class FacebookService {
         }
     }
 
-    /**
-     * Delete a conversation permanently
-     */
-    async deleteConversation(conversationId) {
-        try {
-            // First delete all messages for this conversation
-            await getSupabase()
-                .from('facebook_messages')
-                .delete()
-                .eq('conversation_id', conversationId);
 
-            // Then delete the conversation itself
-            const { error } = await getSupabase()
-                .from('facebook_conversations')
-                .delete()
-                .eq('conversation_id', conversationId);
-
-            if (error) throw error;
-            return true;
-        } catch (error) {
-            console.error('Error deleting conversation:', error);
-            throw error;
-        }
-    }
 
     /**
      * Get archived conversations
@@ -3483,6 +3460,19 @@ class FacebookService {
             if (participantId) {
                 await db.from('calendar_events').delete().eq('contact_psid', participantId);
                 await db.from('property_views').delete().eq('participant_id', participantId);
+            }
+
+            // 5. ALSO delete orphaned property views by name + page_id (for web visitors)
+            if (convData.participant_name && convData.page_id) {
+                try {
+                    await db.from('property_views')
+                        .delete()
+                        .eq('visitor_name', convData.participant_name)
+                        .eq('page_id', convData.page_id);
+                } catch (e) {
+                    // Ignore error if page_id column doesn't exist yet
+                    console.warn('[DELETE] Could not delete by name/page_id (migration pending?):', e.message);
+                }
             }
 
             // 5. Delete Linked Client (CRM)
