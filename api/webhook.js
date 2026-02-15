@@ -3285,6 +3285,60 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
     // Send each part via Facebook
     const participantId =
       conversation?.participant_id || conversationId.replace("t_", "");
+    const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
+
+    // 🔔 RECURRING NOTIFICATION OPT-IN — send BEFORE AI reply so it's the first thing contact sees
+    try {
+      const optinStatus = conversation?.recurring_optin_status;
+      if (!optinStatus) {
+        console.log("[WEBHOOK] 🔔 Sending recurring notification opt-in request (before AI reply)...");
+
+        const optinBody = {
+          recipient: { id: participantId },
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "notification_messages",
+                title: "I saved a spot for you 🏠",
+                image_url: "https://i.imgur.com/8BXYEJE.png",
+                payload: "RECURRING_OPTIN_PROPERTIES",
+                notification_messages_frequency: "DAILY",
+                notification_messages_reoptin: "ENABLED",
+                notification_messages_timezone: "Asia/Manila"
+              }
+            }
+          },
+          messaging_type: "RESPONSE"
+        };
+
+        const optinResp = await fetch(
+          `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(optinBody),
+          }
+        );
+
+        if (optinResp.ok) {
+          console.log("[WEBHOOK] ✅ Recurring notification opt-in sent!");
+          await db.from("facebook_conversations").update({
+            recurring_optin_status: "sent",
+            updated_at: new Date().toISOString(),
+          }).eq("conversation_id", conversationId);
+          // Small delay before AI reply to maintain message order
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          const optinErr = await optinResp.text();
+          console.log("[WEBHOOK] Opt-in send failed (non-fatal):", optinErr.substring(0, 150));
+        }
+      } else {
+        console.log(`[WEBHOOK] Opt-in already handled (status: ${optinStatus}), skipping`);
+      }
+    } catch (optinErr) {
+      console.log("[WEBHOOK] Opt-in error (non-fatal):", optinErr.message);
+    }
 
     for (let i = 0; i < processedMessages.length; i++) {
       const part = processedMessages[i];
@@ -3397,62 +3451,6 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
     console.log("[WEBHOOK] AI reply sent successfully!");
 
     console.log(`[WEBHOOK] AI reply sent! Total time: ${Date.now() - startTime}ms`);
-
-    // AUTO-SEND RECURRING NOTIFICATION OPT-IN (Priority 1) then BOOKING BUTTON (Priority 3)
-    const participantId = conversation?.participant_id || conversationId.replace("t_", "");
-    const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
-
-    // 🔔 RECURRING NOTIFICATION OPT-IN — send on first reply if not yet opted in
-    try {
-      const optinStatus = conversation?.recurring_optin_status;
-      if (!optinStatus && pageReplies.length <= 1) {
-        console.log("[WEBHOOK] 🔔 Sending recurring notification opt-in request...");
-
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        const optinBody = {
-          recipient: { id: participantId },
-          message: {
-            attachment: {
-              type: "template",
-              payload: {
-                template_type: "notification_messages",
-                title: "I saved a spot for you 🏠",
-                image_url: "https://i.imgur.com/8BXYEJE.png",
-                payload: "RECURRING_OPTIN_PROPERTIES",
-                notification_messages_frequency: "DAILY",
-                notification_messages_reoptin: "ENABLED",
-                notification_messages_timezone: "Asia/Manila"
-              }
-            }
-          },
-          messaging_type: "RESPONSE"
-        };
-
-        const optinResp = await fetch(
-          `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(optinBody),
-          }
-        );
-
-        if (optinResp.ok) {
-          console.log("[WEBHOOK] ✅ Recurring notification opt-in sent!");
-          // Mark as sent so we don't spam it
-          await db.from("facebook_conversations").update({
-            recurring_optin_status: "sent",
-            updated_at: new Date().toISOString(),
-          }).eq("conversation_id", conversationId);
-        } else {
-          const optinErr = await optinResp.text();
-          console.log("[WEBHOOK] Opt-in send failed (non-fatal):", optinErr.substring(0, 150));
-        }
-      }
-    } catch (optinErr) {
-      console.log("[WEBHOOK] Opt-in error (non-fatal):", optinErr.message);
-    }
 
     // 📅 BOOKING BUTTON — send after opt-in, on first reply or when interested
     try {
