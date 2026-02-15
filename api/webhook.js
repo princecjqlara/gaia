@@ -1976,6 +1976,14 @@ async function handleIncomingMessage(pageId, event) {
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
     if (!isFromPage && message.text) {
+      // Reset recurring notification follow-up timer (7-day countdown restarts)
+      db.from("recurring_notification_tokens")
+        .update({ followup_sent: false })
+        .eq("conversation_id", conversationId)
+        .eq("token_status", "active")
+        .then(() => { })
+        .catch(() => { });
+
       // MUST await: Vercel kills unawaited promises when handler returns.
       // This is safe because we already sent 200 to Facebook before processing.
       console.log("[WEBHOOK] Triggering AI response (awaited)...");
