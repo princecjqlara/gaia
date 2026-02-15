@@ -2386,12 +2386,24 @@ ${faqContent}
         `- ID:${p.id} | ${p.title} | ${p.address} | ₱${parseInt(p.price || 0).toLocaleString()} | ${p.bedrooms || '?'}BR/${p.bathrooms || '?'}BA | ${p.floor_area || '?'}sqm${p.images?.[0] ? ` | img:${p.images[0]}` : ''}`
       ).join('\n');
 
-      aiPrompt += `\n## 🏠 PROPERTIES FOR SALE\n${propertyList}\n\nTo show a property card: SEND_PROPERTY_CARD: [property_id]\nAsk about budget/location/bedrooms first. Max 3 cards at once.\n`;
+      aiPrompt += `\n## 🏠 PROPERTIES FOR SALE\n${propertyList}\n\nTo show a property card: SEND_PROPERTY_CARD: [property_id]\nWhen customer mentions budget, location, size, or preferences, IMMEDIATELY suggest the BEST MATCHING property from the list above and send its card.\nAsk about budget/location/bedrooms first. Max 3 cards at once.\n`;
     }
 
     if (config.booking_url) {
-      aiPrompt += `\nBooking link: ${config.booking_url}\n`;
+      aiPrompt += `\n## 📅 BOOKING LINK (CRITICAL - ALWAYS SHARE THIS)
+Booking link: ${config.booking_url}
+
+**MANDATORY RULES for booking link:**
+1. On your VERY FIRST reply to ANY new customer, ALWAYS include this booking link. Say something like: "You can also book a consultation here: ${config.booking_url}"
+2. Whenever the customer shows interest (asks about price, availability, features, wants to see a property), INCLUDE the booking link again.
+3. Whenever you recommend a property, ALSO share the booking link for a viewing.
+4. If a customer seems like a hot lead, interested buyer, or asks detailed questions, ALWAYS resurface this link.
+5. NEVER let a conversation go 3+ messages without mentioning the booking link if the customer hasn't booked yet.
+`;
     }
+
+    // Detect if this is the first AI reply (for booking button logic)
+    const isFirstAIReply = !recentMessages || recentMessages.filter(m => m.is_from_page).length === 0;
 
     aiPrompt += `
 ## RULES
@@ -2401,6 +2413,7 @@ ${faqContent}
 - Example: "Hello po! ||| I'd be happy to help. ||| What are you looking for?"
 - When booking confirmed, add at END: BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | Name | Phone
 - Use 24h format (18:00 not 6pm), PIPE | separator
+${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great first impression! Include the booking link.' : ''}
 `;
 
     // Build messages array, handling images for vision models
@@ -3325,6 +3338,68 @@ ${faqContent}
     console.log("[WEBHOOK] AI reply sent successfully!");
 
     console.log(`[WEBHOOK] AI reply sent! Total time: ${Date.now() - startTime}ms`);
+
+    // AUTO-SEND BOOKING BUTTON after first AI reply (or when customer is interested)
+    try {
+      const bookingUrl = config.booking_url;
+      if (bookingUrl) {
+        // Check if this is the first page reply OR if AI label indicates interest
+        const pageReplies = recentMessages?.filter(m => m.is_from_page) || [];
+        const aiLabel = conversation?.ai_label || '';
+        const interestLabels = ['hot_lead', 'warm_lead', 'interested', 'needs_info', 'price_sensitive'];
+        const isInterested = interestLabels.some(l => aiLabel.toLowerCase().includes(l));
+
+        // Send booking button on first reply OR when customer shows interest
+        if (pageReplies.length <= 1 || isInterested) {
+          console.log(`[WEBHOOK] 📅 Auto-sending booking button (firstReply: ${pageReplies.length <= 1}, interested: ${isInterested})`);
+
+          const participantId = conversation?.participant_id || conversationId.replace("t_", "");
+
+          // Small delay so it appears after the AI text messages
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          const bookingBtnBody = {
+            recipient: { id: participantId },
+            message: {
+              attachment: {
+                type: "template",
+                payload: {
+                  template_type: "button",
+                  text: "📅 Ready to book? Click below to schedule your consultation!",
+                  buttons: [
+                    {
+                      type: "web_url",
+                      url: bookingUrl,
+                      title: "📅 Book Now",
+                      webview_height_ratio: "full"
+                    }
+                  ]
+                }
+              }
+            },
+            messaging_type: "RESPONSE"
+          };
+
+          const btnResponse = await fetch(
+            `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(bookingBtnBody),
+            }
+          );
+
+          if (btnResponse.ok) {
+            console.log("[WEBHOOK] ✅ Booking button sent automatically!");
+          } else {
+            const btnErr = await btnResponse.text();
+            console.log("[WEBHOOK] Booking button send failed (non-fatal):", btnErr.substring(0, 100));
+          }
+        }
+      }
+    } catch (bookingBtnErr) {
+      console.log("[WEBHOOK] Booking button error (non-fatal):", bookingBtnErr.message);
+    }
 
     // FIRE-AND-FORGET: Schedule follow-up in background (don't await)
     analyzeAndScheduleFollowUp(db, conversationId, pageId, conversation, recentMessages)

@@ -242,6 +242,34 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   // Mobile view
   const [mobileView, setMobileView] = useState("list"); // 'list', 'chat', 'details'
 
+  // Contact Insights (property matching + similar contacts)
+  const [contactInsights, setContactInsights] = useState(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [insightsExpanded, setInsightsExpanded] = useState({ properties: true, similar: true });
+
+  // Fetch contact insights when conversation changes
+  useEffect(() => {
+    if (!selectedConversation?.conversation_id) {
+      setContactInsights(null);
+      return;
+    }
+    const fetchInsights = async () => {
+      setLoadingInsights(true);
+      try {
+        const resp = await fetch(`/api/contact-insights?conversationId=${encodeURIComponent(selectedConversation.conversation_id)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setContactInsights(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch contact insights:", err);
+      } finally {
+        setLoadingInsights(false);
+      }
+    };
+    fetchInsights();
+  }, [selectedConversation?.conversation_id]);
+
   // Auto-analyze conversation:
   // 1. On selection if no analysis exists
   // 2. Every 3 messages
@@ -3386,6 +3414,255 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                 )}
 
               {/* Viewed Properties */}
+
+              {/* 🏠 Best Matching Properties */}
+              {(contactInsights?.propertyMatches?.length > 0 || loadingInsights) && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <div
+                    onClick={() => setInsightsExpanded(prev => ({ ...prev, properties: !prev.properties }))}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      cursor: "pointer",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <h5 style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span>🏠</span> Best Matching Properties
+                    </h5>
+                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                      {insightsExpanded.properties ? "▼" : "▶"}
+                    </span>
+                  </div>
+                  {insightsExpanded.properties && (
+                    loadingInsights ? (
+                      <div style={{ textAlign: "center", padding: "1rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                        ⏳ Analyzing preferences...
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        {contactInsights?.preferences && Object.keys(contactInsights.preferences).length > 0 && (
+                          <div style={{
+                            padding: "0.4rem 0.6rem",
+                            background: "rgba(59, 130, 246, 0.1)",
+                            borderRadius: "var(--radius-sm)",
+                            fontSize: "0.7rem",
+                            color: "var(--primary)",
+                          }}>
+                            📋 Detected: {Object.entries(contactInsights.preferences).map(([k, v]) => `${k}: ${v}`).join(" • ")}
+                          </div>
+                        )}
+                        {contactInsights?.propertyMatches?.map((match, idx) => (
+                          <div
+                            key={match.propertyId || idx}
+                            style={{
+                              padding: "0.6rem",
+                              background: "var(--bg-secondary)",
+                              borderRadius: "var(--radius-md)",
+                              border: `1px solid ${match.matchScore >= 70 ? "rgba(16, 185, 129, 0.3)" : match.matchScore >= 40 ? "rgba(245, 158, 11, 0.3)" : "var(--border-color)"}`,
+                            }}
+                          >
+                            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                              {match.image && (
+                                <img
+                                  src={match.image}
+                                  alt=""
+                                  style={{ width: "48px", height: "48px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }}
+                                />
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div style={{ fontWeight: "600", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {match.title}
+                                  </div>
+                                  <span style={{
+                                    fontSize: "0.7rem",
+                                    fontWeight: "700",
+                                    padding: "0.15rem 0.4rem",
+                                    borderRadius: "999px",
+                                    background: match.matchScore >= 70 ? "rgba(16, 185, 129, 0.2)" : match.matchScore >= 40 ? "rgba(245, 158, 11, 0.2)" : "rgba(107, 114, 128, 0.2)",
+                                    color: match.matchScore >= 70 ? "#10b981" : match.matchScore >= 40 ? "#f59e0b" : "#6b7280",
+                                    flexShrink: 0,
+                                  }}>
+                                    {match.matchScore}%
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
+                                  ₱{parseInt(match.price || 0).toLocaleString()} • {match.bedrooms || "?"}BR/{match.bathrooms || "?"}BA
+                                </div>
+                                {/* Match score bar */}
+                                <div style={{ marginTop: "0.3rem", height: "3px", background: "var(--border-color)", borderRadius: "2px", overflow: "hidden" }}>
+                                  <div style={{
+                                    width: `${match.matchScore}%`,
+                                    height: "100%",
+                                    background: match.matchScore >= 70 ? "#10b981" : match.matchScore >= 40 ? "#f59e0b" : "#6b7280",
+                                    borderRadius: "2px",
+                                    transition: "width 0.5s ease",
+                                  }} />
+                                </div>
+                                {match.reasons?.length > 0 && (
+                                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
+                                    {match.reasons.slice(0, 2).join(" • ")}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{ width: "100%", marginTop: "0.4rem", fontSize: "0.7rem" }}
+                              onClick={() => {
+                                if (match.propertyId && selectedConversation) {
+                                  facebookService.sendPropertyCard(
+                                    selectedConversation.page_id,
+                                    selectedConversation.participant_id,
+                                    {
+                                      id: match.propertyId,
+                                      title: match.title,
+                                      images: match.image ? [match.image] : [],
+                                      price: match.price,
+                                      bedrooms: match.bedrooms,
+                                      bathrooms: match.bathrooms,
+                                    },
+                                    selectedConversation.participant_name
+                                  ).then(() => alert("Property card sent!")).catch(err => alert("Failed: " + err.message));
+                                }
+                              }}
+                            >
+                              📤 Send Card to Contact
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              {/* 👥 Similar Contacts (Success Paths) */}
+              {(contactInsights?.similarContacts?.length > 0 || loadingInsights) && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <div
+                    onClick={() => setInsightsExpanded(prev => ({ ...prev, similar: !prev.similar }))}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      cursor: "pointer",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <h5 style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span>👥</span> Similar Contacts
+                      {contactInsights?.similarContacts?.some(c => c.isConverted) && (
+                        <span style={{ fontSize: "0.6rem", background: "rgba(16, 185, 129, 0.2)", color: "#10b981", padding: "0.1rem 0.3rem", borderRadius: "999px" }}>
+                          has conversions
+                        </span>
+                      )}
+                    </h5>
+                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                      {insightsExpanded.similar ? "▼" : "▶"}
+                    </span>
+                  </div>
+                  {insightsExpanded.similar && (
+                    loadingInsights ? (
+                      <div style={{ textAlign: "center", padding: "1rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                        ⏳ Finding similar contacts...
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                        {contactInsights?.similarContacts?.map((contact, idx) => (
+                          <div
+                            key={contact.conversationId || idx}
+                            style={{
+                              padding: "0.6rem",
+                              background: contact.isConverted
+                                ? "linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.08))"
+                                : "var(--bg-secondary)",
+                              borderRadius: "var(--radius-md)",
+                              border: `1px solid ${contact.isConverted ? "rgba(16, 185, 129, 0.25)" : "var(--border-color)"}`,
+                            }}
+                          >
+                            {/* Contact header */}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                                <div style={{
+                                  width: "24px", height: "24px", borderRadius: "50%",
+                                  background: contact.isConverted ? "var(--success)" : "var(--primary)",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  color: "white", fontSize: "0.6rem", fontWeight: "bold",
+                                }}>
+                                  {contact.name?.charAt(0)?.toUpperCase() || "?"}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: "600", fontSize: "0.75rem" }}>{contact.name}</div>
+                                  <div style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>
+                                    {contact.stage && <span>{contact.stage}</span>}
+                                    {contact.label && <span> • {contact.label}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                              <span style={{
+                                fontSize: "0.7rem", fontWeight: "700",
+                                padding: "0.15rem 0.4rem", borderRadius: "999px",
+                                background: contact.similarity >= 60 ? "rgba(16, 185, 129, 0.2)" : "rgba(59, 130, 246, 0.2)",
+                                color: contact.similarity >= 60 ? "#10b981" : "#3b82f6",
+                              }}>
+                                {contact.similarity}% match
+                              </span>
+                            </div>
+
+                            {/* Match reasons */}
+                            {contact.reasons?.length > 0 && (
+                              <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginBottom: "0.4rem" }}>
+                                {contact.reasons.join(" • ")}
+                              </div>
+                            )}
+
+                            {/* Success Path Timeline */}
+                            {contact.successPath?.length > 0 && (
+                              <div style={{ marginTop: "0.3rem" }}>
+                                <div style={{ fontSize: "0.65rem", fontWeight: "600", color: "var(--text-muted)", marginBottom: "0.3rem" }}>
+                                  {contact.isConverted ? "✨ Success Path:" : "📍 Journey:"}
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", paddingLeft: "0.3rem", borderLeft: `2px solid ${contact.isConverted ? "rgba(16, 185, 129, 0.3)" : "var(--border-color)"}` }}>
+                                  {contact.successPath.map((step, si) => (
+                                    <div key={si} style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.65rem", paddingLeft: "0.4rem" }}>
+                                      <span>{step.icon}</span>
+                                      <span style={{ color: "var(--text-primary)", fontWeight: si === contact.successPath.length - 1 ? "600" : "400" }}>
+                                        Day {step.day}: {step.event}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Use Strategy button for converted contacts */}
+                            {contact.isConverted && (
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                style={{ width: "100%", marginTop: "0.4rem", fontSize: "0.7rem", background: "rgba(16, 185, 129, 0.1)", borderColor: "rgba(16, 185, 129, 0.3)" }}
+                                onClick={() => {
+                                  const strategy = contact.successPath?.map(s => `Day ${s.day}: ${s.event} (${s.detail})`).join("\n") || "";
+                                  const context = `Similar converted contact "${contact.name}" (${contact.similarity}% match) followed this path:\n${strategy}\n\nConsider applying a similar approach.`;
+                                  navigator.clipboard.writeText(context)
+                                    .then(() => alert("Strategy copied to clipboard! Paste it into Agent Context notes."))
+                                    .catch(() => alert("Strategy:\n\n" + context));
+                                }}
+                              >
+                                📋 Copy Success Strategy
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+
               {previewViewedProperties.length > 0 && (
                 <div style={{ marginBottom: "1.5rem" }}>
                   <div
