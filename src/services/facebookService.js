@@ -3469,9 +3469,15 @@ class FacebookService {
             if (participantId) {
                 // Also delete by participant ID to be thorough
                 await db.from('calendar_events').delete().eq('contact_psid', participantId);
+
+                // Delete property views (associated with participant)
+                await db.from('property_views').delete().eq('participant_id', participantId);
             }
 
-            // 6. Delete Linked Client (CRM)
+            // 6. Delete AI Action Logs
+            await db.from('ai_action_log').delete().eq('conversation_id', conversationId);
+
+            // 7. Delete Linked Client (CRM)
             if (linkedClientId) {
                 const { error: clientError } = await db
                     .from('clients')
@@ -3482,7 +3488,7 @@ class FacebookService {
                 else console.log(`[DELETE] Deleted linked client: ${linkedClientId}`);
             }
 
-            // 7. Finally, delete the conversation
+            // 8. Finally, delete the conversation
             const { error: convError } = await db
                 .from('facebook_conversations')
                 .delete()
@@ -3502,4 +3508,4 @@ class FacebookService {
 
 export const facebookService = new FacebookService();
 export default facebookService;
-
+```
