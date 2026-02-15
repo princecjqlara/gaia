@@ -2259,7 +2259,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       [pageResult, propertiesResult, messagesResult] = await Promise.all([
         db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single(),
         db.from("properties").select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images").eq("status", "For Sale").order("created_at", { ascending: false }).limit(10),
-        db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(15),
+        db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }),
       ]);
     } catch (parallelErr) {
       console.error("[WEBHOOK] Parallel fetch 2 FAILED:", parallelErr.message);
