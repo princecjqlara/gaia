@@ -4584,9 +4584,10 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     }
 
     // Fallback: use the app's own booking page
+    // NOTE: VERCEL_URL is the preview deployment URL (behind auth), use VERCEL_PROJECT_PRODUCTION_URL instead
     if (!bookingUrl) {
-      const appHost = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
+      const appHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
         : process.env.APP_URL || "https://gaia-app.vercel.app";
       bookingUrl = `${appHost}/booking?pageId=${pageId}`;
       console.log("[WEBHOOK] Using fallback booking URL:", bookingUrl);
@@ -4612,6 +4613,8 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     } else if (aiGenEnabled) {
       // Generate PERSONALIZED Welcome via AI
       const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
+      const botDos = settings?.value?.bot_rules_dos || "";
+      const botDonts = settings?.value?.bot_rules_donts || "";
       const welcomePrompt = `
         ${systemPrompt}
         
@@ -4620,6 +4623,8 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
         TONE: Warm, professional, enthusiastic.
         LANGUAGE: Taglish (Filipino/English mix).
         limit: 1-2 sentences max. NO hashtags.
+        ${botDos ? `\n## ✅ DO's (MUST FOLLOW)\n${botDos}` : ''}
+        ${botDonts ? `\n## ❌ DON'Ts (NEVER DO THESE)\n${botDonts}` : ''}
       `;
 
       try {
