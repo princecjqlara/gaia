@@ -1197,6 +1197,7 @@ async function handlePropertyClick(req, res, body) {
       propertyTitle,
       participantId,
       conversation.participant_name,
+      conversation.page_id // Pass page_id
     );
 
     // 4. Send immediate message to the contact
@@ -1270,6 +1271,7 @@ async function logPropertyView(
   propertyTitle,
   participantId,
   visitorName,
+  pageId = null // Add pageId param
 ) {
   try {
     await db.from("property_views").insert({
@@ -1277,10 +1279,11 @@ async function logPropertyView(
       property_title: propertyTitle,
       participant_id: participantId,
       visitor_name: visitorName,
+      page_id: pageId, // Insert page_id
       source: "fb_messenger",
       viewed_at: new Date().toISOString(),
     });
-    console.log("[PROPERTY CLICK] ✅ View logged to database");
+    console.log("[PROPERTY CLICK] ✅ View logged to database with page_id:", pageId);
   } catch (err) {
     console.error("[PROPERTY CLICK] Failed to log view:", err.message);
   }

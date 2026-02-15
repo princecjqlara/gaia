@@ -3313,9 +3313,14 @@ class FacebookService {
                 console.log(`[INSIGHTS] Looking for property views for PID: "${pid}" / Name: "${visitorName}"`);
 
                 // Build OR conditions for finding matching views
-                let orConditions = [];
+                // Build OR conditions for finding matching views
+                // 1. Participant ID match (Always safe because PSID is page-scoped)
                 if (pid) orConditions.push(`participant_id.eq.${pid}`);
-                if (visitorName) orConditions.push(`visitor_name.eq.${visitorName}`);
+
+                // 2. Name + Page ID match (Require page_id to match if falling back to name)
+                if (visitorName && convData?.page_id) {
+                    orConditions.push(`and(visitor_name.eq.${visitorName},page_id.eq.${convData.page_id})`);
+                }
 
                 // Fallback if no conditions
                 if (orConditions.length === 0) {
@@ -3323,7 +3328,7 @@ class FacebookService {
                     return null;
                 }
 
-                // Find stats in property_views matching the participant_id (best) or visitor name (fallback)
+                // Find stats in property_views matching the participant_id (best) or (visitor name AND page_id)
                 console.log('[INSIGHTS] Running query with conditions:', orConditions.join(','));
                 const { data: viewsData, error: viewError } = await getSupabase()
                     .from('property_views')
