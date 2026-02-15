@@ -4564,10 +4564,21 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     // DEBUG: Log settings to find correct booking URL key
     console.log("[WEBHOOK] Welcome Settings Dump:", JSON.stringify(settings?.value || {}, null, 2));
 
-    // Try multiple keys for booking URL from ai_chatbot_config
-    let bookingUrl = settings?.value?.booking_url || settings?.value?.booking_link || settings?.value?.bookingLink;
+    // === BOOKING URL LOOKUP CHAIN (highest priority first) ===
+    // 1. Environment variable (most reliable — set once in Vercel dashboard)
+    let bookingUrl = process.env.BOOKING_URL || process.env.DEFAULT_BOOKING_URL;
 
-    // Also check booking_settings table if no URL found in ai_chatbot_config
+    // 2. Welcome button URL from config (new UI field)
+    if (!bookingUrl) {
+      bookingUrl = settings?.value?.welcome_button_url;
+    }
+
+    // 3. Booking URL keys from ai_chatbot_config
+    if (!bookingUrl) {
+      bookingUrl = settings?.value?.booking_url || settings?.value?.booking_link || settings?.value?.bookingLink;
+    }
+
+    // 4. Check booking_settings table
     if (!bookingUrl) {
       try {
         const { data: bookingSettingsData } = await db
@@ -4583,8 +4594,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       }
     }
 
-    // Fallback: use the app's own booking page
-    // NOTE: VERCEL_URL is the preview deployment URL (behind auth), use VERCEL_PROJECT_PRODUCTION_URL instead
+    // 5. Final fallback: app's own booking page
     if (!bookingUrl) {
       const appHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
         ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
