@@ -3428,56 +3428,59 @@ class FacebookService {
             console.log(`[DELETE] Starting cascade delete for conversation: ${conversationId}`);
             const db = getSupabase();
 
-            // 1. Get stats before delete (for logging)
-            // Also get linked client ID to delete it later
+            // 1. Identify the participant
             const { data: convData } = await db
                 .from('facebook_conversations')
                 .select('linked_client_id, participant_id, page_id')
                 .eq('conversation_id', conversationId)
                 .single();
 
-            const linkedClientId = convData?.linked_client_id;
-            const participantId = convData?.participant_id;
-            const pageId = convData?.page_id;
-
-            // 2. Delete Messages
-            const { error: msgError, count: msgCount } = await db
-                .from('facebook_messages')
-                .delete({ count: 'exact' })
-                .eq('conversation_id', conversationId);
-
-            if (msgError) console.error('[DELETE] Error deleting messages:', msgError.message);
-            console.log(`[DELETE] Deleted ${msgCount} messages`);
-
-            // 3. Delete Tag Assignments
-            const { error: tagError } = await db
-                .from('conversation_tag_assignments')
-                .delete()
-                .eq('conversation_id', conversationId);
-
-            if (tagError) console.error('[DELETE] Error deleting tags:', tagError.message);
-
-            // 4. Delete Follow-up Schedules & Tokens
-            await db.from('ai_followup_schedule').delete().eq('conversation_id', conversationId);
-            await db.from('recurring_notification_tokens').delete().eq('conversation_id', conversationId);
-            await db.from('contact_engagement').delete().eq('conversation_id', conversationId);
-
-            // 5. Delete Calendar Events (linked to this conversation)
-            if (conversationId) {
-                await db.from('calendar_events').delete().eq('conversation_id', conversationId);
+            if (!convData) {
+                console.log(`[DELETE] Conversation ${conversationId} not found, already deleted?`);
+                return { success: true };
             }
-            if (participantId) {
-                // Also delete by participant ID to be thorough
-                await db.from('calendar_events').delete().eq('contact_psid', participantId);
 
-                // Delete property views (associated with participant)
+            const participantId = convData.participant_id;
+            const linkedClientId = convData.linked_client_id;
+
+            console.log(`[DELETE] Identified participant ${participantId} for cleanup`);
+
+            // 2. Find ALL conversation IDs for this participant (handle duplicates)
+            const { data: allConvs } = await db
+                .from('facebook_conversations')
+                .select('conversation_id')
+                .eq('participant_id', participantId);
+
+            const allConvIds = allConvs?.map(c => c.conversation_id) || [conversationId];
+            console.log(`[DELETE] Found ${allConvIds.length} conversation rows to clean up:`, allConvIds);
+
+            // 3. Perform deletions for ALL conversation IDs
+            if (allConvIds.length > 0) {
+                // Delete Messages
+                const { error: msgError, count: msgCount } = await db
+                    .from('facebook_messages')
+                    .delete({ count: 'exact' })
+                    .in('conversation_id', allConvIds);
+                if (msgError) console.error('[DELETE] Error deleting messages:', msgError.message);
+
+                // Delete Tag Assignments
+                await db.from('conversation_tag_assignments').delete().in('conversation_id', allConvIds);
+
+                // Delete Follow-up Schedules & Tokens
+                await db.from('ai_followup_schedule').delete().in('conversation_id', allConvIds);
+                await db.from('recurring_notification_tokens').delete().in('conversation_id', allConvIds);
+                await db.from('contact_engagement').delete().in('conversation_id', allConvIds);
+                await db.from('ai_action_log').delete().in('conversation_id', allConvIds);
+                await db.from('calendar_events').delete().in('conversation_id', allConvIds);
+            }
+
+            // 4. Participant-level cleanups (independent of conversation ID)
+            if (participantId) {
+                await db.from('calendar_events').delete().eq('contact_psid', participantId);
                 await db.from('property_views').delete().eq('participant_id', participantId);
             }
 
-            // 6. Delete AI Action Logs
-            await db.from('ai_action_log').delete().eq('conversation_id', conversationId);
-
-            // 7. Delete Linked Client (CRM)
+            // 5. Delete Linked Client (CRM)
             if (linkedClientId) {
                 const { error: clientError } = await db
                     .from('clients')
@@ -3485,18 +3488,17 @@ class FacebookService {
                     .eq('id', linkedClientId);
 
                 if (clientError) console.error('[DELETE] Error deleting client:', clientError.message);
-                else console.log(`[DELETE] Deleted linked client: ${linkedClientId}`);
             }
 
-            // 8. Finally, delete the conversation
+            // 6. Finally, delete ALL conversation rows
             const { error: convError } = await db
                 .from('facebook_conversations')
                 .delete()
-                .eq('conversation_id', conversationId);
+                .eq('participant_id', participantId); // Delete by participant_id to catch everything
 
             if (convError) throw convError;
 
-            console.log(`[DELETE] Successfully deleted conversation ${conversationId}`);
+            console.log(`[DELETE] Successfully deleted all data for participant ${participantId}`);
             return { success: true, deletedClientId: linkedClientId };
 
         } catch (error) {
