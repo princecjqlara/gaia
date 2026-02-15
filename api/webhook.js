@@ -4474,12 +4474,11 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       const errorData = await resp.json();
       console.error("[WEBHOOK] FB Send Error:", errorData);
     }
-  }
     return false;
-} catch (error) {
-  console.error(`[WEBHOOK] Failed to send welcome message: ${error.message}`);
-  return false;
-}
+  } catch (error) {
+    console.error(`[WEBHOOK] Failed to send welcome message: ${error.message}`);
+    return false;
+  }
 }
 
 export const config = {
