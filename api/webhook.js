@@ -2384,6 +2384,57 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     const knownPhone =
       conversation?.phone_number || conversation?.extracted_details?.phone;
 
+    // ============================================
+    // EVALUATION GATING LOGIC (NEW)
+    // ============================================
+    let evaluationScore = 0;
+    let canViewProperties = true;
+    let gatingReason = "";
+
+    try {
+      // 1. Get threshold setting (default 70%)
+      const { data: thresholdSetting } = await db
+        .from('settings')
+        .select('value')
+        .eq('key', 'evaluation_threshold')
+        .single();
+      const threshold = thresholdSetting?.value?.percentage || 70;
+
+      // 2. Calculate base progress using goalController
+      const { evaluateGoalProgress } = await import("../src/services/goalController.js");
+      // Use 'qualify_lead' logic for evaluation gating
+      const baseProgress = evaluateGoalProgress(recentMessages, { goal_type: 'qualify_lead' });
+
+      // 3. Boost score based on extracted data (hard facts are most important)
+      let dataScore = 0;
+      const details = conversation?.extracted_details || {};
+      const analysis = conversation?.ai_analysis || {};
+
+      if (details.budget || analysis.budget) dataScore += 25;
+      if (details.location || analysis.preferred_location) dataScore += 25;
+      if (details.property_type || analysis.property_type) dataScore += 10;
+      if (details.bedrooms || analysis.bedrooms) dataScore += 10;
+
+      // Final Score = Base (Action/Text) + Data (Facts)
+      // Base progress maxes at ~50% without specific keywords, so data fills the rest
+      evaluationScore = Math.min(100, normalizeProgress(baseProgress.progress) + dataScore);
+
+      function normalizeProgress(p) { return p || 0; }
+
+      // 4. Determine status
+      if (evaluationScore < threshold) {
+        canViewProperties = false;
+        gatingReason = `Evaluation score ${evaluationScore}% is below threshold ${threshold}%`;
+        console.log(`[WEBHOOK] ⛔ Property gating ACTIVE: ${gatingReason}`);
+      } else {
+        console.log(`[WEBHOOK] ✅ Property gating PASSED: Score ${evaluationScore}% >= ${threshold}%`);
+      }
+    } catch (evalErr) {
+      console.error("[WEBHOOK] Evaluation logic error:", evalErr.message);
+      // Fallback: allow properties if error, to avoid blocking users due to bugs
+      canViewProperties = true;
+    }
+
     // DEBUG: Log what RAG content we have
     console.log("[WEBHOOK] RAG Content Check:", {
       hasKnowledgeBase: !!knowledgeBase,
@@ -2495,13 +2546,38 @@ ${faqContent}
       aiPrompt += `\n## ❌ DON'Ts\n${config.bot_rules_donts}\n`;
     }
 
-    // Add properties (compact format)
+    // Add properties (compact format) — GATED by evaluation score
     if (properties && properties.length > 0) {
-      const propertyList = properties.map((p) =>
-        `- ID:${p.id} | ${p.title} | ${p.address} | ₱${parseInt(p.price || 0).toLocaleString()} | ${p.bedrooms || '?'}BR/${p.bathrooms || '?'}BA | ${p.floor_area || '?'}sqm${p.images?.[0] ? ` | img:${p.images[0]}` : ''}`
-      ).join('\n');
+      if (canViewProperties) {
+        // ✅ Evaluation threshold met — show properties but enforce BEST MATCH ONLY
+        const propertyList = properties.map((p) =>
+          `- ID:${p.id} | ${p.title} | ${p.address} | ₱${parseInt(p.price || 0).toLocaleString()} | ${p.bedrooms || '?'}BR/${p.bathrooms || '?'}BA | ${p.floor_area || '?'}sqm${p.images?.[0] ? ` | img:${p.images[0]}` : ''}`
+        ).join('\n');
 
-      aiPrompt += `\n## 🏠 PROPERTIES FOR SALE\n${propertyList}\n\nTo show a property card: SEND_PROPERTY_CARD: [property_id]\nWhen customer mentions budget, location, size, or preferences, IMMEDIATELY suggest the BEST MATCHING property from the list above and send its card.\nAsk about budget/location/bedrooms first. Max 3 cards at once.\n`;
+        aiPrompt += `\n## 🏠 PROPERTIES FOR SALE (EVALUATION COMPLETE ✅ — Score: ${evaluationScore}%)
+${propertyList}
+
+To show a property card: SEND_PROPERTY_CARD: [property_id]
+
+## ⚠️ STRICT RULES FOR PROPERTY RECOMMENDATIONS
+1. Send ONLY the **ONE** best-matching property card. Never send multiple cards unless the customer explicitly asks "show me more" or "other options".
+2. Explain WHY this property is the best match for them based on their stated preferences.
+3. If the customer asks for alternatives, you may send ONE more at a time.
+`;
+      } else {
+        // ⛔ Evaluation NOT complete — AI cannot see or recommend properties
+        aiPrompt += `\n## 🏠 PROPERTY RECOMMENDATIONS (LOCKED 🔒 — Score: ${evaluationScore}%)
+You do NOT have access to the property list yet. The customer's evaluation is incomplete.
+You MUST gather the following information before properties can be unlocked:
+- 💰 Budget (how much they can afford)
+- 📍 Preferred location/area
+- 🏠 Property type preference (condo, house, lot, etc.)
+- 🛏️ Number of bedrooms needed
+
+Ask these questions NATURALLY in conversation. Do NOT say "evaluation" or "threshold" to the customer.
+Instead say things like: "Para ma-recommend ko po yung perfect property for you, can I ask a few quick questions?"
+`;
+      }
     }
 
     if (config.booking_url) {
@@ -3317,6 +3393,38 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
         continue; // Done with this part
       }
 
+      // Check for SHOW_PROFILE_CARD marker (MANUAL trigger only — AI does NOT generate this)
+      const profileCardMatch = part.match(/^SHOW_PROFILE_CARD$/i);
+      if (profileCardMatch) {
+        const details = conversation?.extracted_details || {};
+        const analysis = conversation?.ai_analysis || {};
+        const name = conversation?.participant_name || "Customer";
+
+        // Build profile summary lines
+        const profileLines = [];
+        if (details.budget || analysis.budget) profileLines.push(`💰 Budget: ${details.budget || analysis.budget}`);
+        if (details.location || analysis.preferred_location) profileLines.push(`📍 Location: ${details.location || analysis.preferred_location}`);
+        if (details.property_type || analysis.property_type) profileLines.push(`🏠 Type: ${details.property_type || analysis.property_type}`);
+        if (details.bedrooms || analysis.bedrooms) profileLines.push(`🛏️ Bedrooms: ${details.bedrooms || analysis.bedrooms}`);
+        if (details.bathrooms || analysis.bathrooms) profileLines.push(`🚿 Bathrooms: ${details.bathrooms || analysis.bathrooms}`);
+        if (details.floor_area || analysis.floor_area) profileLines.push(`📐 Floor Area: ${details.floor_area || analysis.floor_area} sqm`);
+
+        if (profileLines.length === 0) {
+          profileLines.push("No preferences gathered yet.");
+        }
+
+        const subtitle = profileLines.join('\n');
+
+        processedMessages.push({
+          type: "profile_card",
+          name: name,
+          subtitle: subtitle,
+          score: evaluationScore
+        });
+        console.log(`[WEBHOOK] 📋 Profile card added for: ${name} (score: ${evaluationScore}%)`);
+        continue;
+      }
+
       // Check for SEND_PROPERTY_CARD marker
       const propertyCardMatch = part.match(/^SEND_PROPERTY_CARD:\s*([a-zA-Z0-9\-]+)/i);
 
@@ -3448,6 +3556,29 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           updated_at: new Date().toISOString(),
         }).eq("conversation_id", conversationId).then(() => { });
 
+      } else if (part.type === "profile_card") {
+        // Instagram-style profile summary card (MANUAL trigger only)
+        const scoreEmoji = part.score >= 70 ? "✅" : part.score >= 40 ? "🟡" : "🔴";
+        messageBody = {
+          recipient: { id: participantId },
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "button",
+                text: `📋 ${part.name}'s Profile ${scoreEmoji}\n━━━━━━━━━━━━━━━━━\n${part.subtitle}\n━━━━━━━━━━━━━━━━━\n📊 Evaluation: ${part.score}%`,
+                buttons: [
+                  {
+                    type: "postback",
+                    title: "🏠 Show Best Match",
+                    payload: "REQUEST_BEST_PROPERTY"
+                  }
+                ]
+              }
+            }
+          },
+          messaging_type: "RESPONSE"
+        };
       } else {
         // Regular text message
         messageBody = {

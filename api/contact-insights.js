@@ -107,15 +107,21 @@ function scorePropertyMatch(property, preferences) {
     }
 
     // If no preferences extracted, score based on property quality
+    // If no preferences extracted, score based on property quality but keep percentage LOW
     if (maxScore === 0) {
         maxScore = 100;
-        // Give baseline score based on property completeness
-        if (property.price) score += 20;
-        if (property.images?.length > 0) score += 20;
-        if (property.bedrooms) score += 10;
-        if (property.bathrooms) score += 10;
-        if (property.description) score += 10;
-        reasons.push("General recommendation (no specific preferences detected)");
+        // Give baseline score based on property completeness, but scaled down
+        // so it doesn't look like a high-confidence match (max ~10%)
+        if (property.price) score += 2;
+        if (property.images?.length > 0) score += 2;
+        if (property.bedrooms) score += 1;
+        if (property.bathrooms) score += 1;
+        if (property.description) score += 1;
+
+        // Ensure at least 1% if it's a valid property so it shows up
+        if (score === 0) score = 1;
+
+        reasons.push("New recommendation (waiting for preferences)");
     }
 
     return {

@@ -406,6 +406,22 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         // localStorage already saved above as backup
       }
 
+      // Save evaluation threshold to settings table
+      try {
+        const db = await getDb();
+        const { error } = await db
+          .from('settings')
+          .upsert({
+            key: 'evaluation_threshold',
+            value: { percentage: evaluationThreshold }
+          }, { onConflict: 'key' });
+
+        if (error) console.error('Error saving evaluation threshold:', error);
+        else console.log('Saved evaluation threshold:', evaluationThreshold);
+      } catch (err) {
+        console.error('Error saving evaluation threshold to DB:', err);
+      }
+
 
 
       setMessage({ type: 'success', text: 'Settings saved successfully! Page will reload in 1 second...' });
