@@ -2487,6 +2487,8 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     let evaluationScore = 0;
     let canViewProperties = true;
     let gatingReason = "";
+    let evaluationThreshold = 70;
+    let evaluationHalfThreshold = 35;
 
     try {
       // 1. Get threshold setting (default 70%) — NO .single() to avoid PGRST116 when row missing
@@ -2502,6 +2504,8 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
         }
       } catch (e) { /* use default 70 */ }
       console.log(`[WEBHOOK] 📋 Eval threshold: ${threshold}%`);
+      evaluationThreshold = threshold;
+      evaluationHalfThreshold = Math.round(threshold / 2);
 
       // 2. Load evaluation questions from config or dedicated settings key
       let evalQuestions = [];
@@ -2709,9 +2713,12 @@ The above context was provided by a team member. Use this information to persona
     const hasOptedIn = conversation?.recurring_optin_status === 'opted_in';
 
     // === BOOKING PUSH FREQUENCY CONTROL ===
-    // Only push booking on first encounter, after silence, or every 5th reply
+    // Only push booking on first encounter, evaluation halfway, or evaluation complete
     const aiReplyCount = recentMessages ? recentMessages.filter(m => m.is_from_page).length : 0;
     const isFirstAIReply = aiReplyCount === 0;
+    const bookingMilestones = (conversation?.booking_btn_milestones && typeof conversation.booking_btn_milestones === "object")
+      ? conversation.booking_btn_milestones
+      : {};
 
     // Check time gap since last contact message (for silence detection)
     let timeSinceLastContactMsg = 0; // in minutes
@@ -2723,9 +2730,10 @@ The above context was provided by a team member. Use this information to persona
       }
     }
 
-    const shouldPushBooking = isFirstAIReply                     // First encounter
-      || timeSinceLastContactMsg > 30                            // After 30+ min silence
-      || (aiReplyCount > 0 && aiReplyCount % 5 === 0);          // Every 5th reply
+    const isFirstBooking = isFirstAIReply && !bookingMilestones.first;
+    const atHalfBooking = evaluationScore >= evaluationHalfThreshold && !bookingMilestones.half;
+    const atFullBooking = evaluationScore >= evaluationThreshold && !bookingMilestones.full;
+    const shouldPushBooking = isFirstBooking || atHalfBooking || atFullBooking;
 
     aiPrompt += `
 ## 🎯 YOUR PRIORITIES (Follow this order STRICTLY)
@@ -2906,7 +2914,7 @@ ${shouldPushBooking ? 'You may mention booking verbally (e.g. "you can book a co
     }
 
     // Log booking push decision
-    console.log(`[WEBHOOK] Booking push decision: isFirst=${isFirstAIReply}, shouldPush=${shouldPushBooking}, aiReplies=${aiReplyCount}, gapMinutes=${Math.round(timeSinceLastContactMsg)}`);
+    console.log(`[WEBHOOK] Booking push decision: first=${isFirstBooking}, half=${atHalfBooking}, full=${atFullBooking}, shouldPush=${shouldPushBooking}, aiReplies=${aiReplyCount}, gapMinutes=${Math.round(timeSinceLastContactMsg)}`);
 
     aiPrompt += `
 ## RULES
@@ -3962,19 +3970,12 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
       const bookingUrl = config.booking_url;
       if (bookingUrl) {
         // Get the evaluation threshold (default 70%) and check milestones
-        const { data: thresholdSetting2 } = await db
-          .from('settings')
-          .select('value')
-          .eq('key', 'evaluation_threshold')
-          .single()
-          .then(r => r)
-          .catch(() => ({ data: null }));
-        const evalThreshold = thresholdSetting2?.value?.percentage || 70;
-        const halfThreshold = Math.round(evalThreshold / 2);
+        const evalThreshold = evaluationThreshold;
+        const halfThreshold = evaluationHalfThreshold;
 
         // Check what booking milestone flags have been sent for this conversation
-        const bookingSent = conversation?.booking_btn_milestones || {};
-        const isFirst = pageReplies.length === 0;
+        const bookingSent = bookingMilestones;
+        const isFirst = pageReplies.length === 0 && !bookingSent.first;
         const atHalf = evaluationScore >= halfThreshold && !bookingSent.half;
         const atFull = evaluationScore >= evalThreshold && !bookingSent.full;
 
@@ -4207,7 +4208,7 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
       .insert({
         conversation_id: conversationId,
         page_id: pageId,
-        scheduled_for: scheduledAt.toISOString(),
+        scheduled_at: scheduledAt.toISOString(),
         follow_up_type: sanitizedType,
         reason: analysis.reason || "AI scheduled follow-up",
         status: "pending",
@@ -4316,14 +4317,31 @@ async function handleReadReceipt(pageId, event) {
     const delayMinutes = Math.floor(Math.random() * 11) + 5; // 5-15 minutes
     const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
 
-    await db.from('ai_followup_schedule').insert({
+    const reason = `read_receipt:${new Date(readTimestamp).toISOString()}|delay=${delayMinutes}m`;
+    const { error: insertError } = await db.from('ai_followup_schedule').insert({
       conversation_id: conv.conversation_id,
       page_id: pageId,
       scheduled_at: scheduledAt.toISOString(),
       status: 'pending',
       follow_up_type: 'read_receipt',
-      notes: `Contact read message at ${new Date(readTimestamp).toISOString()}. Scheduled read-aware follow-up in ${delayMinutes} minutes.`
+      reason
     });
+
+    if (insertError) {
+      console.log('[WEBHOOK] Read receipt schedule failed, retrying as reminder:', insertError.message);
+      const { error: fallbackError } = await db.from('ai_followup_schedule').insert({
+        conversation_id: conv.conversation_id,
+        page_id: pageId,
+        scheduled_at: scheduledAt.toISOString(),
+        status: 'pending',
+        follow_up_type: 'reminder',
+        reason
+      });
+      if (fallbackError) {
+        console.log('[WEBHOOK] Read receipt fallback failed:', fallbackError.message);
+        return;
+      }
+    }
 
     console.log(`[WEBHOOK] 👁️ Read-triggered follow-up scheduled for ${conv.participant_name || senderId} in ${delayMinutes} min`);
   } catch (err) {

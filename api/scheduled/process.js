@@ -589,7 +589,8 @@ export default async function handler(req, res) {
 
                         if (NVIDIA_API_KEY && conversationContext) {
                             // Determine if this is a read-receipt triggered follow-up
-                            const isReadTriggered = followup.follow_up_type === 'read_receipt';
+                            const isReadTriggered = followup.follow_up_type === 'read_receipt'
+                                || (typeof followup.reason === 'string' && followup.reason.startsWith('read_receipt:'));
                             const readReceiptContext = isReadTriggered
                                 ? `\n## IMPORTANT CONTEXT: The customer just opened and READ your last message moments ago but hasn't replied yet. They are likely active on their phone RIGHT NOW. This is a perfect time to gently nudge them. Do NOT say "I saw you read my message" — just follow up naturally as if you're catching them at a good time.\n`
                                 : '';

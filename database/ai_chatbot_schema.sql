@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS ai_followup_schedule (
     conversation_id TEXT NOT NULL REFERENCES facebook_conversations(conversation_id) ON DELETE CASCADE,
     page_id TEXT REFERENCES facebook_pages(page_id) ON DELETE CASCADE,
     scheduled_at TIMESTAMPTZ NOT NULL,
-    follow_up_type TEXT NOT NULL CHECK (follow_up_type IN ('best_time', 'intuition', 'manual', 'flow', 'reminder')),
+    follow_up_type TEXT NOT NULL CHECK (follow_up_type IN ('best_time', 'intuition', 'manual', 'flow', 'reminder', 'read_receipt')),
     reason TEXT, -- Why this follow-up was scheduled
     message_template TEXT, -- Pre-generated message or template
     goal_id UUID REFERENCES conversation_goals(id) ON DELETE SET NULL,
