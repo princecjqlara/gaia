@@ -2621,34 +2621,52 @@ The above context was provided by a team member. Use this information to persona
 
     // When evaluation is NOT complete, asking questions is top priority
     if (!canViewProperties) {
-      // Figure out what we still need
-      const missingInfo = [];
-      const knownInfo = [];
-      const details = conversation?.extracted_details || {};
-      const analysis = conversation?.ai_analysis || {};
-      if (details.budget || analysis.budget) knownInfo.push('Budget'); else missingInfo.push('💰 Budget — Ask: "Ano po ang budget range niyo para sa property?"');
-      if (details.location || analysis.preferred_location) knownInfo.push('Location'); else missingInfo.push('📍 Location — Ask: "Saang area po kayo naghahanap ng property?"');
-      if (details.property_type || analysis.property_type) knownInfo.push('Property type'); else missingInfo.push('🏠 Property type — Ask: "Anong type po ng property ang hanap niyo — condo, house and lot, or townhouse?"');
-      if (details.bedrooms || analysis.bedrooms) knownInfo.push('Bedrooms'); else missingInfo.push('🛏️ Bedrooms — Ask: "Ilang bedrooms po ang kailangan niyo?"');
+      // Load user-configured evaluation questions from DB
+      let evalQuestions = config.evaluation_questions || [];
+      try {
+        const { data: evalSetting } = await db
+          .from('settings')
+          .select('value')
+          .eq('key', 'evaluation_questions')
+          .single();
+        if (evalSetting?.value?.questions?.length > 0) {
+          evalQuestions = evalSetting.value.questions;
+        }
+      } catch (e) {
+        console.log('[WEBHOOK] Could not load evaluation_questions setting');
+      }
 
-      // Load configured evaluation questions
-      const evalQuestions = config.evaluation_questions || [];
+      // Track progress: how many AI replies = roughly how many questions asked
+      const aiReplies = (recentMessages || []).filter(m => m.is_from_page).length;
+      const nextQ = Math.min(aiReplies, Math.max(evalQuestions.length - 1, 0));
+
+      if (evalQuestions.length > 0) {
+        aiPrompt += `
+### Priority 1: 📋 ASK YOUR EVALUATION QUESTIONS (HIGHEST PRIORITY — MUST DO)
+You are evaluating this customer. Score: ${evaluationScore}% (need more info to unlock property recommendations).
+
+Here are YOUR evaluation questions. Ask them ONE AT A TIME in order. You've sent ~${aiReplies} replies so far.
+
+**YOUR QUESTIONS (ask the next ⬜ one):**
+${evalQuestions.map((q, i) => `${i + 1}. ${i < aiReplies ? '✅' : '⬜'} ${q}`).join('\n')}
+
+⚡ YOUR #1 JOB: Ask question #${nextQ + 1} NOW — "${evalQuestions[nextQ]}". Just ask it directly and naturally.
+- Do NOT ask "Can I ask you some questions?" — just ASK the question
+- Do NOT recommend any properties — they are LOCKED
+- Do NOT skip to booking or scheduling  
+- Ask ONE question per message, wait for their answer
+- Be natural and conversational, like a friendly agent
+`;
+      } else {
+        aiPrompt += `
+### Priority 1: 📋 GET TO KNOW THE CUSTOMER (HIGHEST PRIORITY)
+Ask the customer about what they're looking for in a property. Be conversational and friendly.
+Ask about their preferences naturally — what type, where, budget, size, etc.
+Ask ONE question per message. Do NOT recommend properties yet — they are locked.
+`;
+      }
 
       aiPrompt += `
-### Priority 1: 📋 ASK EVALUATION QUESTIONS (HIGHEST PRIORITY — MUST DO)
-You are evaluating this customer to find their perfect property. Score: ${evaluationScore}% (need ${canViewProperties ? 'COMPLETE' : `more info`}).
-
-**What we know so far:** ${knownInfo.length > 0 ? knownInfo.join(', ') : 'Nothing yet — start asking!'}
-**What we STILL NEED:** 
-${missingInfo.map(q => `- ${q}`).join('\n')}
-
-⚡ YOUR #1 JOB RIGHT NOW: Pick the FIRST missing item above and ASK that question DIRECTLY in your response.
-- Do NOT ask "Can I ask you some questions?" — just ASK the question directly
-- Do NOT recommend any properties yet
-- Do NOT skip to booking or scheduling
-- Ask ONE question per message, wait for their answer
-${evalQuestions.length > 0 ? `\n**Additional evaluation questions to ask after the basics:**\n${evalQuestions.slice(0, 5).map((q, i) => `${i + 1}. ${q}`).join('\n')}\n` : ''}
-
 ### Priority 2: 📞 Be Conversational
 After asking the evaluation question, be friendly and natural. Make it feel like a chat, not an interrogation.
 
@@ -2746,43 +2764,12 @@ To show a property card: SEND_PROPERTY_CARD: [property_id]
 3. If the customer asks for alternatives, you may send ONE more at a time.
 `;
       } else {
-        // ⛔ Evaluation NOT complete — AI must ask configured evaluation questions
-        const evalQuestions = config.evaluation_questions || [];
-        const answeredDetails = conversation?.extracted_details || {};
-        const answeredAnalysis = conversation?.ai_analysis || {};
-
-        // Figure out what info we still need
-        const stillNeeded = [];
-        const alreadyKnown = [];
-        if (answeredDetails.budget || answeredAnalysis.budget) alreadyKnown.push('Budget');
-        else stillNeeded.push('Budget');
-        if (answeredDetails.location || answeredAnalysis.preferred_location) alreadyKnown.push('Location');
-        else stillNeeded.push('Location');
-        if (answeredDetails.property_type || answeredAnalysis.property_type) alreadyKnown.push('Property type');
-        else stillNeeded.push('Property type');
-        if (answeredDetails.bedrooms || answeredAnalysis.bedrooms) alreadyKnown.push('Bedrooms');
-        else stillNeeded.push('Bedrooms');
-
-        let evalQuestionsPrompt = '';
-        if (evalQuestions.length > 0) {
-          evalQuestionsPrompt = `\n## YOUR EVALUATION QUESTIONS (Ask these ONE AT A TIME)\nHere are the evaluation questions you must ask. Pick the NEXT unanswered one and ask it NATURALLY in conversation:\n${evalQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nAsk ONE question per message. After the customer answers, wait for the next message to ask the next question.\n`;
-        }
-
+        // ⛔ Evaluation NOT complete — just tell AI properties are locked
         aiPrompt += `\n## 🏠 PROPERTY RECOMMENDATIONS (LOCKED 🔒 — Score: ${evaluationScore}%)
 You do NOT have access to the property list yet. The customer's evaluation is incomplete.
-
-### What we know: ${alreadyKnown.length > 0 ? alreadyKnown.join(', ') : 'Nothing yet'}
-### Still needed: ${stillNeeded.join(', ')}
-
-You MUST ask about the missing items above DIRECTLY. Do NOT just say "I have questions" — actually ASK the question.
-- If Budget is missing: Ask "Ano po ang budget range niyo?" or similar
-- If Location is missing: Ask "Saang area po kayo naghahanap?" or similar
-- If Property type is missing: Ask "Anong type po ng property ang hanap niyo — condo, house and lot, or townhouse?"
-- If Bedrooms is missing: Ask "Ilang bedrooms po ang kailangan niyo?"
-
+Continue asking the evaluation questions from Priority 1 above.
 Do NOT mention evaluation, score, threshold, or percentage to the customer.
 Do NOT recommend any properties yet. Say something like "Let me find the perfect match for you po!"
-${evalQuestionsPrompt}
 `;
       }
     }

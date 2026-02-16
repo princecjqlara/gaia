@@ -12,7 +12,7 @@ const EvaluationQuestionsModal = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
-  const loadQuestions = () => {
+  const loadQuestions = async () => {
     try {
       const saved = localStorage.getItem('evaluation_questions');
       const defaultQuestions = [
@@ -24,6 +24,25 @@ const EvaluationQuestionsModal = ({ isOpen, onClose }) => {
       ];
       const loaded = saved ? JSON.parse(saved) : defaultQuestions;
       setQuestions(loaded);
+
+      // Auto-sync to DB so webhook server can use them
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey) {
+          const { createClient } = await import('@supabase/supabase-js');
+          const db = createClient(supabaseUrl, supabaseKey);
+          // Save as separate key for easy webhook access
+          await db.from('settings').upsert({
+            key: 'evaluation_questions',
+            value: { questions: loaded },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+          console.log('[EVAL] ✅ Questions auto-synced to DB on load');
+        }
+      } catch (syncErr) {
+        console.error('[EVAL] Auto-sync failed:', syncErr.message);
+      }
     } catch (err) {
       console.error('Error loading questions:', err);
     }
