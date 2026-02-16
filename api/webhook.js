@@ -2605,17 +2605,43 @@ To show a property card: SEND_PROPERTY_CARD: [property_id]
 3. If the customer asks for alternatives, you may send ONE more at a time.
 `;
       } else {
-        // ⛔ Evaluation NOT complete — AI cannot see or recommend properties
+        // ⛔ Evaluation NOT complete — AI must ask configured evaluation questions
+        const evalQuestions = config.evaluation_questions || [];
+        const answeredDetails = conversation?.extracted_details || {};
+        const answeredAnalysis = conversation?.ai_analysis || {};
+
+        // Figure out what info we still need
+        const stillNeeded = [];
+        const alreadyKnown = [];
+        if (answeredDetails.budget || answeredAnalysis.budget) alreadyKnown.push('Budget');
+        else stillNeeded.push('Budget');
+        if (answeredDetails.location || answeredAnalysis.preferred_location) alreadyKnown.push('Location');
+        else stillNeeded.push('Location');
+        if (answeredDetails.property_type || answeredAnalysis.property_type) alreadyKnown.push('Property type');
+        else stillNeeded.push('Property type');
+        if (answeredDetails.bedrooms || answeredAnalysis.bedrooms) alreadyKnown.push('Bedrooms');
+        else stillNeeded.push('Bedrooms');
+
+        let evalQuestionsPrompt = '';
+        if (evalQuestions.length > 0) {
+          evalQuestionsPrompt = `\n## YOUR EVALUATION QUESTIONS (Ask these ONE AT A TIME)\nHere are the evaluation questions you must ask. Pick the NEXT unanswered one and ask it NATURALLY in conversation:\n${evalQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nAsk ONE question per message. After the customer answers, wait for the next message to ask the next question.\n`;
+        }
+
         aiPrompt += `\n## 🏠 PROPERTY RECOMMENDATIONS (LOCKED 🔒 — Score: ${evaluationScore}%)
 You do NOT have access to the property list yet. The customer's evaluation is incomplete.
-You MUST gather the following information before properties can be unlocked:
-- 💰 Budget (how much they can afford)
-- 📍 Preferred location/area
-- 🏠 Property type preference (condo, house, lot, etc.)
-- 🛏️ Number of bedrooms needed
 
-Ask these questions NATURALLY in conversation. Do NOT say "evaluation" or "threshold" to the customer.
-Instead say things like: "Para ma-recommend ko po yung perfect property for you, can I ask a few quick questions?"
+### What we know: ${alreadyKnown.length > 0 ? alreadyKnown.join(', ') : 'Nothing yet'}
+### Still needed: ${stillNeeded.join(', ')}
+
+You MUST ask about the missing items above DIRECTLY. Do NOT just say "I have questions" — actually ASK the question.
+- If Budget is missing: Ask "Ano po ang budget range niyo?" or similar
+- If Location is missing: Ask "Saang area po kayo naghahanap?" or similar
+- If Property type is missing: Ask "Anong type po ng property ang hanap niyo — condo, house and lot, or townhouse?"
+- If Bedrooms is missing: Ask "Ilang bedrooms po ang kailangan niyo?"
+
+Do NOT mention evaluation, score, threshold, or percentage to the customer.
+Do NOT recommend any properties yet. Say something like "Let me find the perfect match for you po!"
+${evalQuestionsPrompt}
 `;
       }
     }
@@ -3694,7 +3720,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
 
         // Check what booking milestone flags have been sent for this conversation
         const bookingSent = conversation?.booking_btn_milestones || {};
-        const isFirst = pageReplies.length <= 1;
+        const isFirst = pageReplies.length === 0;
         const atHalf = evaluationScore >= halfThreshold && !bookingSent.half;
         const atFull = evaluationScore >= evalThreshold && !bookingSent.full;
 
@@ -3744,14 +3770,18 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           if (btnResponse.ok) {
             console.log("[WEBHOOK] ✅ Booking button sent automatically!");
             // Record which milestones have been reached to avoid resending
-            const newMilestones = { ...bookingSent };
-            if (isFirst) newMilestones.first = true;
-            if (atHalf) newMilestones.half = true;
-            if (atFull) newMilestones.full = true;
-            await db.from('facebook_conversations').update({
-              booking_btn_milestones: newMilestones,
-              updated_at: new Date().toISOString(),
-            }).eq('conversation_id', conversationId);
+            try {
+              const newMilestones = { ...bookingSent };
+              if (isFirst) newMilestones.first = true;
+              if (atHalf) newMilestones.half = true;
+              if (atFull) newMilestones.full = true;
+              await db.from('facebook_conversations').update({
+                booking_btn_milestones: newMilestones,
+                updated_at: new Date().toISOString(),
+              }).eq('conversation_id', conversationId);
+            } catch (milestoneErr) {
+              console.log('[WEBHOOK] Milestone update failed (column may not exist yet):', milestoneErr.message);
+            }
           } else {
             const btnErr = await btnResponse.text();
             console.log("[WEBHOOK] Booking button send failed (non-fatal):", btnErr.substring(0, 100));

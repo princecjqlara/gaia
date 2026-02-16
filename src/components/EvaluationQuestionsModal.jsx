@@ -29,10 +29,34 @@ const EvaluationQuestionsModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const saveQuestions = (updatedQuestions) => {
+  const saveQuestions = async (updatedQuestions) => {
     try {
       localStorage.setItem('evaluation_questions', JSON.stringify(updatedQuestions));
       setQuestions(updatedQuestions);
+
+      // Also sync into ai_chatbot_config so the webhook server can use them
+      try {
+        const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
+        config.evaluation_questions = updatedQuestions;
+        localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+
+        // Sync to database
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey) {
+          const { createClient } = await import('@supabase/supabase-js');
+          const db = createClient(supabaseUrl, supabaseKey);
+          await db.from('settings').upsert({
+            key: 'ai_chatbot_config',
+            value: config,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+          console.log('[EVAL] ✅ Questions synced to database');
+        }
+      } catch (syncErr) {
+        console.error('[EVAL] Sync to DB failed (non-fatal):', syncErr.message);
+      }
+
       showToast('Questions saved successfully', 'success');
     } catch (err) {
       showToast('Error saving questions', 'error');
