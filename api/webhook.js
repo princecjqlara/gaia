@@ -2616,19 +2616,63 @@ The above context was provided by a team member. Use this information to persona
       || (aiReplyCount > 0 && aiReplyCount % 5 === 0);          // Every 5th reply
 
     aiPrompt += `
-## 🎯 YOUR PRIORITIES (Follow this order)
+## 🎯 YOUR PRIORITIES (Follow this order STRICTLY)
+`;
 
+    // When evaluation is NOT complete, asking questions is top priority
+    if (!canViewProperties) {
+      // Figure out what we still need
+      const missingInfo = [];
+      const knownInfo = [];
+      const details = conversation?.extracted_details || {};
+      const analysis = conversation?.ai_analysis || {};
+      if (details.budget || analysis.budget) knownInfo.push('Budget'); else missingInfo.push('💰 Budget — Ask: "Ano po ang budget range niyo para sa property?"');
+      if (details.location || analysis.preferred_location) knownInfo.push('Location'); else missingInfo.push('📍 Location — Ask: "Saang area po kayo naghahanap ng property?"');
+      if (details.property_type || analysis.property_type) knownInfo.push('Property type'); else missingInfo.push('🏠 Property type — Ask: "Anong type po ng property ang hanap niyo — condo, house and lot, or townhouse?"');
+      if (details.bedrooms || analysis.bedrooms) knownInfo.push('Bedrooms'); else missingInfo.push('🛏️ Bedrooms — Ask: "Ilang bedrooms po ang kailangan niyo?"');
+
+      // Load configured evaluation questions
+      const evalQuestions = config.evaluation_questions || [];
+
+      aiPrompt += `
+### Priority 1: 📋 ASK EVALUATION QUESTIONS (HIGHEST PRIORITY — MUST DO)
+You are evaluating this customer to find their perfect property. Score: ${evaluationScore}% (need ${canViewProperties ? 'COMPLETE' : `more info`}).
+
+**What we know so far:** ${knownInfo.length > 0 ? knownInfo.join(', ') : 'Nothing yet — start asking!'}
+**What we STILL NEED:** 
+${missingInfo.map(q => `- ${q}`).join('\n')}
+
+⚡ YOUR #1 JOB RIGHT NOW: Pick the FIRST missing item above and ASK that question DIRECTLY in your response.
+- Do NOT ask "Can I ask you some questions?" — just ASK the question directly
+- Do NOT recommend any properties yet
+- Do NOT skip to booking or scheduling
+- Ask ONE question per message, wait for their answer
+${evalQuestions.length > 0 ? `\n**Additional evaluation questions to ask after the basics:**\n${evalQuestions.slice(0, 5).map((q, i) => `${i + 1}. ${q}`).join('\n')}\n` : ''}
+
+### Priority 2: 📞 Be Conversational
+After asking the evaluation question, be friendly and natural. Make it feel like a chat, not an interrogation.
+
+### Priority 3: ${hasOptedIn ? '✅ Opt-in secured!' : '🔔 Get Notification Opt-in (LOW PRIORITY for now)'}
+${hasOptedIn
+          ? 'The customer has already opted in. Great!'
+          : `After asking your evaluation question, you may ALSO include an opt-in hook.
+- Add this marker at the END (not start) of your response: OPTIN_HOOK: [catchy text, max 20 words]
+- Only do this if it feels natural — evaluation questions are more important right now.`}
+`;
+    } else {
+      // Evaluation is COMPLETE — now focus on opt-in and booking
+      aiPrompt += `
 ### Priority 1: ${hasOptedIn ? '✅ Opt-in secured!' : '🔔 Get Notification Opt-in (HIGHEST PRIORITY)'}
 ${hasOptedIn
-        ? 'The customer has already opted in. Great! Focus on next priorities.'
-        : `The customer has NOT yet clicked the notification opt-in button below. Your TOP TASK is to naturally encourage them to click it.
+          ? 'The customer has already opted in. Great! Focus on next priorities.'
+          : `The customer has NOT yet clicked the notification opt-in button below. Your TOP TASK is to naturally encourage them to click it.
 - START your response with this EXACT marker: OPTIN_HOOK: [Your short, catchy text here]
 - The system will use your text to create a button for them to click.
 - Create a catchy hook (max 20 words). Examples:
   - "I saved a spot for you — click below so I can reach out pag may perfect property na!"
   - "Click below po para ma-message kita pag may perfect match na!"
   - "Quick question — are you still looking? Tap below so I can help you find it!"`
-      }
+        }
 
 ### Priority 2: 📞 Hop on a Call + Evaluation
 Encourage the customer to schedule a quick call for a personalized property evaluation.
@@ -2637,13 +2681,14 @@ Encourage the customer to schedule a quick call for a personalized property eval
 
 ### Priority 3: 📅 Booking
 ${shouldPushBooking
-        ? `Goal: ${activeGoal.toUpperCase()}
+          ? `Goal: ${activeGoal.toUpperCase()}
 Instructions: ${goalDescriptions[activeGoal] || "Help the customer and guide them towards taking action."}
 Gently guide the conversation towards scheduling a consultation.`
-        : `The customer is actively engaged in conversation. Focus on answering their questions naturally.
+          : `The customer is actively engaged in conversation. Focus on answering their questions naturally.
 Do NOT push booking, scheduling, or consultations unless the customer explicitly asks about it.
 If they ask about booking, help them — otherwise just be helpful and conversational.`}
 `;
+    }
 
     const customGoals = config.custom_goals?.trim();
     if (customGoals) {
