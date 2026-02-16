@@ -2560,24 +2560,34 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                       {LABELS[selectedConversation.ai_label].icon} {LABELS[selectedConversation.ai_label].display}
                     </div>
                   )}
-                  {/* Evaluation Progress Indicator */}
+                  {/* Evaluation Progress Counter — always visible */}
                   {(() => {
-                    const pct = selectedConversation.evaluation_score;
-                    if (pct === undefined || pct === null) return null;
+                    const pct = selectedConversation.evaluation_score ?? 0;
                     const color = pct >= 80 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444';
                     return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
-                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Eval</span>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        marginTop: '0.25rem', padding: '0.3rem 0.6rem',
+                        background: 'var(--bg-secondary)', borderRadius: '8px',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          📋 Eval
+                        </span>
                         <div style={{
-                          width: '60px', height: '5px', borderRadius: '3px',
-                          background: 'var(--bg-secondary)', overflow: 'hidden'
+                          flex: 1, minWidth: '80px', height: '7px', borderRadius: '4px',
+                          background: 'var(--bg-tertiary, #1a1a2e)', overflow: 'hidden'
                         }}>
                           <div style={{
-                            width: `${pct}%`, height: '100%', borderRadius: '3px',
-                            background: color, transition: 'width 0.3s ease'
+                            width: `${pct}%`, height: '100%', borderRadius: '4px',
+                            background: `linear-gradient(90deg, ${color}, ${color}cc)`,
+                            transition: 'width 0.5s ease'
                           }} />
                         </div>
-                        <span style={{ fontSize: '0.65rem', color, fontWeight: 600 }}>
+                        <span style={{
+                          fontSize: '0.75rem', color, fontWeight: 700,
+                          minWidth: '32px', textAlign: 'right'
+                        }}>
                           {pct}%
                         </span>
                       </div>
