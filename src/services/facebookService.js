@@ -3290,8 +3290,8 @@ class FacebookService {
                 console.log(`[INSIGHTS] Looking for property views for PID: "${pid}" / Name: "${visitorName}"`);
 
                 // Build OR conditions for finding matching views
-                // Build OR conditions for finding matching views
                 // 1. Participant ID match (Always safe because PSID is page-scoped)
+                const orConditions = [];
                 if (pid) orConditions.push(`participant_id.eq.${pid}`);
 
                 // 2. Name + Page ID match (Require page_id to match if falling back to name)
