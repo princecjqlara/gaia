@@ -2560,6 +2560,34 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                       {LABELS[selectedConversation.ai_label].icon} {LABELS[selectedConversation.ai_label].display}
                     </div>
                   )}
+                  {/* Evaluation Progress Indicator */}
+                  {(() => {
+                    try {
+                      const saved = localStorage.getItem('evaluation_questions');
+                      const questions = saved ? JSON.parse(saved) : [];
+                      if (questions.length === 0) return null;
+                      const userMsgCount = (messages || []).filter(m => !m.is_from_page && m.message_text && m.message_text.trim().length > 0).length;
+                      const answered = Math.min(userMsgCount, questions.length);
+                      const pct = Math.round((answered / questions.length) * 100);
+                      const color = pct >= 80 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444';
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
+                          <div style={{
+                            width: '60px', height: '5px', borderRadius: '3px',
+                            background: 'var(--bg-secondary)', overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              width: `${pct}%`, height: '100%', borderRadius: '3px',
+                              background: color, transition: 'width 0.3s ease'
+                            }} />
+                          </div>
+                          <span style={{ fontSize: '0.65rem', color, fontWeight: 600 }}>
+                            {pct}% ({answered}/{questions.length})
+                          </span>
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
                 </div>
                 {/* AI Control Button */}
                 <button
