@@ -22,7 +22,24 @@ const EvaluationQuestionsModal = ({ isOpen, onClose }) => {
         'What has been your biggest marketing challenge?',
         'Why are you looking for our services now?'
       ];
-      const loaded = saved ? JSON.parse(saved) : defaultQuestions;
+      let loaded = saved ? JSON.parse(saved) : null;
+
+      if (!loaded) {
+        try {
+          const resp = await fetch('/api/sync-settings');
+          const data = await resp.json();
+          if (resp.ok && data?.config?.evaluation_questions?.length > 0) {
+            loaded = data.config.evaluation_questions;
+            console.log('[EVAL] Loaded questions from ai_chatbot_config');
+          }
+        } catch (err) {
+          console.error('[EVAL] Could not load questions from API:', err.message);
+        }
+      }
+
+      if (!loaded) {
+        loaded = defaultQuestions;
+      }
       setQuestions(loaded);
 
       // Auto-sync to DB so webhook server can use them
@@ -58,6 +75,22 @@ const EvaluationQuestionsModal = ({ isOpen, onClose }) => {
         const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
         config.evaluation_questions = updatedQuestions;
         localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
+
+        try {
+          const resp = await fetch('/api/sync-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            console.error('[EVAL] Sync via API failed:', data?.error || 'Unknown error');
+          } else {
+            console.log('[EVAL] ✅ Config synced via API');
+          }
+        } catch (apiErr) {
+          console.error('[EVAL] Sync via API failed:', apiErr.message);
+        }
 
         // Sync to database
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;

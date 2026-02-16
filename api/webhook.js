@@ -2551,15 +2551,16 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
         console.log(`[WEBHOOK] 📋 No eval questions found, using ${evalQuestions.length} defaults`);
       }
 
-      const customerMessages = recentMessages
+      const customerMessagesList = recentMessages
         .filter(m => !m.is_from_page)
-        .map(m => m.message_text || '')
-        .join('\n');
-      console.log(`[WEBHOOK] 📋 Customer messages for eval: ${customerMessages.length} chars`);
+        .map(m => (m.message_text || '').trim())
+        .filter(Boolean);
+      const customerMessages = customerMessagesList.join('\n');
+      console.log(`[WEBHOOK] 📋 Customer messages for eval: ${customerMessages.length} chars (${customerMessagesList.length} msgs)`);
 
       let answeredCount = 0;
 
-      if (customerMessages.length > 10) {
+      if (customerMessagesList.length > 0) {
         // Try AI check first
         const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
 
@@ -2631,8 +2632,12 @@ If none answered: []`;
           }
           console.log(`[WEBHOOK] 📋 Evaluation keyword fallback: ${answeredCount}/${evalQuestions.length}`);
         }
+        if (answeredCount === 0 && customerMessagesList.length > 0) {
+          answeredCount = Math.min(customerMessagesList.length, evalQuestions.length);
+          console.log(`[WEBHOOK] 📋 Evaluation reply-count fallback: ${answeredCount}/${evalQuestions.length}`);
+        }
       } else {
-        console.log('[WEBHOOK] 📋 Not enough customer messages for evaluation');
+        console.log('[WEBHOOK] 📋 No customer messages for evaluation');
       }
 
       evaluationScore = Math.round((answeredCount / evalQuestions.length) * 100);
@@ -2690,8 +2695,8 @@ ${systemPrompt}
 You MUST respond in ${language}. This is MANDATORY.
 - Use Taglish (mix Filipino and English naturally in sentences)
 - Use "po" and "opo" for respect
-- Example: "Hello po! Kumusta? Ready na po tayo sa consultation mo!"
-- Example: "Ano po ang business mo? Gusto namin i-maximize yung ROI mo sa ads."
+- Example: "Salamat po sa message mo. Ano po ang hinahanap mong property?"
+- Example: "Based sa sinabi mo, Manila area po. Ano po budget range ninyo?"
 - NEVER respond in pure English only - always mix Filipino words.
 
 ## Platform: Facebook Messenger
@@ -2932,14 +2937,16 @@ ${shouldPushBooking ? 'You may mention booking verbally (e.g. "you can book a co
     aiPrompt += `
 ## RULES
 - Customer name: "${displayName || "NOT PROVIDED"}" (if NOT PROVIDED, use "po" instead)
+- Conversation status: ${isFirstAIReply ? "first reply" : "ongoing conversation"}
 - NEVER invent names. Use "po" for respect.
 - Split responses with ||| (1-2 sentences per part, like texting)
 - Example: "Hello po! ||| I'd be happy to help. ||| What are you looking for?"
 - NEVER include raw URLs or links in your messages. The system sends buttons automatically.
 - When booking confirmed, add at END: BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | Name | Phone
 - Use 24h format (18:00 not 6pm), PIPE | separator
- - Avoid repetitive greetings like "Kumusta" or "Hello"
- ${isFirstAIReply ? '- This is your first reply; a brief greeting is ok.' : '- Do NOT open with greetings; respond directly to the customer.'}
+- Avoid repetitive greetings like "Kumusta" or "Hello"
+- Do NOT greet or reintroduce yourself if this is not the first AI reply in this conversation
+${isFirstAIReply ? '- This is your first reply; a brief greeting is ok.' : '- This is not your first reply; start directly with the next question or answer.'}
 ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great first impression!' : ''}
 `;
 
