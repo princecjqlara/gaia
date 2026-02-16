@@ -2856,10 +2856,10 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
         "meta/llama-3.2-11b-vision-instruct",
       ];
     } else {
-      // Use smarter model for better question-following
+      // Use the smartest available models
       MODELS = [
+        "meta/llama-3.1-405b-instruct",
         "nvidia/llama-3.1-nemotron-70b-instruct",
-        "meta/llama-3.1-70b-instruct",
       ];
     }
 
