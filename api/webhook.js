@@ -2482,7 +2482,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       conversation?.phone_number || conversation?.extracted_details?.phone;
 
     // ============================================
-    // EVALUATION GATING LOGIC (NEW)
+    // EVALUATION GATING LOGIC — Based on admin-defined evaluation questions
     // ============================================
     let evaluationScore = 0;
     let canViewProperties = true;
@@ -2497,40 +2497,112 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
         .single();
       const threshold = thresholdSetting?.value?.percentage || 70;
 
-      // 2. Calculate progress INLINE (goalController.js can't be imported on Vercel)
-      const qualifyIndicators = ['budget confirmed', 'timeline known', 'decision maker', 'ready to proceed'];
+      // 2. Load evaluation questions (from dedicated key or ai_chatbot_config)
+      let evalQuestions = config.evaluation_questions || [];
+      if (!evalQuestions.length) {
+        const { data: evalSetting } = await db
+          .from('settings')
+          .select('value')
+          .eq('key', 'evaluation_questions')
+          .single();
+        evalQuestions = evalSetting?.value?.questions || [];
+      }
+
       const conversationText = recentMessages
-        .map(m => m.message_text || '')
+        .map(m => (m.message_text || ''))
         .join(' ')
         .toLowerCase();
 
-      let indicatorScore = 0;
-      for (const indicator of qualifyIndicators) {
-        if (conversationText.includes(indicator.toLowerCase())) indicatorScore++;
+      if (evalQuestions.length > 0) {
+        // 3. Use AI to check which questions have been answered
+        const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+        const customerMessages = recentMessages
+          .filter(m => !m.is_from_page)
+          .map(m => m.message_text || '')
+          .join('\n');
+
+        let answeredCount = 0;
+
+        if (NVIDIA_API_KEY && customerMessages.length > 10) {
+          try {
+            const questionList = evalQuestions
+              .map((q, i) => `${i + 1}. ${q}`)
+              .join('\n');
+
+            const checkPrompt = `Analyze the customer messages below and determine which evaluation questions have been answered.
+
+## Evaluation Questions:
+${questionList}
+
+## Customer Messages:
+${customerMessages}
+
+For each question, respond with ONLY a JSON array of question numbers (1-indexed) that have been answered or have enough info to consider answered. Be generous — if the customer provided related info even without being directly asked, count it.
+
+Example response: [1, 3, 5]
+If none answered: []`;
+
+            const aiResp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${NVIDIA_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: 'meta/llama-3.1-8b-instruct',
+                messages: [{ role: 'user', content: checkPrompt }],
+                temperature: 0.1,
+                max_tokens: 100
+              })
+            });
+
+            if (aiResp.ok) {
+              const aiData = await aiResp.json();
+              const aiText = aiData.choices?.[0]?.message?.content?.trim() || '';
+              const match = aiText.match(/\[[\d,\s]*\]/);
+              if (match) {
+                const answered = JSON.parse(match[0]);
+                answeredCount = answered.filter(n => n >= 1 && n <= evalQuestions.length).length;
+              }
+              console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evalQuestions.length} questions answered (AI check)`);
+            }
+          } catch (aiErr) {
+            console.log('[WEBHOOK] Evaluation AI check failed, using keyword fallback:', aiErr.message);
+          }
+        }
+
+        // Keyword fallback if AI didn't run or failed
+        if (answeredCount === 0 && customerMessages.length > 10) {
+          const custText = customerMessages.toLowerCase();
+          for (const q of evalQuestions) {
+            const keywords = q.toLowerCase()
+              .replace(/[?.,!]/g, '')
+              .split(/\s+/)
+              .filter(w => w.length > 3 && !['what', 'your', 'have', 'been', 'with', 'this', 'that', 'from', 'they', 'will', 'does', 'which'].includes(w));
+            const matchCount = keywords.filter(kw => custText.includes(kw)).length;
+            if (matchCount >= Math.max(1, Math.floor(keywords.length * 0.3))) {
+              answeredCount++;
+            }
+          }
+          if (answeredCount > 0) {
+            console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evalQuestions.length} questions answered (keyword fallback)`);
+          }
+        }
+
+        evaluationScore = Math.round((answeredCount / evalQuestions.length) * 100);
+      } else {
+        // No evaluation questions defined — fall back to simple data score
+        let dataScore = 0;
+        const details = conversation?.extracted_details || {};
+        const analysis = conversation?.ai_analysis || {};
+        if (details.budget || analysis.budget) dataScore += 25;
+        if (details.location || analysis.preferred_location) dataScore += 25;
+        if (details.property_type || analysis.property_type) dataScore += 10;
+        if (details.bedrooms || analysis.bedrooms) dataScore += 10;
+        const messageProgress = Math.min(recentMessages.length * 3, 15);
+        evaluationScore = Math.min(100, dataScore + messageProgress);
+        console.log(`[WEBHOOK] 📋 Evaluation: No questions defined, using data fallback: ${evaluationScore}%`);
       }
-      const indicatorProgress = qualifyIndicators.length > 0
-        ? (indicatorScore / qualifyIndicators.length) * 100 : 0;
-      const messageProgress = Math.min(recentMessages.length * 3, 15);
-      const positiveWords = ['yes', 'sure', 'okay', 'sounds good', 'interested', 'tell me more', 'great'];
-      let sentimentScore = 0;
-      for (const word of positiveWords) {
-        if (conversationText.includes(word)) sentimentScore += 3;
-      }
-      sentimentScore = Math.min(sentimentScore, 10);
-      const baseProgress = Math.min(indicatorProgress + messageProgress + sentimentScore, 100);
-
-      // 3. Boost score based on extracted data (hard facts are most important)
-      let dataScore = 0;
-      const details = conversation?.extracted_details || {};
-      const analysis = conversation?.ai_analysis || {};
-
-      if (details.budget || analysis.budget) dataScore += 25;
-      if (details.location || analysis.preferred_location) dataScore += 25;
-      if (details.property_type || analysis.property_type) dataScore += 10;
-      if (details.bedrooms || analysis.bedrooms) dataScore += 10;
-
-      // Final Score = Base (Action/Text) + Data (Facts)
-      evaluationScore = Math.min(100, Math.round(baseProgress) + dataScore);
 
       // 4. Determine status
       if (evaluationScore < threshold) {
