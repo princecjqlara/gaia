@@ -2490,6 +2490,8 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     const knowledgeBase = config.knowledge_base || "";
     const faqContent = config.faq || ""; // FAQ for RAG pipeline
     const language = config.language || "Taglish"; // Default to Taglish (Tagalog + English mix)
+    const botRulesDonts = config.bot_rules_donts || "";
+    const disallowGreetings = /never introduce|do not introduce|dont introduce|don't introduce/i.test(botRulesDonts);
     const knownPhone =
       conversation?.phone_number || conversation?.extracted_details?.phone;
     const displayName = getFirstName(conversation?.participant_name) || conversation?.participant_name;
@@ -2940,13 +2942,13 @@ ${shouldPushBooking ? 'You may mention booking verbally (e.g. "you can book a co
 - Conversation status: ${isFirstAIReply ? "first reply" : "ongoing conversation"}
 - NEVER invent names. Use "po" for respect.
 - Split responses with ||| (1-2 sentences per part, like texting)
-- Example: "Hello po! ||| I'd be happy to help. ||| What are you looking for?"
+ - Example: "Salamat po sa details. ||| Noted po. ||| Ano po budget range ninyo?"
 - NEVER include raw URLs or links in your messages. The system sends buttons automatically.
 - When booking confirmed, add at END: BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | Name | Phone
 - Use 24h format (18:00 not 6pm), PIPE | separator
 - Avoid repetitive greetings like "Kumusta" or "Hello"
-- Do NOT greet or reintroduce yourself if this is not the first AI reply in this conversation
-${isFirstAIReply ? '- This is your first reply; a brief greeting is ok.' : '- This is not your first reply; start directly with the next question or answer.'}
+${disallowGreetings ? '- Do NOT greet or introduce yourself unless asked by the customer.' : '- Do NOT greet or reintroduce yourself if this is not the first AI reply in this conversation.'}
+${isFirstAIReply ? (disallowGreetings ? '- This is your first reply; start directly with the next question or answer.' : '- This is your first reply; a brief greeting is ok.') : '- This is not your first reply; start directly with the next question or answer.'}
 ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great first impression!' : ''}
 `;
 
