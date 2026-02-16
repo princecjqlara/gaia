@@ -2855,9 +2855,9 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
         "meta/llama-3.2-11b-vision-instruct",
       ];
     } else {
-      // Use fast 8b model first (responds in ~2-3s), 70b as fallback
+      // Use smarter model for better question-following
       MODELS = [
-        "meta/llama-3.1-8b-instruct",
+        "nvidia/llama-3.1-nemotron-70b-instruct",
         "meta/llama-3.1-70b-instruct",
       ];
     }
