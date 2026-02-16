@@ -2541,8 +2541,16 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       }
     } catch (evalErr) {
       console.error("[WEBHOOK] Evaluation logic error:", evalErr.message);
-      // Fallback: allow properties if error, to avoid blocking users due to bugs
       canViewProperties = true;
+    }
+
+    // Save evaluation score to conversation for frontend display
+    try {
+      await db.from("facebook_conversations")
+        .update({ evaluation_score: evaluationScore })
+        .eq("conversation_id", conversationId);
+    } catch (e) {
+      // Column may not exist yet — ignore
     }
 
     // DEBUG: Log what RAG content we have
