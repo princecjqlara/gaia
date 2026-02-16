@@ -2489,41 +2489,64 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     let gatingReason = "";
 
     try {
-      // 1. Get threshold setting (default 70%)
-      const { data: thresholdSetting } = await db
-        .from('settings')
-        .select('value')
-        .eq('key', 'evaluation_threshold')
-        .single();
-      const threshold = thresholdSetting?.value?.percentage || 70;
-
-      // 2. Load evaluation questions (from dedicated key or ai_chatbot_config)
-      let evalQuestions = config.evaluation_questions || [];
-      if (!evalQuestions.length) {
-        const { data: evalSetting } = await db
+      // 1. Get threshold setting (default 70%) — NO .single() to avoid PGRST116 when row missing
+      let threshold = 70;
+      try {
+        const { data: thresholdRows } = await db
           .from('settings')
           .select('value')
-          .eq('key', 'evaluation_questions')
-          .single();
-        evalQuestions = evalSetting?.value?.questions || [];
+          .eq('key', 'evaluation_threshold')
+          .limit(1);
+        if (thresholdRows?.[0]?.value?.percentage) {
+          threshold = thresholdRows[0].value.percentage;
+        }
+      } catch (e) { /* use default 70 */ }
+      console.log(`[WEBHOOK] 📋 Eval threshold: ${threshold}%`);
+
+      // 2. Load evaluation questions from config or dedicated settings key
+      let evalQuestions = [];
+      if (config.evaluation_questions && Array.isArray(config.evaluation_questions) && config.evaluation_questions.length > 0) {
+        evalQuestions = config.evaluation_questions;
+        console.log(`[WEBHOOK] 📋 Eval questions loaded from ai_chatbot_config: ${evalQuestions.length} questions`);
+      } else {
+        try {
+          const { data: evalRows } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'evaluation_questions')
+            .limit(1);
+          if (evalRows?.[0]?.value?.questions && Array.isArray(evalRows[0].value.questions)) {
+            evalQuestions = evalRows[0].value.questions;
+            console.log(`[WEBHOOK] 📋 Eval questions loaded from settings key: ${evalQuestions.length} questions`);
+          }
+        } catch (e) { /* no questions */ }
       }
 
-      const conversationText = recentMessages
-        .map(m => (m.message_text || ''))
-        .join(' ')
-        .toLowerCase();
+      if (evalQuestions.length === 0) {
+        // Use default questions if none configured
+        evalQuestions = [
+          'What is your primary business goal?',
+          'What is your marketing budget?',
+          'Who is your target audience?',
+          'What has been your biggest marketing challenge?',
+          'Why are you looking for our services now?'
+        ];
+        console.log(`[WEBHOOK] 📋 No eval questions found, using ${evalQuestions.length} defaults`);
+      }
 
-      if (evalQuestions.length > 0) {
-        // 3. Use AI to check which questions have been answered
+      const customerMessages = recentMessages
+        .filter(m => !m.is_from_page)
+        .map(m => m.message_text || '')
+        .join('\n');
+      console.log(`[WEBHOOK] 📋 Customer messages for eval: ${customerMessages.length} chars`);
+
+      let answeredCount = 0;
+
+      if (customerMessages.length > 10) {
+        // Try AI check first
         const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
-        const customerMessages = recentMessages
-          .filter(m => !m.is_from_page)
-          .map(m => m.message_text || '')
-          .join('\n');
 
-        let answeredCount = 0;
-
-        if (NVIDIA_API_KEY && customerMessages.length > 10) {
+        if (NVIDIA_API_KEY) {
           try {
             const questionList = evalQuestions
               .map((q, i) => `${i + 1}. ${q}`)
@@ -2559,20 +2582,25 @@ If none answered: []`;
             if (aiResp.ok) {
               const aiData = await aiResp.json();
               const aiText = aiData.choices?.[0]?.message?.content?.trim() || '';
+              console.log(`[WEBHOOK] 📋 Eval AI raw response: ${aiText}`);
               const match = aiText.match(/\[[\d,\s]*\]/);
               if (match) {
                 const answered = JSON.parse(match[0]);
                 answeredCount = answered.filter(n => n >= 1 && n <= evalQuestions.length).length;
               }
               console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evalQuestions.length} questions answered (AI check)`);
+            } else {
+              console.log(`[WEBHOOK] 📋 Eval AI call failed: ${aiResp.status} ${aiResp.statusText}`);
             }
           } catch (aiErr) {
-            console.log('[WEBHOOK] Evaluation AI check failed, using keyword fallback:', aiErr.message);
+            console.log('[WEBHOOK] 📋 Eval AI check error:', aiErr.message);
           }
+        } else {
+          console.log('[WEBHOOK] 📋 No NVIDIA_API_KEY — skipping AI eval check');
         }
 
-        // Keyword fallback if AI didn't run or failed
-        if (answeredCount === 0 && customerMessages.length > 10) {
+        // Keyword fallback if AI didn't produce results
+        if (answeredCount === 0) {
           const custText = customerMessages.toLowerCase();
           for (const q of evalQuestions) {
             const keywords = q.toLowerCase()
@@ -2584,25 +2612,14 @@ If none answered: []`;
               answeredCount++;
             }
           }
-          if (answeredCount > 0) {
-            console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evalQuestions.length} questions answered (keyword fallback)`);
-          }
+          console.log(`[WEBHOOK] 📋 Evaluation keyword fallback: ${answeredCount}/${evalQuestions.length}`);
         }
-
-        evaluationScore = Math.round((answeredCount / evalQuestions.length) * 100);
       } else {
-        // No evaluation questions defined — fall back to simple data score
-        let dataScore = 0;
-        const details = conversation?.extracted_details || {};
-        const analysis = conversation?.ai_analysis || {};
-        if (details.budget || analysis.budget) dataScore += 25;
-        if (details.location || analysis.preferred_location) dataScore += 25;
-        if (details.property_type || analysis.property_type) dataScore += 10;
-        if (details.bedrooms || analysis.bedrooms) dataScore += 10;
-        const messageProgress = Math.min(recentMessages.length * 3, 15);
-        evaluationScore = Math.min(100, dataScore + messageProgress);
-        console.log(`[WEBHOOK] 📋 Evaluation: No questions defined, using data fallback: ${evaluationScore}%`);
+        console.log('[WEBHOOK] 📋 Not enough customer messages for evaluation');
       }
+
+      evaluationScore = Math.round((answeredCount / evalQuestions.length) * 100);
+      console.log(`[WEBHOOK] 📋 Final evaluation score: ${evaluationScore}%`);
 
       // 4. Determine status
       if (evaluationScore < threshold) {
@@ -2613,7 +2630,7 @@ If none answered: []`;
         console.log(`[WEBHOOK] ✅ Property gating PASSED: Score ${evaluationScore}% >= ${threshold}%`);
       }
     } catch (evalErr) {
-      console.error("[WEBHOOK] Evaluation logic error:", evalErr.message);
+      console.error("[WEBHOOK] ❌ Evaluation logic error:", evalErr.message, evalErr.stack);
       canViewProperties = true;
     }
 
