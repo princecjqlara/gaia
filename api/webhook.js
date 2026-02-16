@@ -2156,10 +2156,7 @@ async function handleIncomingMessage(pageId, event) {
             .single();
 
           if (aiSettings?.value?.auto_labeling_enabled !== false) {
-            const { autoLabelConversation } =
-              await import("../src/services/aiConversationAnalyzer");
-
-            // Get messages
+            // Get messages FIRST (needed by both AI and keyword fallback)
             const { data: msgs } = await db
               .from("facebook_messages")
               .select("message_text, is_from_page")
@@ -2177,15 +2174,26 @@ async function handleIncomingMessage(pageId, event) {
               const existingTagNames = (existingTagAssignments || [])
                 .map((t) => t.tag?.name)
                 .filter(Boolean);
-              const labelingRules = aiSettings?.value?.labeling_rules || "";
 
-              const result = await autoLabelConversation(
-                msgs,
-                existingTagNames,
-                labelingRules,
-              );
+              // ── Step 1: Try AI-based labeling (may fail if import breaks) ──
+              let result = { labelsToAdd: [], labelsToRemove: [], reasoning: "" };
+              try {
+                const { autoLabelConversation } =
+                  await import("../src/services/aiConversationAnalyzer");
+                const labelingRules = aiSettings?.value?.labeling_rules || "";
+                result = await autoLabelConversation(
+                  msgs,
+                  existingTagNames,
+                  labelingRules,
+                );
+              } catch (aiErr) {
+                console.log(
+                  "[WEBHOOK] AI auto-label import/call failed, using keyword fallback:",
+                  aiErr.message,
+                );
+              }
 
-              // Apply tag changes if any
+              // Apply tag changes if AI returned any
               if (
                 result.labelsToAdd?.length > 0 ||
                 result.labelsToRemove?.length > 0
@@ -2198,7 +2206,6 @@ async function handleIncomingMessage(pageId, event) {
                 for (const labelName of result.labelsToAdd || []) {
                   const normalizedName = labelName.toUpperCase().trim();
 
-                  // Check if tag exists
                   let { data: existingTag } = await db
                     .from("conversation_tags")
                     .select("id")
@@ -2206,7 +2213,6 @@ async function handleIncomingMessage(pageId, event) {
                     .ilike("name", normalizedName)
                     .single();
 
-                  // Create if not exists
                   if (!existingTag) {
                     const { data: newTag } = await db
                       .from("conversation_tags")
@@ -2220,7 +2226,6 @@ async function handleIncomingMessage(pageId, event) {
                     existingTag = newTag;
                   }
 
-                  // Assign tag
                   if (existingTag) {
                     await db.from("conversation_tag_assignments").upsert(
                       {
@@ -2235,10 +2240,8 @@ async function handleIncomingMessage(pageId, event) {
                   }
                 }
 
-                // Remove labels
                 for (const labelName of result.labelsToRemove || []) {
                   const normalizedName = labelName.toUpperCase().trim();
-
                   const { data: tagToRemove } = await db
                     .from("conversation_tags")
                     .select("id")
@@ -2256,9 +2259,7 @@ async function handleIncomingMessage(pageId, event) {
                 }
               }
 
-              // ============================================
-              // MAP AI LABELS → ai_label COLUMN (ALWAYS runs, not just on tag changes)
-              // ============================================
+              // ── Step 2: Map to ai_label column (ALWAYS runs) ──
               const AI_LABEL_MAP = {
                 'HOT_LEAD': 'hot_lead',
                 'HOT LEAD': 'hot_lead',
@@ -2288,7 +2289,7 @@ async function handleIncomingMessage(pageId, event) {
                 'WARM LEAD': 'interested',
               };
 
-              // Find highest-priority matching label from AI result + existing tags
+              // Try AI result labels first, then existing tags
               const allLabelNames = [
                 ...(result.labelsToAdd || []),
                 ...existingTagNames,
@@ -2303,7 +2304,7 @@ async function handleIncomingMessage(pageId, event) {
                 }
               }
 
-              // FALLBACK: If AI didn't return a mappable label, use keyword detection
+              // ── Step 3: Keyword fallback (runs even if AI failed) ──
               if (!bestAiLabel) {
                 const customerMsgs = msgs
                   .filter(m => !m.is_from_page)
@@ -2328,8 +2329,8 @@ async function handleIncomingMessage(pageId, event) {
                 }
               }
 
+              // ── Step 4: Update ai_label column ──
               if (bestAiLabel) {
-                // Respect critical labels — don't auto-downgrade
                 const { data: currentConv } = await db
                   .from("facebook_conversations")
                   .select("ai_label")
