@@ -1,5 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
+function getFirstName(name) {
+    if (!name || typeof name !== 'string') return '';
+    const trimmed = name.trim();
+    if (!trimmed) return '';
+    const withoutTitles = trimmed.replace(/^(mr|mrs|ms|miss|sir|maam|ma'am|dr)\.?\s+/i, '');
+    const commaSplit = withoutTitles.includes(',')
+        ? withoutTitles.split(',').slice(1).join(' ').trim() || withoutTitles.split(',')[0].trim()
+        : withoutTitles;
+    const parts = commaSplit.split(/\s+/);
+    return parts[0] || commaSplit;
+}
+
 /**
  * Process due scheduled messages AND AI intuition follow-ups
  * This endpoint is called by cron-job.org or similar services
@@ -440,7 +452,7 @@ export default async function handler(req, res) {
                         }
 
                         const recipientId = conversation?.participant_id;
-                        const contactName = conversation?.participant_name || 'there';
+                        const contactName = getFirstName(conversation?.participant_name) || conversation?.participant_name || 'there';
 
                         if (!recipientId) {
                             console.log(`[AI FOLLOWUP] No recipient for ${followup.conversation_id}`);

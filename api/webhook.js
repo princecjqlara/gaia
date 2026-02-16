@@ -144,6 +144,18 @@ function extractNameFromText(text) {
   return null;
 }
 
+function getFirstName(name) {
+  if (!name || typeof name !== "string") return "";
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  const withoutTitles = trimmed.replace(/^(mr|mrs|ms|miss|sir|maam|ma'am|dr)\.?\s+/i, "");
+  const commaSplit = withoutTitles.includes(",")
+    ? withoutTitles.split(",").slice(1).join(" ").trim() || withoutTitles.split(",")[0].trim()
+    : withoutTitles;
+  const parts = commaSplit.split(/\s+/);
+  return parts[0] || commaSplit;
+}
+
 /**
  * Extract a phone number from message text
  * Keeps common PH formats (09xxxxxxxxx, 0xxxxxxxxxx, +63xxxxxxxxxx)
@@ -2480,6 +2492,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     const language = config.language || "Taglish"; // Default to Taglish (Tagalog + English mix)
     const knownPhone =
       conversation?.phone_number || conversation?.extracted_details?.phone;
+    const displayName = getFirstName(conversation?.participant_name) || conversation?.participant_name;
 
     // ============================================
     // EVALUATION GATING LOGIC — Based on admin-defined evaluation questions
@@ -2682,7 +2695,7 @@ You MUST respond in ${language}. This is MANDATORY.
 - NEVER respond in pure English only - always mix Filipino words.
 
 ## Platform: Facebook Messenger
-Contact Name: ${conversation?.participant_name || "Customer"}
+Contact Name: ${displayName || "Customer"}
 ${knownPhone ? `Phone Number: ${knownPhone}` : ""}
 ${conversation?.pipeline_stage ? `Pipeline Stage: ${conversation.pipeline_stage}` : ""}
 ${conversation?.lead_status ? `Lead Status: ${conversation.lead_status}` : ""}
@@ -2918,7 +2931,7 @@ ${shouldPushBooking ? 'You may mention booking verbally (e.g. "you can book a co
 
     aiPrompt += `
 ## RULES
-- Customer name: "${conversation?.participant_name || "NOT PROVIDED"}" (if NOT PROVIDED, use "po" instead)
+- Customer name: "${displayName || "NOT PROVIDED"}" (if NOT PROVIDED, use "po" instead)
 - NEVER invent names. Use "po" for respect.
 - Split responses with ||| (1-2 sentences per part, like texting)
 - Example: "Hello po! ||| I'd be happy to help. ||| What are you looking for?"
@@ -4912,6 +4925,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
         .single();
       if (conv?.participant_name) participantName = conv.participant_name;
     } catch (e) { }
+    const greetingName = getFirstName(participantName) || participantName;
 
     // DEBUG: Log settings to find correct booking URL key
     console.log("[WEBHOOK] Welcome Settings Dump:", JSON.stringify(settings?.value || {}, null, 2));
@@ -4971,7 +4985,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
 
     if (customWelcomeText) {
       // Use user's custom text (replace {{name}} placeholder)
-      welcomeText = customWelcomeText.replace(/\{\{name\}\}/gi, participantName);
+      welcomeText = customWelcomeText.replace(/\{\{name\}\}/gi, greetingName);
     } else if (aiGenEnabled) {
       // Generate PERSONALIZED Welcome via AI
       const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
@@ -4980,7 +4994,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       const welcomePrompt = `
         ${systemPrompt}
         
-        TASK: Generate a SHORT, friendly, and personalized welcome message for a new user named "${participantName}".
+        TASK: Generate a SHORT, friendly, and personalized welcome message for a new user named "${greetingName}".
         GOAL: Encourage them to book a consultation.
         TONE: Warm, professional, enthusiastic.
         LANGUAGE: Taglish (Filipino/English mix).
@@ -5014,7 +5028,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       } catch (aiErr) {
         console.error("[WEBHOOK] Welcome AI Gen Failed:", aiErr.message);
         // Personalized static fallback
-        welcomeText = `Hello ${participantName !== "Friend" ? participantName : ""} po! 👋 Welcome! I'm your AI assistant — ready to help you find what you need. Let's get started!`;
+        welcomeText = `Hello ${greetingName !== "Friend" ? greetingName : ""} po! 👋 Welcome! I'm your AI assistant — ready to help you find what you need. Let's get started!`;
       }
     }
 
