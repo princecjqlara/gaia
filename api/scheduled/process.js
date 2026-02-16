@@ -150,7 +150,7 @@ export default async function handler(req, res) {
                                         recipient: { id: recipient.participant_id },
                                         message: { text: scheduledMsg.message_text },
                                         messaging_type: 'MESSAGE_TAG',
-                                        tag: 'ACCOUNT_UPDATE'
+                                        tag: 'HUMAN_AGENT'
                                     })
                                 }
                             );
@@ -293,6 +293,8 @@ export default async function handler(req, res) {
                     .not('lead_status', 'in', '(appointment_booked,converted)')
                     .neq('pipeline_stage', 'booked')
                     .lt('last_message_time', cutoffTime.toISOString())
+                    // Only include conversations within the 7-day Facebook messaging window
+                    .gt('last_message_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
                     .order('last_message_time', { ascending: true })
                     .limit(25);
 
@@ -447,6 +449,28 @@ export default async function handler(req, res) {
                                 .update({ status: 'failed', error_message: 'No recipient ID' })
                                 .eq('id', followup.id);
                             continue;
+                        }
+
+                        // Check 7-day window - HUMAN_AGENT tag only works within 7 days of last customer message
+                        const { data: lastCustomerMsg } = await supabase
+                            .from('facebook_messages')
+                            .select('timestamp')
+                            .eq('conversation_id', followup.conversation_id)
+                            .eq('is_from_page', false)
+                            .order('timestamp', { ascending: false })
+                            .limit(1)
+                            .single();
+
+                        if (lastCustomerMsg) {
+                            const daysSinceLastMsg = (Date.now() - new Date(lastCustomerMsg.timestamp).getTime()) / (1000 * 60 * 60 * 24);
+                            if (daysSinceLastMsg > 7) {
+                                console.log(`[AI FOLLOWUP] Outside 7-day window (${daysSinceLastMsg.toFixed(1)} days) for ${followup.conversation_id} - skipping`);
+                                await supabase
+                                    .from('ai_followup_schedule')
+                                    .update({ status: 'cancelled', error_message: `Outside 7-day messaging window (${daysSinceLastMsg.toFixed(1)} days since last customer msg)` })
+                                    .eq('id', followup.id);
+                                continue;
+                            }
                         }
 
                         // Generate AI-powered contextual follow-up
@@ -696,7 +720,7 @@ Generate ONLY the follow-up message, nothing else:`;
                                         recipient: { id: recipientId },
                                         message: { text: part },
                                         messaging_type: 'MESSAGE_TAG',
-                                        tag: 'ACCOUNT_UPDATE'
+                                        tag: 'HUMAN_AGENT'
                                     })
                                 }
                             );
