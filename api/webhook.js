@@ -2851,15 +2851,15 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
 
     let MODELS;
     if (hasImages) {
-      // Kimi K2.5 has native vision, with Llama vision as fallback
+      // GLM-5 for vision, with Llama vision as fallback
       MODELS = [
-        "moonshotai/kimi-k2.5",
+        "zhipu/glm-5",
         "meta/llama-3.2-11b-vision-instruct",
       ];
     } else {
-      // Kimi K2.5 (1T params, 32B active) = smartest, with known-working fallbacks
+      // GLM-5 (744B params) = smartest, with known-working fallbacks
       MODELS = [
-        "moonshotai/kimi-k2.5",
+        "zhipu/glm-5",
         "meta/llama-3.1-70b-instruct",
         "meta/llama-3.1-8b-instruct",
       ];
