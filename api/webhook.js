@@ -2556,7 +2556,21 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
 
     let aiPrompt = `## Role
 ${systemPrompt}
+`;
 
+    // === BOT RULES: INJECTED AT TOP FOR MAXIMUM COMPLIANCE ===
+    if (config.bot_rules_dos || config.bot_rules_donts) {
+      aiPrompt += `\n## 🚨 ABSOLUTE RULES — OVERRIDE EVERYTHING ELSE (SET BY YOUR OWNER)\nThese rules were set by the business owner. You MUST follow them in EVERY response. Violating these rules is UNACCEPTABLE.\n`;
+      if (config.bot_rules_dos) {
+        aiPrompt += `\n### ✅ YOU MUST DO:\n${config.bot_rules_dos}\n`;
+      }
+      if (config.bot_rules_donts) {
+        aiPrompt += `\n### ❌ YOU MUST NEVER DO:\n${config.bot_rules_donts}\n`;
+      }
+      aiPrompt += `\n---\n`;
+    }
+
+    aiPrompt += `
 ## 🗣️ LANGUAGE (CRITICAL - MUST FOLLOW)
 You MUST respond in ${language}. This is MANDATORY.
 - Use Taglish (mix Filipino and English naturally in sentences)
@@ -2747,12 +2761,13 @@ ${faqContent}
 `;
     }
 
-    // Add bot rules
-    if (config.bot_rules_dos) {
-      aiPrompt += `\n## ✅ DO's\n${config.bot_rules_dos}\n`;
-    }
-    if (config.bot_rules_donts) {
-      aiPrompt += `\n## ❌ DON'Ts\n${config.bot_rules_donts}\n`;
+    // Bot rules were already added at the TOP of the prompt for maximum compliance
+    // Add a reminder at the end too
+    if (config.bot_rules_dos || config.bot_rules_donts) {
+      aiPrompt += `\n## ⚠️ REMINDER: Follow the ABSOLUTE RULES from above!\n`;
+      if (config.bot_rules_donts) {
+        aiPrompt += `DO NOT: ${config.bot_rules_donts}\n`;
+      }
     }
 
     // Add properties (compact format) — GATED by evaluation score
