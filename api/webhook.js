@@ -2500,6 +2500,25 @@ The above context was provided by a team member. Use this information to persona
     // Check if contact has opted in to recurring notifications
     const hasOptedIn = conversation?.recurring_optin_status === 'opted_in';
 
+    // === BOOKING PUSH FREQUENCY CONTROL ===
+    // Only push booking on first encounter, after silence, or every 5th reply
+    const aiReplyCount = recentMessages ? recentMessages.filter(m => m.is_from_page).length : 0;
+    const isFirstAIReply = aiReplyCount === 0;
+
+    // Check time gap since last contact message (for silence detection)
+    let timeSinceLastContactMsg = 0; // in minutes
+    if (recentMessages && recentMessages.length > 0) {
+      const contactMsgs = recentMessages.filter(m => !m.is_from_page && m.created_at);
+      if (contactMsgs.length > 0) {
+        const lastContactTime = new Date(contactMsgs[contactMsgs.length - 1].created_at);
+        timeSinceLastContactMsg = (Date.now() - lastContactTime.getTime()) / (1000 * 60);
+      }
+    }
+
+    const shouldPushBooking = isFirstAIReply                     // First encounter
+      || timeSinceLastContactMsg > 30                            // After 30+ min silence
+      || (aiReplyCount > 0 && aiReplyCount % 5 === 0);          // Every 5th reply
+
     aiPrompt += `
 ## 🎯 YOUR PRIORITIES (Follow this order)
 
@@ -2521,9 +2540,13 @@ Encourage the customer to schedule a quick call for a personalized property eval
 - Make it feel low-pressure and helpful.
 
 ### Priority 3: 📅 Booking
-Goal: ${activeGoal.toUpperCase()}
+${shouldPushBooking
+        ? `Goal: ${activeGoal.toUpperCase()}
 Instructions: ${goalDescriptions[activeGoal] || "Help the customer and guide them towards taking action."}
-Every response should move the conversation closer to achieving this goal.
+Gently guide the conversation towards scheduling a consultation.`
+        : `The customer is actively engaged in conversation. Focus on answering their questions naturally.
+Do NOT push booking, scheduling, or consultations unless the customer explicitly asks about it.
+If they ask about booking, help them — otherwise just be helpful and conversational.`}
 `;
 
     const customGoals = config.custom_goals?.trim();
@@ -2531,9 +2554,12 @@ Every response should move the conversation closer to achieving this goal.
       aiPrompt += `\n## Additional Goals\n${customGoals}\n`;
     }
 
-    // Booking context (simplified - no calendar DB queries)
-    if (activeGoal === "booking" || config.booking_url) {
+    // Booking context — only add proactive booking instructions when shouldPushBooking is true
+    if (shouldPushBooking && (activeGoal === "booking" || config.booking_url)) {
       aiPrompt += `\n## 📅 BOOKING\nWhen customer wants to book, suggest weekday times (Mon-Fri 9AM-5PM).\nIf they confirm, add this marker at the END of your response:\nBOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber\n`;
+    } else if (config.booking_url) {
+      // Always keep the booking marker instructions available (if customer asks)
+      aiPrompt += `\n## 📅 BOOKING (only if customer asks)\nIf the customer explicitly asks to book/schedule, suggest weekday times (Mon-Fri 9AM-5PM).\nIf they confirm, add this marker at the END of your response:\nBOOKING_CONFIRMED: YYYY-MM-DD HH:MM | CustomerName | PhoneNumber\n`;
     }
 
     // Add Knowledge Base (company info, services, etc.)
@@ -2595,14 +2621,15 @@ Instead say things like: "Para ma-recommend ko po yung perfect property for you,
     }
 
     if (config.booking_url) {
-      aiPrompt += `\n## 📅 BOOKING
+      aiPrompt += `\n## 📅 BOOKING LINK
 Booking link: ${config.booking_url}
-NOTE: The system automatically sends a booking button card to the customer. Do NOT include the booking link as raw text in your messages. Only mention booking verbally (e.g. "you can book a consultation using the button above") when relevant.
+NOTE: The system automatically sends a booking button card to the customer. Do NOT include the booking link as raw text in your messages.
+${shouldPushBooking ? 'You may mention booking verbally (e.g. "you can book a consultation using the button above") to encourage scheduling.' : 'Do NOT mention booking unless the customer explicitly asks about scheduling or appointments. Focus on their current question.'}
 `;
     }
 
-    // Detect if this is the first AI reply (for booking button logic)
-    const isFirstAIReply = !recentMessages || recentMessages.filter(m => m.is_from_page).length === 0;
+    // Log booking push decision
+    console.log(`[WEBHOOK] Booking push decision: isFirst=${isFirstAIReply}, shouldPush=${shouldPushBooking}, aiReplies=${aiReplyCount}, gapMinutes=${Math.round(timeSinceLastContactMsg)}`);
 
     aiPrompt += `
 ## RULES
