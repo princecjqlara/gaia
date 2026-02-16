@@ -157,14 +157,13 @@ async function handlePostSettings(req, res, supabase) {
     try {
         const settings = req.body;
 
-        // Basic settings that should always verify
+        // Basic settings that should always work (no optional columns)
         const minimalSettings = {
             page_id: pageId,
             start_time: settings.start_time || '09:00',
             end_time: settings.end_time || '17:00',
             slot_duration: settings.slot_duration || 30,
             custom_fields: settings.custom_fields || [],
-            custom_form: settings.custom_form || [],
             updated_at: new Date().toISOString()
         };
 
@@ -173,7 +172,7 @@ async function handlePostSettings(req, res, supabase) {
         const optionalFields = [
             'available_days', 'same_day_buffer', 'min_advance_hours', 'booking_mode',
             'allow_next_hour', 'confirmation_message', 'messenger_prefill_message',
-            'auto_redirect_enabled', 'auto_redirect_delay'
+            'auto_redirect_enabled', 'auto_redirect_delay', 'custom_form'
         ];
 
         optionalFields.forEach(field => {
@@ -189,6 +188,7 @@ async function handlePostSettings(req, res, supabase) {
 
         // If that fails (column missing), try minimal settings
         if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+            console.log('Extended settings failed, trying minimal:', error.message);
             const { data: minData, error: minError } = await supabase
                 .from('booking_settings')
                 .upsert(minimalSettings, { onConflict: 'page_id' })
@@ -197,6 +197,26 @@ async function handlePostSettings(req, res, supabase) {
 
             if (!minError) {
                 return res.status(200).json({ ...settings, ...minData, _warning: 'Some settings could not be saved due to schema mismatch' });
+            }
+
+            // If minimal also fails, try absolute bare minimum (just page_id + times)
+            if (minError.code === 'PGRST204' || minError.message?.includes('column')) {
+                console.log('Minimal settings also failed, trying bare minimum:', minError.message);
+                const bareSettings = {
+                    page_id: pageId,
+                    start_time: settings.start_time || '09:00',
+                    end_time: settings.end_time || '17:00',
+                    slot_duration: settings.slot_duration || 30,
+                    updated_at: new Date().toISOString()
+                };
+                const { data: bareData, error: bareError } = await supabase
+                    .from('booking_settings')
+                    .upsert(bareSettings, { onConflict: 'page_id' })
+                    .select()
+                    .single();
+                if (!bareError) {
+                    return res.status(200).json({ ...settings, ...bareData, _warning: 'Saved with limited schema — run migrations to unlock all settings' });
+                }
             }
             error = minError;
         }
