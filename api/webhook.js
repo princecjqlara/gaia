@@ -861,7 +861,7 @@ export default async function handler(req, res) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subscribed_fields: "messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,feed",
+          subscribed_fields: "messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,message_reads,feed",
           access_token: page.page_access_token
         })
       });
@@ -4184,17 +4184,7 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
-    // 2b. Only send read-receipt follow-ups if contact has previously replied to a follow-up
-    const { count: priorReplies } = await db
-      .from('message_ab_results')
-      .select('id', { count: 'exact', head: true })
-      .eq('conversation_id', conv.conversation_id)
-      .eq('got_reply', true);
-
-    if (!priorReplies || priorReplies === 0) {
-      console.log('[WEBHOOK] 👁️ Contact has never replied to a follow-up, skipping read follow-up');
-      return;
-    }
+    // 2b. Removed prior-reply gate — read receipts should work for all contacts
 
     // 3. Check the last message in this conversation — was it from the page (AI)?
     const { data: lastMsg } = await db
