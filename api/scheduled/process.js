@@ -599,6 +599,8 @@ export default async function handler(req, res) {
 
 ${knowledgeBase ? `## Knowledge Base:\n${knowledgeBase}\n` : ''}
 ## Language: Respond in ${language}
+${language.toLowerCase().includes('taglish') ? `- IMPORTANT: Use Taglish (mix Filipino and English naturally in sentences). Example: "Hi! Kamusta ka na? Just checking in about yung property na tinitignan mo."
+- NEVER respond in pure English only - always mix Filipino words like po, na, yung, naman, din, ba, etc.` : ''}
 
 ## Task: Generate a follow-up message for this conversation.
 ${isReadTriggered ? 'The customer just saw your message and is likely active right now.' : 'The customer hasn\'t responded in a while.'}
@@ -650,9 +652,9 @@ Generate ONLY the follow-up message, nothing else:`;
                         // Fallback to simple messages if AI fails
                         if (!message) {
                             const fallbackMessages = [
-                                `Hi ${contactName}! 👋 Just checking in - any questions?`,
-                                `Hey ${contactName}! 😊 Still interested? Let me know!`,
-                                `Hi ${contactName}! Following up - happy to help if you need anything!`
+                                `Hi ${contactName}! 👋 Kamusta? May tanong ka pa ba?`,
+                                `Hey ${contactName}! 😊 Interested ka pa? Let me know lang!`,
+                                `Hi ${contactName}! Follow up lang po — happy to help if you need anything!`
                             ];
                             message = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
                             console.log(`[AI FOLLOWUP] Using fallback message`);
