@@ -882,6 +882,102 @@ export default async function handler(req, res) {
     }
   }
 
+  // MARKETING MESSAGES: POST ?action=marketing_list|marketing_status|marketing_send|marketing_broadcast
+  if (req.method === "POST" && req.body?.action?.startsWith("marketing_")) {
+    const db = getSupabase();
+    if (!db) return res.status(500).json({ error: "No DB" });
+    const { action, page_id, conversation_id, participant_id, message_text, message_template } = req.body;
+
+    try {
+      // Get active page
+      let pageQuery = db.from("facebook_pages").select("page_id, page_access_token, page_name").eq("is_active", true);
+      if (page_id) pageQuery = pageQuery.eq("page_id", page_id);
+      const { data: mktPage, error: mktPageErr } = await pageQuery.limit(1).single();
+      if (mktPageErr || !mktPage) return res.status(400).json({ error: "No active Facebook page found" });
+
+      // --- LIST SUBSCRIBERS ---
+      if (action === "marketing_list") {
+        let tokenQuery = db.from("recurring_notification_tokens")
+          .select("id, conversation_id, participant_id, page_id, token_status, frequency, opted_in_at, last_used_at, expires_at")
+          .eq("token_status", "active").eq("page_id", mktPage.page_id)
+          .order("opted_in_at", { ascending: false });
+        const { data: tokens } = await tokenQuery;
+        const enriched = [];
+        for (const token of (tokens || [])) {
+          const { data: conv } = await db.from("facebook_conversations")
+            .select("participant_name, last_message_time, ai_label, pipeline_stage")
+            .eq("conversation_id", token.conversation_id).single();
+          enriched.push({ ...token, participant_name: conv?.participant_name || "Unknown", ai_label: conv?.ai_label, pipeline_stage: conv?.pipeline_stage });
+        }
+        return res.status(200).json({ subscribers: enriched, total: enriched.length });
+      }
+
+      // --- CHECK STATUS ---
+      if (action === "marketing_status") {
+        if (!conversation_id && !participant_id) return res.status(400).json({ error: "conversation_id or participant_id required" });
+        let tq = db.from("recurring_notification_tokens").select("*").eq("page_id", mktPage.page_id).eq("token_status", "active");
+        if (conversation_id) tq = tq.eq("conversation_id", conversation_id);
+        if (participant_id) tq = tq.eq("participant_id", participant_id);
+        const { data: token } = await tq.single();
+        const isExpired = token?.expires_at && new Date(token.expires_at) < new Date();
+        const cooldownEnd = token?.last_used_at ? new Date(new Date(token.last_used_at).getTime() + 48 * 3600000) : null;
+        return res.status(200).json({
+          opted_in: !!token && !isExpired, token_status: token?.token_status || "none",
+          frequency: token?.frequency, is_expired: isExpired,
+          is_in_cooldown: cooldownEnd && cooldownEnd > new Date(),
+          cooldown_ends: cooldownEnd?.toISOString() || null,
+        });
+      }
+
+      // --- SEND TO SINGLE CONTACT ---
+      if (action === "marketing_send") {
+        if (!conversation_id && !participant_id) return res.status(400).json({ error: "conversation_id or participant_id required" });
+        if (!message_text && !message_template) return res.status(400).json({ error: "message_text or message_template required" });
+        let tq = db.from("recurring_notification_tokens").select("*").eq("page_id", mktPage.page_id).eq("token_status", "active");
+        if (conversation_id) tq = tq.eq("conversation_id", conversation_id);
+        if (participant_id) tq = tq.eq("participant_id", participant_id);
+        const { data: token } = await tq.single();
+        if (!token) return res.status(400).json({ error: "Contact has not opted in" });
+        if (token.expires_at && new Date(token.expires_at) < new Date()) {
+          await db.from("recurring_notification_tokens").update({ token_status: "expired" }).eq("id", token.id);
+          return res.status(400).json({ error: "Token expired. Contact needs to re-subscribe." });
+        }
+        if (token.last_used_at) {
+          const gap = Date.now() - new Date(token.last_used_at).getTime();
+          if (gap < 48 * 3600000) return res.status(429).json({ error: `Cooldown active. ~${Math.ceil((48 * 3600000 - gap) / 3600000)}h left.` });
+        }
+        const result = await sendMarketingMsg(mktPage, token, message_text, message_template);
+        if (result.success) {
+          await db.from("recurring_notification_tokens").update({ last_used_at: new Date().toISOString(), followup_sent: true }).eq("id", token.id);
+          return res.status(200).json({ success: true, message_id: result.message_id });
+        }
+        if (result.error_code === 551) await db.from("recurring_notification_tokens").update({ token_status: "revoked" }).eq("id", token.id);
+        return res.status(400).json({ error: result.error });
+      }
+
+      // --- BROADCAST TO ALL ---
+      if (action === "marketing_broadcast") {
+        if (!message_text && !message_template) return res.status(400).json({ error: "message_text or message_template required" });
+        const { data: tokens } = await db.from("recurring_notification_tokens").select("*").eq("page_id", mktPage.page_id).eq("token_status", "active");
+        if (!tokens?.length) return res.status(200).json({ success: true, sent: 0, skipped: 0 });
+        let sent = 0, skipped = 0, failed = 0;
+        for (const token of tokens) {
+          if (token.expires_at && new Date(token.expires_at) < new Date()) { skipped++; continue; }
+          if (token.last_used_at && (Date.now() - new Date(token.last_used_at).getTime()) < 48 * 3600000) { skipped++; continue; }
+          const r = await sendMarketingMsg(mktPage, token, message_text, message_template);
+          if (r.success) { await db.from("recurring_notification_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", token.id); sent++; }
+          else { failed++; }
+          await new Promise(r => setTimeout(r, 200));
+        }
+        return res.status(200).json({ success: true, total: tokens.length, sent, skipped, failed });
+      }
+
+      return res.status(400).json({ error: "Unknown marketing action" });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -4821,6 +4917,33 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
   } catch (error) {
     console.error(`[WEBHOOK] Failed to send welcome message: ${error.message}`);
     return false;
+  }
+}
+
+/**
+ * Send a marketing message using a notification token
+ */
+async function sendMarketingMsg(page, token, text, template) {
+  const body = { recipient: { notification_messages_token: token.token } };
+  if (template) {
+    body.message = { attachment: { type: "template", payload: template } };
+  } else {
+    body.message = { text };
+  }
+  try {
+    const resp = await fetch(
+      `https://graph.facebook.com/v21.0/${page.page_id}/messages?access_token=${page.page_access_token}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    );
+    const data = await resp.json();
+    if (resp.ok) {
+      console.log(`[MARKETING] ✅ Sent to ${token.participant_id}: ${data.message_id}`);
+      return { success: true, message_id: data.message_id };
+    }
+    console.log(`[MARKETING] ❌ Failed:`, data.error?.message);
+    return { success: false, error: data.error?.message, error_code: data.error?.code };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 }
 
