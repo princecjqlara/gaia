@@ -4094,7 +4094,7 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
       .insert({
         conversation_id: conversationId,
         page_id: pageId,
-        scheduled_at: scheduledAt.toISOString(),
+        scheduled_for: scheduledAt.toISOString(),
         follow_up_type: sanitizedType,
         reason: analysis.reason || "AI scheduled follow-up",
         status: "pending",
