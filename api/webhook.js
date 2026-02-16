@@ -2448,7 +2448,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       [pageResult, propertiesResult, messagesResult] = await Promise.all([
         db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single(),
         db.from("properties").select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images").eq("status", "For Sale").order("created_at", { ascending: false }).limit(10),
-        db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }),
+        db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(20),
       ]);
     } catch (parallelErr) {
       console.error("[WEBHOOK] Parallel fetch 2 FAILED:", parallelErr.message);
@@ -2638,24 +2638,34 @@ The above context was provided by a team member. Use this information to persona
 
       // Track progress: how many AI replies = roughly how many questions asked
       const aiReplies = (recentMessages || []).filter(m => m.is_from_page).length;
-      const nextQ = Math.min(aiReplies, Math.max(evalQuestions.length - 1, 0));
+
+      // Build a summary of what the customer already told us
+      const customerMessages = (recentMessages || []).filter(m => !m.is_from_page && m.message_text);
+      const conversationSummary = customerMessages.map(m => m.message_text).join(' | ');
 
       if (evalQuestions.length > 0) {
         aiPrompt += `
 ### Priority 1: 📋 ASK YOUR EVALUATION QUESTIONS (HIGHEST PRIORITY — MUST DO)
 You are evaluating this customer. Score: ${evaluationScore}% (need more info to unlock property recommendations).
 
-Here are YOUR evaluation questions. Ask them ONE AT A TIME in order. You've sent ~${aiReplies} replies so far.
+Here are YOUR evaluation questions. Ask them ONE AT A TIME in order.
 
-**YOUR QUESTIONS (ask the next ⬜ one):**
-${evalQuestions.map((q, i) => `${i + 1}. ${i < aiReplies ? '✅' : '⬜'} ${q}`).join('\n')}
+**YOUR QUESTIONS:**
+${evalQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
-⚡ YOUR #1 JOB: Ask question #${nextQ + 1} NOW — "${evalQuestions[nextQ]}". Just ask it directly and naturally.
-- Do NOT ask "Can I ask you some questions?" — just ASK the question
-- Do NOT recommend any properties — they are LOCKED
-- Do NOT skip to booking or scheduling  
+**WHAT THE CUSTOMER HAS ALREADY SAID:** "${conversationSummary || 'Nothing yet'}"
+
+⚡ CRITICAL RULES:
+- REVIEW the conversation history above carefully — do NOT ask a question the customer already answered
+- If they already said their location, DO NOT ask about location again
+- If they already said their budget, DO NOT ask about budget again
+- Find the NEXT question from the list that has NOT been answered yet, and ask THAT one
+- If ALL questions seem answered, acknowledge their answers and tell them you're finding the best match
 - Ask ONE question per message, wait for their answer
 - Be natural and conversational, like a friendly agent
+- Do NOT ask "Can I ask you some questions?" — just ASK the question directly
+- Do NOT recommend any properties — they are LOCKED
+- Do NOT skip to booking or scheduling
 `;
       } else {
         aiPrompt += `
