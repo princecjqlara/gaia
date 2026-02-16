@@ -2852,6 +2852,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
     let MODELS;
     if (hasImages) {
       MODELS = [
+        "meta/llama-3.2-90b-vision-instruct",
         "meta/llama-3.2-11b-vision-instruct",
       ];
     } else {
