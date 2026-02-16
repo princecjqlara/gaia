@@ -2925,6 +2925,8 @@ ${shouldPushBooking ? 'You may mention booking verbally (e.g. "you can book a co
 - NEVER include raw URLs or links in your messages. The system sends buttons automatically.
 - When booking confirmed, add at END: BOOKING_CONFIRMED: YYYY-MM-DD HH:MM | Name | Phone
 - Use 24h format (18:00 not 6pm), PIPE | separator
+ - Avoid repetitive greetings like "Kumusta" or "Hello"
+ ${isFirstAIReply ? '- This is your first reply; a brief greeting is ok.' : '- Do NOT open with greetings; respond directly to the customer.'}
 ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great first impression!' : ''}
 `;
 
