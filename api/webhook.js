@@ -2857,10 +2857,11 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
         "meta/llama-3.2-11b-vision-instruct",
       ];
     } else {
-      // Kimi K2.5 (1T params, 32B active) = smartest, with Nemotron fallback
+      // Kimi K2.5 (1T params, 32B active) = smartest, with known-working fallbacks
       MODELS = [
         "moonshotai/kimi-k2.5",
-        "nvidia/llama-3.1-nemotron-70b-instruct",
+        "meta/llama-3.1-70b-instruct",
+        "meta/llama-3.1-8b-instruct",
       ];
     }
 
@@ -2871,7 +2872,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
       try {
         console.log(`[WEBHOOK] Trying model: ${model}, hasImages: ${hasImages}`);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout per model attempt
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout per model attempt
         const aiResponse = await fetch(
           "https://integrate.api.nvidia.com/v1/chat/completions",
           {
