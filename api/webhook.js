@@ -3568,23 +3568,20 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           messaging_type: "RESPONSE"
         };
       } else if (part.type === "optin_button") {
-        // Send opt-in button with custom text
+        // Send notification_messages opt-in template (triggers native Facebook opt-in dialog)
         messageBody = {
           recipient: { id: participantId },
           message: {
             attachment: {
               type: "template",
               payload: {
-                template_type: "button",
-                text: part.content || "Click below to view properties",
-                buttons: [
-                  {
-                    type: "web_url",
-                    url: part.url,
-                    title: "🏠 View Properties",
-                    webview_height_ratio: "full"
-                  }
-                ]
+                template_type: "notification_messages",
+                title: part.content || "🏠 Get Property Updates & Deals!",
+                image_url: config.page_picture_url || undefined,
+                payload: "MARKETING_OPTIN_PROPERTIES",
+                notification_messages_frequency: "DAILY",
+                notification_messages_reoptin: "ENABLED",
+                notification_messages_timezone: "Asia/Manila"
               }
             }
           },
