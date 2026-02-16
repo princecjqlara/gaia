@@ -2413,13 +2413,13 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       }
       const indicatorProgress = qualifyIndicators.length > 0
         ? (indicatorScore / qualifyIndicators.length) * 100 : 0;
-      const messageProgress = Math.min(recentMessages.length * 5, 30);
+      const messageProgress = Math.min(recentMessages.length * 3, 15);
       const positiveWords = ['yes', 'sure', 'okay', 'sounds good', 'interested', 'tell me more', 'great'];
       let sentimentScore = 0;
       for (const word of positiveWords) {
-        if (conversationText.includes(word)) sentimentScore += 5;
+        if (conversationText.includes(word)) sentimentScore += 3;
       }
-      sentimentScore = Math.min(sentimentScore, 20);
+      sentimentScore = Math.min(sentimentScore, 10);
       const baseProgress = Math.min(indicatorProgress + messageProgress + sentimentScore, 100);
 
       // 3. Boost score based on extracted data (hard facts are most important)
@@ -3674,16 +3674,35 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
 
     console.log(`[WEBHOOK] AI reply sent! Total time: ${Date.now() - startTime}ms`);
 
-    // 📅 BOOKING BUTTON — send after opt-in, on first reply or when interested
+    // 📅 BOOKING BUTTON — only show at specific milestones:
+    //   1. First AI reply (introduction)
+    //   2. When evaluation reaches 50% of threshold (halfway point)
+    //   3. When evaluation reaches the threshold (qualified)
     try {
       const bookingUrl = config.booking_url;
       if (bookingUrl) {
-        const aiLabel = conversation?.ai_label || '';
-        const interestLabels = ['hot_lead', 'warm_lead', 'interested', 'needs_info', 'price_sensitive'];
-        const isInterested = interestLabels.some(l => aiLabel.toLowerCase().includes(l));
+        // Get the evaluation threshold (default 70%) and check milestones
+        const { data: thresholdSetting2 } = await db
+          .from('settings')
+          .select('value')
+          .eq('key', 'evaluation_threshold')
+          .single()
+          .then(r => r)
+          .catch(() => ({ data: null }));
+        const evalThreshold = thresholdSetting2?.value?.percentage || 70;
+        const halfThreshold = Math.round(evalThreshold / 2);
 
-        if (pageReplies.length <= 1 || isInterested) {
-          console.log(`[WEBHOOK] 📅 Auto-sending booking button (firstReply: ${pageReplies.length <= 1}, interested: ${isInterested})`);
+        // Check what booking milestone flags have been sent for this conversation
+        const bookingSent = conversation?.booking_btn_milestones || {};
+        const isFirst = pageReplies.length <= 1;
+        const atHalf = evaluationScore >= halfThreshold && !bookingSent.half;
+        const atFull = evaluationScore >= evalThreshold && !bookingSent.full;
+
+        const shouldSendBooking = isFirst || atHalf || atFull;
+
+        if (shouldSendBooking) {
+          const reason = isFirst ? 'first_reply' : atFull ? 'eval_complete' : 'eval_half';
+          console.log(`[WEBHOOK] 📅 Sending booking button (reason: ${reason}, score: ${evaluationScore}%, threshold: ${evalThreshold}%)`);
 
           await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -3694,7 +3713,11 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
                 type: "template",
                 payload: {
                   template_type: "button",
-                  text: "📅 Ready to book? Click below to schedule your consultation!",
+                  text: isFirst
+                    ? "📅 Ready to book? Click below to schedule your consultation!"
+                    : atFull
+                      ? "📅 Great news! Based on our chat, I think we have the perfect property for you. Book a viewing!"
+                      : "📅 Interested po? Click below to book a quick consultation!",
                   buttons: [
                     {
                       type: "web_url",
@@ -3720,10 +3743,21 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
 
           if (btnResponse.ok) {
             console.log("[WEBHOOK] ✅ Booking button sent automatically!");
+            // Record which milestones have been reached to avoid resending
+            const newMilestones = { ...bookingSent };
+            if (isFirst) newMilestones.first = true;
+            if (atHalf) newMilestones.half = true;
+            if (atFull) newMilestones.full = true;
+            await db.from('facebook_conversations').update({
+              booking_btn_milestones: newMilestones,
+              updated_at: new Date().toISOString(),
+            }).eq('conversation_id', conversationId);
           } else {
             const btnErr = await btnResponse.text();
             console.log("[WEBHOOK] Booking button send failed (non-fatal):", btnErr.substring(0, 100));
           }
+        } else {
+          console.log(`[WEBHOOK] 📅 Booking button skipped (score: ${evaluationScore}%, half: ${halfThreshold}%, full: ${evalThreshold}%, milestones: ${JSON.stringify(bookingSent)})`);
         }
       }
     } catch (bookingBtnErr) {
