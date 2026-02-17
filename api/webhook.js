@@ -873,7 +873,7 @@ export default async function handler(req, res) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subscribed_fields: "messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,message_reads,feed",
+          subscribed_fields: "messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,message_reads,message_template_status_update,feed",
           access_token: page.page_access_token
         })
       });
@@ -1196,6 +1196,8 @@ export default async function handler(req, res) {
             for (const change of (entry.changes || [])) {
               if (change.field === "feed" && change.value?.item === "comment") {
                 try { await handleCommentEvent(pageId, change.value); } catch (e) { console.error(e.message); }
+              } else if (change.field === "message_template_status_update") {
+                try { await handleTemplateStatusUpdate(pageId, change.value); } catch (e) { console.error(e.message); }
               }
             }
           }
@@ -4554,6 +4556,53 @@ async function handleOptinEvent(pageId, event) {
     console.log(`[WEBHOOK] ✅ Recurring notification token stored for ${senderId} (${frequency})`);
   } catch (error) {
     console.error("[WEBHOOK] handleOptinEvent error:", error.message);
+  }
+}
+
+/**
+ * Handle message template status updates
+ * Fired when a utility template is approved or rejected
+ */
+async function handleTemplateStatusUpdate(pageId, value) {
+  try {
+    const db = getSupabase();
+    if (!db) return;
+
+    if (!value) {
+      console.log("[WEBHOOK] Template status update missing value");
+      return;
+    }
+
+    const templateName = value.message_template_name || value.template_name || null;
+    const templateId = value.message_template_id || value.template_id || null;
+    const statusRaw = (value.message_template_status || value.status || "").toString().toUpperCase();
+    const status = statusRaw || "PENDING";
+    const errorMessage = value.reason || value.rejected_reason || value.error_message || null;
+
+    let query = db.from("utility_followup_templates").update({
+      status,
+      error_message: errorMessage,
+      approved_at: status === "APPROVED" ? new Date().toISOString() : null,
+    }).eq("page_id", pageId);
+
+    if (templateId) {
+      query = query.eq("template_id", templateId);
+    } else if (templateName) {
+      query = query.eq("template_name", templateName);
+    } else {
+      console.log("[WEBHOOK] Template status update missing template id/name");
+      return;
+    }
+
+    const { error } = await query;
+    if (error) {
+      console.error("[WEBHOOK] Template status update error:", error.message);
+      return;
+    }
+
+    console.log(`[WEBHOOK] Template status updated: ${templateName || templateId} (${status})`);
+  } catch (error) {
+    console.error("[WEBHOOK] handleTemplateStatusUpdate error:", error.message);
   }
 }
 

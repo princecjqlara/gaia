@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 function getFirstName(name) {
     if (!name || typeof name !== 'string') return '';
@@ -10,6 +11,293 @@ function getFirstName(name) {
         : withoutTitles;
     const parts = commaSplit.split(/\s+/);
     return parts[0] || commaSplit;
+}
+
+const UTILITY_WRAPPER_FALLBACKS = [
+    'Update: {{1}} Reply anytime.',
+    'Just checking in: {{1}} Let me know.',
+    'Quick update: {{1}} I am here to help.',
+    'Follow-up: {{1}} Reply when you can.',
+    'Hi! {{1}} Let me know if you need anything.'
+];
+
+function normalizeTemplateBody(body) {
+    if (!body || typeof body !== 'string') return '';
+    return body.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function hashTemplateBody(body) {
+    const normalized = normalizeTemplateBody(body);
+    return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+function sanitizeUtilityText(text, maxChars) {
+    if (!text || typeof text !== 'string') return '';
+    let cleaned = text.replace(/\|\|\|/g, ' ');
+    cleaned = cleaned.replace(/[{}]/g, '');
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    if (Number.isFinite(maxChars) && maxChars > 0 && cleaned.length > maxChars) {
+        cleaned = cleaned.slice(0, maxChars).trim();
+    }
+    return cleaned;
+}
+
+function isValidUtilityWrapper(wrapper) {
+    if (!wrapper || typeof wrapper !== 'string') return false;
+    const trimmed = wrapper.trim();
+    const matches = trimmed.match(/{{1}}/g) || [];
+    if (matches.length !== 1) return false;
+    if (trimmed.startsWith('{{1}}') || trimmed.endsWith('{{1}}')) return false;
+    if (trimmed.includes('\n')) return false;
+    return true;
+}
+
+function buildUtilityTemplateName(hash) {
+    return `utility_followup_${hash.slice(0, 18)}`;
+}
+
+async function selectApprovedUtilityTemplate(supabase, pageId, language) {
+    let query = supabase
+        .from('utility_followup_templates')
+        .select('id, template_id, template_name, language, template_body, status, use_count, last_used_at')
+        .eq('page_id', pageId)
+        .eq('status', 'APPROVED')
+        .order('last_used_at', { ascending: true, nullsFirst: true })
+        .limit(1);
+
+    if (language) {
+        query = query.eq('language', language);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+        return { template: null, error: error.message };
+    }
+
+    if (data && data.length > 0) {
+        return { template: data[0], error: null };
+    }
+
+    if (language) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+            .from('utility_followup_templates')
+            .select('id, template_id, template_name, language, template_body, status, use_count, last_used_at')
+            .eq('page_id', pageId)
+            .eq('status', 'APPROVED')
+            .order('last_used_at', { ascending: true, nullsFirst: true })
+            .limit(1);
+
+        if (fallbackError) {
+            return { template: null, error: fallbackError.message };
+        }
+
+        if (fallbackData && fallbackData.length > 0) {
+            return { template: fallbackData[0], error: null };
+        }
+    }
+
+    return { template: null, error: null };
+}
+
+async function markUtilityTemplateUsed(supabase, template) {
+    if (!template?.id) return;
+    const nextCount = (template.use_count || 0) + 1;
+    await supabase
+        .from('utility_followup_templates')
+        .update({
+            use_count: nextCount,
+            last_used_at: new Date().toISOString()
+        })
+        .eq('id', template.id);
+}
+
+async function generateUtilityWrapper(nvidiaKey, languageLabel) {
+    if (!nvidiaKey) return null;
+    const prompt = `Create a short utility follow-up wrapper in ${languageLabel || 'English'}.
+It must include the placeholder {{1}} exactly once and cannot start or end with {{1}}.
+Keep it under 80 characters, no emojis, no marketing, no sensitive requests.
+Return ONLY the wrapper text.`;
+
+    try {
+        const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${nvidiaKey}`
+            },
+            body: JSON.stringify({
+                model: 'meta/llama-3.1-8b-instruct',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.7,
+                max_tokens: 60
+            })
+        });
+
+        if (!response.ok) return null;
+        const data = await response.json();
+        const wrapper = data.choices?.[0]?.message?.content?.trim()?.replace(/^"|"$/g, '');
+        return wrapper || null;
+    } catch {
+        return null;
+    }
+}
+
+async function maybeAutoCreateUtilityTemplate({
+    supabase,
+    pageId,
+    pageAccessToken,
+    language,
+    messageText,
+    config,
+    nvidiaKey,
+    wrapperLanguage
+}) {
+    const autoCreateEnabled = config?.auto_create !== false;
+    if (!autoCreateEnabled || !pageAccessToken) return;
+
+    const dailyCap = Number.isFinite(config?.daily_create_cap)
+        ? config.daily_create_cap
+        : 10;
+
+    if (dailyCap <= 0) return;
+
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    const { count: createdToday, error: countError } = await supabase
+        .from('utility_followup_templates')
+        .select('id', { count: 'exact', head: true })
+        .eq('page_id', pageId)
+        .eq('source', 'ai_generated')
+        .gte('created_at', startOfDay.toISOString());
+
+    if (countError) {
+        console.log('[AI FOLLOWUP] Utility template count error:', countError.message);
+        return;
+    }
+
+    if ((createdToday || 0) >= dailyCap) return;
+
+    let wrapper = await generateUtilityWrapper(nvidiaKey, wrapperLanguage || config?.wrapper_language || 'English');
+    if (!isValidUtilityWrapper(wrapper)) {
+        wrapper = null;
+    }
+
+    if (!wrapper) {
+        const fallback = UTILITY_WRAPPER_FALLBACKS[Math.floor(Math.random() * UTILITY_WRAPPER_FALLBACKS.length)];
+        wrapper = fallback;
+    }
+
+    if (!isValidUtilityWrapper(wrapper)) return;
+
+    const templateHash = hashTemplateBody(wrapper);
+    const { data: existing, error: existingError } = await supabase
+        .from('utility_followup_templates')
+        .select('id')
+        .eq('page_id', pageId)
+        .eq('template_hash', templateHash)
+        .limit(1);
+
+    if (existingError) {
+        console.log('[AI FOLLOWUP] Utility template lookup error:', existingError.message);
+        return;
+    }
+
+    if (existing && existing.length > 0) return;
+
+    const templateName = buildUtilityTemplateName(templateHash);
+    const exampleText = sanitizeUtilityText(messageText || 'Quick update.', 60) || 'Quick update.';
+
+    const payload = {
+        name: templateName,
+        category: 'UTILITY',
+        language: language,
+        components: [
+            {
+                type: 'BODY',
+                text: wrapper,
+                example: { body_text: [[exampleText]] }
+            }
+        ]
+    };
+
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v21.0/${pageId}/message_templates?access_token=${pageAccessToken}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }
+        );
+
+        const data = await response.json();
+        if (!response.ok) {
+            console.log('[AI FOLLOWUP] Utility template create failed:', data.error?.message || 'Unknown error');
+            return;
+        }
+
+        await supabase
+            .from('utility_followup_templates')
+            .insert({
+                page_id: pageId,
+                template_id: data.id || null,
+                template_name: templateName,
+                language: language,
+                status: data.status || 'PENDING',
+                template_body: wrapper,
+                template_hash: templateHash,
+                source: 'ai_generated',
+                use_count: 0,
+                created_at: new Date().toISOString(),
+                approved_at: data.status === 'APPROVED' ? new Date().toISOString() : null,
+                error_message: null
+            });
+
+        console.log(`[AI FOLLOWUP] Utility template submitted: ${templateName} (${data.status || 'PENDING'})`);
+    } catch (err) {
+        console.log('[AI FOLLOWUP] Utility template submit error:', err.message);
+    }
+}
+
+async function sendUtilityTemplateMessage({
+    pageId,
+    pageAccessToken,
+    recipientId,
+    templateName,
+    language,
+    bodyText
+}) {
+    const response = await fetch(
+        `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${pageAccessToken}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                recipient: { id: recipientId },
+                messaging_type: 'UTILITY',
+                template: {
+                    name: templateName,
+                    language: { code: language },
+                    components: [
+                        {
+                            type: 'body',
+                            parameters: [
+                                { type: 'text', text: bodyText }
+                            ]
+                        }
+                    ]
+                }
+            })
+        }
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+        return { ok: false, error: data.error?.message || 'Utility send failed', errorCode: data.error?.code };
+    }
+
+    return { ok: true, data };
 }
 
 /**
@@ -305,8 +593,6 @@ export default async function handler(req, res) {
                     .not('lead_status', 'in', '(appointment_booked,converted)')
                     .neq('pipeline_stage', 'booked')
                     .lt('last_message_time', cutoffTime.toISOString())
-                    // Only include conversations within the 7-day Facebook messaging window
-                    .gt('last_message_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
                     .order('last_message_time', { ascending: true })
                     .limit(25);
 
@@ -464,6 +750,9 @@ export default async function handler(req, res) {
                         }
 
                         // Check 7-day window - HUMAN_AGENT tag only works within 7 days of last customer message
+                        let daysSinceLastMsg = null;
+                        let outside7DayWindow = false;
+
                         const { data: lastCustomerMsg } = await supabase
                             .from('facebook_messages')
                             .select('timestamp')
@@ -473,15 +762,11 @@ export default async function handler(req, res) {
                             .limit(1)
                             .single();
 
-                        if (lastCustomerMsg) {
-                            const daysSinceLastMsg = (Date.now() - new Date(lastCustomerMsg.timestamp).getTime()) / (1000 * 60 * 60 * 24);
-                            if (daysSinceLastMsg > 7) {
-                                console.log(`[AI FOLLOWUP] Outside 7-day window (${daysSinceLastMsg.toFixed(1)} days) for ${followup.conversation_id} - skipping`);
-                                await supabase
-                                    .from('ai_followup_schedule')
-                                    .update({ status: 'cancelled', error_message: `Outside 7-day messaging window (${daysSinceLastMsg.toFixed(1)} days since last customer msg)` })
-                                    .eq('id', followup.id);
-                                continue;
+                        if (lastCustomerMsg?.timestamp) {
+                            daysSinceLastMsg = (Date.now() - new Date(lastCustomerMsg.timestamp).getTime()) / (1000 * 60 * 60 * 24);
+                            outside7DayWindow = daysSinceLastMsg > 7;
+                            if (outside7DayWindow) {
+                                console.log(`[AI FOLLOWUP] Outside 7-day window (${daysSinceLastMsg.toFixed(1)} days) for ${followup.conversation_id} - switching to utility template`);
                             }
                         }
 
@@ -497,6 +782,20 @@ export default async function handler(req, res) {
                         const systemPrompt = aiConfig.system_prompt || 'You are a friendly AI assistant.';
                         const knowledgeBase = aiConfig.knowledge_base || '';
                         const language = aiConfig.language || 'Taglish';
+                        const utilityConfig = aiConfig.utility_followup_templates || {};
+                        const utilityLanguage = utilityConfig.language || 'en_US';
+                        const utilityMaxBodyChars = Number.isFinite(utilityConfig.max_body_chars)
+                            ? utilityConfig.max_body_chars
+                            : 320;
+                        const utilityFollowupsEnabled = utilityConfig.enabled !== false;
+
+                        if (outside7DayWindow && !utilityFollowupsEnabled) {
+                            await supabase
+                                .from('ai_followup_schedule')
+                                .update({ status: 'cancelled', error_message: 'Utility follow-ups disabled for contacts outside 7-day window' })
+                                .eq('id', followup.id);
+                            continue;
+                        }
 
                         // ============================================
                         // A/B TESTING: Sequence-Based Thompson Sampling
@@ -673,10 +972,60 @@ Generate ONLY the follow-up message, nothing else:`;
                             console.log(`[AI FOLLOWUP] Using fallback message`);
                         }
 
+                        const useUtilityTemplate = utilityFollowupsEnabled && outside7DayWindow;
+                        let utilityTemplate = null;
+                        let utilityText = null;
+
+                        if (useUtilityTemplate) {
+                            utilityText = sanitizeUtilityText(message, utilityMaxBodyChars);
+                            if (!utilityText) {
+                                await supabase
+                                    .from('ai_followup_schedule')
+                                    .update({ status: 'failed', error_message: 'Utility message was empty after sanitization' })
+                                    .eq('id', followup.id);
+                                aiFollowupsFailed++;
+                                continue;
+                            }
+
+                            const { template, error: templateError } = await selectApprovedUtilityTemplate(
+                                supabase,
+                                followup.page_id,
+                                utilityLanguage
+                            );
+
+                            if (templateError) {
+                                console.log(`[AI FOLLOWUP] Utility template query error: ${templateError}`);
+                            }
+
+                            if (!template) {
+                                await maybeAutoCreateUtilityTemplate({
+                                    supabase,
+                                    pageId: followup.page_id,
+                                    pageAccessToken: page.page_access_token,
+                                    language: utilityLanguage,
+                                    messageText: message,
+                                    config: utilityConfig,
+                                    nvidiaKey: NVIDIA_API_KEY,
+                                    wrapperLanguage: language
+                                });
+
+                                await supabase
+                                    .from('ai_followup_schedule')
+                                    .update({ status: 'failed', error_message: 'No approved utility templates available' })
+                                    .eq('id', followup.id);
+                                aiFollowupsFailed++;
+                                continue;
+                            }
+
+                            utilityTemplate = template;
+                        }
+
                         // === MESSAGE SPLITTING (same logic as webhook.js) ===
                         let messageParts = [];
 
-                        if (message.includes('|||')) {
+                        if (useUtilityTemplate) {
+                            messageParts = [utilityText];
+                        } else if (message.includes('|||')) {
                             // AI decided to split the message using ||| delimiter
                             messageParts = message.split('|||').map(p => p.trim()).filter(p => p.length > 0);
                             console.log(`[AI FOLLOWUP] AI split into ${messageParts.length} parts using |||`);
@@ -726,25 +1075,42 @@ Generate ONLY the follow-up message, nothing else:`;
 
                             console.log(`[AI FOLLOWUP] Sending part ${i + 1}/${messageParts.length}: "${part.substring(0, 50)}..."`);
 
-                            const response = await fetch(
-                                `https://graph.facebook.com/v21.0/${followup.page_id}/messages?access_token=${page.page_access_token}`,
-                                {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        recipient: { id: recipientId },
-                                        message: { text: part },
-                                        messaging_type: 'MESSAGE_TAG',
-                                        tag: 'HUMAN_AGENT'
-                                    })
-                                }
-                            );
+                            if (useUtilityTemplate) {
+                                const sendResult = await sendUtilityTemplateMessage({
+                                    pageId: followup.page_id,
+                                    pageAccessToken: page.page_access_token,
+                                    recipientId,
+                                    templateName: utilityTemplate.template_name,
+                                    language: utilityTemplate.language || utilityLanguage,
+                                    bodyText: part
+                                });
 
-                            if (!response.ok) {
-                                const err = await response.json();
-                                console.error(`[AI FOLLOWUP] Failed to send part ${i + 1}:`, err.error?.message);
-                                allPartsSent = false;
-                                break;
+                                if (!sendResult.ok) {
+                                    console.error(`[AI FOLLOWUP] Utility send failed for ${followup.conversation_id}:`, sendResult.error);
+                                    allPartsSent = false;
+                                    break;
+                                }
+                            } else {
+                                const response = await fetch(
+                                    `https://graph.facebook.com/v21.0/${followup.page_id}/messages?access_token=${page.page_access_token}`,
+                                    {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            recipient: { id: recipientId },
+                                            message: { text: part },
+                                            messaging_type: 'MESSAGE_TAG',
+                                            tag: 'HUMAN_AGENT'
+                                        })
+                                    }
+                                );
+
+                                if (!response.ok) {
+                                    const err = await response.json();
+                                    console.error(`[AI FOLLOWUP] Failed to send part ${i + 1}:`, err.error?.message);
+                                    allPartsSent = false;
+                                    break;
+                                }
                             }
 
                             // Small delay between messages to maintain order
@@ -754,6 +1120,20 @@ Generate ONLY the follow-up message, nothing else:`;
                         }
 
                         if (allPartsSent) {
+                            if (useUtilityTemplate) {
+                                await markUtilityTemplateUsed(supabase, utilityTemplate);
+                                await maybeAutoCreateUtilityTemplate({
+                                    supabase,
+                                    pageId: followup.page_id,
+                                    pageAccessToken: page.page_access_token,
+                                    language: utilityLanguage,
+                                    messageText: message,
+                                    config: utilityConfig,
+                                    nvidiaKey: NVIDIA_API_KEY,
+                                    wrapperLanguage: language
+                                });
+                            }
+
                             // Mark as sent
                             await supabase
                                 .from('ai_followup_schedule')
