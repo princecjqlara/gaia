@@ -161,6 +161,33 @@ function isLikelyDirectAnswer(questionText, replyText) {
   return normalizedReply.length <= 40 && replyTokens.length <= 5;
 }
 
+export function parseAiAnsweredQuestionNumbers(aiOutput, totalQuestions) {
+  if (typeof aiOutput !== "string") {
+    return [];
+  }
+
+  let cleaned = aiOutput.trim();
+  if (!cleaned) {
+    return [];
+  }
+
+  const fencedMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fencedMatch) {
+    cleaned = fencedMatch[1].trim();
+  }
+
+  if (!/^\[(?:\s*\d+\s*(?:,\s*\d+\s*)*)?\]$/.test(cleaned)) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    return sanitizeAnsweredNumbers(parsed, totalQuestions);
+  } catch {
+    return [];
+  }
+}
+
 export function mergeAnsweredQuestionNumbers({
   totalQuestions,
   rememberedQuestionNumbers,

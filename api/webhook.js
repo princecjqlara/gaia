@@ -15,6 +15,7 @@ import {
 import {
   getEvaluationQuestionPlan,
   mergeAnsweredQuestionNumbers,
+  parseAiAnsweredQuestionNumbers,
   promoteLastAskedQuestionAsAnswered,
 } from "../src/utils/evaluationQuestionFlow.js";
 import {
@@ -26,6 +27,7 @@ import {
   buildOptinFallbackText,
   isUnsupportedNotificationOptinError,
 } from "../src/utils/messengerOptin.js";
+import { buildAiFollowupSchedulePayload } from "../src/utils/followUpSchedulePayload.js";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -2280,7 +2282,7 @@ async function handleIncomingMessage(pageId, event) {
               let result = { labelsToAdd: [], labelsToRemove: [], reasoning: "" };
               try {
                 const { autoLabelConversation } =
-                  await import("../src/services/aiConversationAnalyzer");
+                  await import("../src/services/aiConversationAnalyzer.js");
                 const labelingRules = aiSettings?.value?.labeling_rules || "";
                 result = await autoLabelConversation(
                   msgs,
@@ -2709,7 +2711,10 @@ ${questionList}
 ## Customer Messages:
 ${customerMessages}
 
-For each question, respond with ONLY a JSON array of question numbers (1-indexed) that have been answered or have enough info to consider answered. Be generous — if the customer provided related info even without being directly asked, count it.
+Return EXACTLY one JSON array of question numbers (1-indexed) that have been answered or have enough info to consider answered.
+Do not add labels, explanation, bullets, or extra text.
+If unsure, return an empty array.
+Be generous - if the customer provided related info even without being directly asked, count it.
 
 Example response: [1, 3, 5]
 If none answered: []`;
@@ -2732,13 +2737,16 @@ If none answered: []`;
               const aiData = await aiResp.json();
               const aiText = aiData.choices?.[0]?.message?.content?.trim() || '';
               console.log(`[WEBHOOK] 📋 Eval AI raw response: ${aiText}`);
-              const match = aiText.match(/\[[\d,\s]*\]/);
-              if (match) {
-                const answered = JSON.parse(match[0]);
-                aiAnsweredQuestionNumbers = answered
-                  .map((n) => Number(n))
-                  .filter((n) => Number.isInteger(n) && n >= 1 && n <= evaluationQuestions.length);
+
+              aiAnsweredQuestionNumbers = parseAiAnsweredQuestionNumbers(
+                aiText,
+                evaluationQuestions.length,
+              );
+
+              if (aiAnsweredQuestionNumbers.length === 0 && aiText) {
+                console.log("[WEBHOOK] 📋 Eval AI output not strict JSON array - ignoring AI parsed answers");
               }
+
               answeredCount = aiAnsweredQuestionNumbers.length;
               console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evaluationQuestions.length} questions answered (AI check)`);
             } else {
@@ -4486,16 +4494,18 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
     }
 
     // Schedule the new intelligent follow-up
+    const schedulePayload = buildAiFollowupSchedulePayload({
+      conversationId,
+      pageId,
+      scheduledAt,
+      followUpType: sanitizedType,
+      reason: analysis.reason || "AI scheduled follow-up",
+      status: "pending",
+    });
+
     const { error: scheduleError } = await db
       .from("ai_followup_schedule")
-      .insert({
-        conversation_id: conversationId,
-        page_id: pageId,
-        scheduled_at: scheduledAt.toISOString(),
-        follow_up_type: sanitizedType,
-        reason: analysis.reason || "AI scheduled follow-up",
-        status: "pending",
-      });
+      .insert(schedulePayload);
 
     if (scheduleError) {
       console.error(
@@ -4601,25 +4611,29 @@ async function handleReadReceipt(pageId, event) {
     const scheduledAt = new Date();
 
     const reason = `read_receipt:${new Date(readTimestamp).toISOString()}|delay=${delayMinutes}m`;
-    const { error: insertError } = await db.from('ai_followup_schedule').insert({
-      conversation_id: conv.conversation_id,
-      page_id: pageId,
-      scheduled_at: scheduledAt.toISOString(),
-      status: 'pending',
-      follow_up_type: 'read_receipt',
-      reason
-    });
+    const { error: insertError } = await db.from('ai_followup_schedule').insert(
+      buildAiFollowupSchedulePayload({
+        conversationId: conv.conversation_id,
+        pageId,
+        scheduledAt,
+        status: 'pending',
+        followUpType: 'read_receipt',
+        reason,
+      }),
+    );
 
     if (insertError) {
       console.log('[WEBHOOK] Read receipt schedule failed, retrying as reminder:', insertError.message);
-      const { error: fallbackError } = await db.from('ai_followup_schedule').insert({
-        conversation_id: conv.conversation_id,
-        page_id: pageId,
-        scheduled_at: scheduledAt.toISOString(),
-        status: 'pending',
-        follow_up_type: 'reminder',
-        reason
-      });
+      const { error: fallbackError } = await db.from('ai_followup_schedule').insert(
+        buildAiFollowupSchedulePayload({
+          conversationId: conv.conversation_id,
+          pageId,
+          scheduledAt,
+          status: 'pending',
+          followUpType: 'reminder',
+          reason,
+        }),
+      );
       if (fallbackError) {
         console.log('[WEBHOOK] Read receipt fallback failed:', fallbackError.message);
         return;

@@ -1,6 +1,7 @@
 import {
   getEvaluationQuestionPlan,
   mergeAnsweredQuestionNumbers,
+  parseAiAnsweredQuestionNumbers,
   promoteLastAskedQuestionAsAnswered,
 } from "../utils/evaluationQuestionFlow";
 
@@ -97,5 +98,24 @@ describe("evaluationQuestionFlow", () => {
     });
 
     expect(promoted).toEqual([]);
+  });
+
+  test("parses strict json array from ai output", () => {
+    const parsed = parseAiAnsweredQuestionNumbers("[1, 3, 5]", 6);
+    expect(parsed).toEqual([1, 3, 5]);
+  });
+
+  test("parses json array inside code fence", () => {
+    const parsed = parseAiAnsweredQuestionNumbers("```json\n[2,4]\n```", 6);
+    expect(parsed).toEqual([2, 4]);
+  });
+
+  test("ignores verbose ai output that is not strict json array", () => {
+    const parsed = parseAiAnsweredQuestionNumbers(
+      `Here are the evaluation questions:\n1. Budget\n[3, 6, 8, 10]`,
+      27,
+    );
+
+    expect(parsed).toEqual([]);
   });
 });

@@ -35,4 +35,19 @@ describe("messengerOptin", () => {
     expect(fallback).toContain("I saved a spot for you");
     expect(fallback.length).toBeGreaterThan(0);
   });
+
+  test("truncates long opt-in title to supported length", () => {
+    const payload = buildNotificationOptinMessage({
+      participantId: "psid_123",
+      title:
+        "Click below po para ma-message kita pag may perfect match na! Saan located ang Carmona Estates?",
+    });
+
+    expect(payload.message.attachment.payload.title.length).toBeLessThanOrEqual(65);
+  });
+
+  test("detects title length payload errors", () => {
+    const err = '{"error":{"message":"(#100) Title length exceeded the max limit. Please check developer doc for more information."}}';
+    expect(isUnsupportedNotificationOptinError(err)).toBe(true);
+  });
 });
