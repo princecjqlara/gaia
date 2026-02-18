@@ -25,6 +25,18 @@ describe("contactNameUtils", () => {
     expect(name).toBe("Prince");
   });
 
+  test("uses conversation lookup name before graph name", () => {
+    const name = resolveParticipantName({
+      currentName: "Customer",
+      eventName: "",
+      conversationName: "Maria Clara",
+      graphName: "John Doe",
+      extractedName: "",
+    });
+
+    expect(name).toBe("Maria Clara");
+  });
+
   test("returns fallback when no valid name found", () => {
     const name = resolveParticipantName({
       currentName: "Customer",

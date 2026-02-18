@@ -1859,7 +1859,50 @@ async function handleIncomingMessage(pageId, event) {
         participantName = senderNameFromEvent;
       }
 
-      // Source 2: Fetch from Facebook Graph API if still no name
+      // Source 2: Fetch name from Conversations API (more reliable than profile endpoint)
+      let conversationLookupName = "";
+      if (
+        needsParticipantNameLookup(participantName) &&
+        needsParticipantNameLookup(conversationLookupName) &&
+        !isFromPage
+      ) {
+        try {
+          const realConversation = await fetchRealConversationId(participantId, pageId);
+          const realConversationId = realConversation?.conversationId || "";
+
+          if (!needsParticipantNameLookup(realConversation?.name)) {
+            conversationLookupName = realConversation.name;
+            console.log(
+              `[WEBHOOK] Got name from conversations list: ${conversationLookupName}`,
+            );
+          }
+
+          if (needsParticipantNameLookup(conversationLookupName)) {
+            const conversationIdForLookup =
+              realConversationId ||
+              (conversationId && !conversationId.startsWith("t_")
+                ? conversationId
+                : "");
+
+            if (conversationIdForLookup) {
+              const deepConversationName = await fetchNameFromConversation(
+                conversationIdForLookup,
+                participantId,
+                pageId,
+              );
+              if (!needsParticipantNameLookup(deepConversationName)) {
+                conversationLookupName = deepConversationName;
+              }
+            }
+          }
+        } catch (conversationErr) {
+          console.log(
+            `[WEBHOOK] Conversation name lookup failed (non-fatal): ${conversationErr.message}`,
+          );
+        }
+      }
+
+      // Source 3: Fetch from Facebook Graph API if still no name
       let profileLookupName = "";
       if (needsParticipantNameLookup(participantName) && !isFromPage) {
         try {
@@ -1890,7 +1933,7 @@ async function handleIncomingMessage(pageId, event) {
         }
       }
 
-      // Source 3: Extract from contact's own message (e.g. "I'm Prince")
+      // Source 4: Extract from contact's own message (e.g. "I'm Prince")
       const extractedName = !isFromPage
         ? extractNameFromText(message.text || "")
         : "";
@@ -1901,6 +1944,7 @@ async function handleIncomingMessage(pageId, event) {
       participantName = resolveParticipantName({
         currentName: participantName,
         eventName: senderNameFromEvent,
+        conversationName: conversationLookupName,
         graphName: profileLookupName,
         extractedName,
       });

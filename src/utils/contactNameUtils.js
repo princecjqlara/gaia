@@ -28,6 +28,7 @@ export function needsParticipantNameLookup(name) {
 export function resolveParticipantName({
   currentName,
   eventName,
+  conversationName,
   graphName,
   extractedName,
   fallback = "Customer",
@@ -37,7 +38,7 @@ export function resolveParticipantName({
     return cleanedCurrentName;
   }
 
-  const candidates = [eventName, graphName, extractedName];
+  const candidates = [eventName, conversationName, graphName, extractedName];
   for (const candidate of candidates) {
     const cleaned = cleanName(candidate);
     if (!needsParticipantNameLookup(cleaned)) {
