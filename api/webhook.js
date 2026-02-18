@@ -7,6 +7,11 @@ import {
   parseWelcomeGenerationOutput,
   sanitizeWelcomeButtonLabel,
 } from "../src/utils/welcomeMessagePrompt.js";
+import {
+  getDisplayContactName,
+  needsParticipantNameLookup,
+  resolveParticipantName,
+} from "../src/utils/contactNameUtils.js";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -1843,22 +1848,20 @@ async function handleIncomingMessage(pageId, event) {
     // Try multiple sources for participant name
     let participantName = existingConv?.participant_name;
 
-    // Fetch name if missing, empty, or is "Unknown" (for both incoming messages AND echoes)
-    const needsNameLookup =
-      !participantName ||
-      participantName === "Unknown" ||
-      participantName.trim() === "";
+    // Fetch name if missing or placeholder (for both incoming messages AND echoes)
+    const needsNameLookup = needsParticipantNameLookup(participantName);
     if (needsNameLookup) {
       // Source 1: Check if Facebook included sender name in the event
       const senderNameFromEvent =
-        event.sender?.name || event.recipient?.name || message.sender_name;
-      if (senderNameFromEvent) {
+        event.sender?.name || event.recipient?.name || message.sender_name || "";
+      if (!needsParticipantNameLookup(senderNameFromEvent)) {
         console.log(`[WEBHOOK] Got name from event: ${senderNameFromEvent}`);
         participantName = senderNameFromEvent;
       }
 
       // Source 2: Fetch from Facebook Graph API if still no name
-      if (!participantName && !isFromPage) {
+      let profileLookupName = "";
+      if (needsParticipantNameLookup(participantName) && !isFromPage) {
         try {
           // Get page access token for the API call
           const { data: pageData } = await db
@@ -1874,9 +1877,9 @@ async function handleIncomingMessage(pageId, event) {
             );
             if (profileResp.ok) {
               const profileData = await profileResp.json();
-              participantName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
-              if (participantName) {
-                console.log(`[WEBHOOK] Got name from Graph API: ${participantName}`);
+              profileLookupName = profileData.name || `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+              if (!needsParticipantNameLookup(profileLookupName)) {
+                console.log(`[WEBHOOK] Got name from Graph API: ${profileLookupName}`);
               }
             } else {
               console.log(`[WEBHOOK] Graph API name lookup unavailable (privacy restriction)`);
@@ -1887,10 +1890,22 @@ async function handleIncomingMessage(pageId, event) {
         }
       }
 
-      // Fallback
-      if (!participantName) {
-        participantName = "Customer";
+      // Source 3: Extract from contact's own message (e.g. "I'm Prince")
+      const extractedName = !isFromPage
+        ? extractNameFromText(message.text || "")
+        : "";
+      if (extractedName) {
+        console.log(`[WEBHOOK] Got name from message text: ${extractedName}`);
       }
+
+      participantName = resolveParticipantName({
+        currentName: participantName,
+        eventName: senderNameFromEvent,
+        graphName: profileLookupName,
+        extractedName,
+      });
+
+      // Fallback
       console.log(`[WEBHOOK] Name: ${participantName}`);
     }
 
@@ -2503,7 +2518,10 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     const disallowGreetings = /never introduce|do not introduce|dont introduce|don't introduce/i.test(botRulesDonts);
     const knownPhone =
       conversation?.phone_number || conversation?.extracted_details?.phone;
-    const displayName = getFirstName(conversation?.participant_name) || conversation?.participant_name;
+    const displayName = getDisplayContactName(
+      conversation?.participant_name,
+      getFirstName,
+    );
 
     // ============================================
     // EVALUATION GATING LOGIC — Based on admin-defined evaluation questions
@@ -2711,7 +2729,7 @@ You MUST respond in ${language}. This is MANDATORY.
 - NEVER respond in pure English only - always mix Filipino words.
 
 ## Platform: Facebook Messenger
-Contact Name: ${displayName || "Customer"}
+Contact Name: ${displayName || "NOT PROVIDED"}
 ${knownPhone ? `Phone Number: ${knownPhone}` : ""}
 ${conversation?.pipeline_stage ? `Pipeline Stage: ${conversation.pipeline_stage}` : ""}
 ${conversation?.lead_status ? `Lead Status: ${conversation.lead_status}` : ""}
@@ -3189,8 +3207,11 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           console.log("[WEBHOOK] Booking parts:", JSON.stringify(parts));
 
           const dateTimeStr = parts[0] || "";
-          const customerName =
-            parts[1] || conversation?.participant_name || "Customer";
+          const customerName = resolveParticipantName({
+            currentName: parts[1],
+            extractedName: conversation?.participant_name,
+            fallback: "Lead",
+          });
           const phone = parts[2] || "";
 
           console.log(
@@ -3516,7 +3537,10 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
             );
 
             // Get customer name from conversation
-            const customerName = conversation?.participant_name || "Customer";
+            const customerName = resolveParticipantName({
+              currentName: conversation?.participant_name,
+              fallback: "Lead",
+            });
 
             // Try to extract phone from recent messages
             let phone = "";
@@ -3634,8 +3658,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
               if (
                 !existingClient &&
                 customerName &&
-                customerName !== "Customer" &&
-                customerName !== "Unknown"
+                !needsParticipantNameLookup(customerName)
               ) {
                 const { data: byName } = await db
                   .from("clients")
@@ -3760,7 +3783,10 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
       if (profileCardMatch) {
         const details = conversation?.extracted_details || {};
         const analysis = conversation?.ai_analysis || {};
-        const name = conversation?.participant_name || "Customer";
+        const name = resolveParticipantName({
+          currentName: conversation?.participant_name,
+          fallback: "Lead",
+        });
 
         // Build profile summary lines
         const profileLines = [];
@@ -4689,7 +4715,7 @@ async function handlePostbackEvent(pageId, event) {
     let conversationId = existingConv?.conversation_id;
     let participantName = existingConv?.participant_name;
 
-    if (!conversationId || !participantName || participantName === "Unknown") {
+    if (!conversationId || needsParticipantNameLookup(participantName)) {
       const result = await fetchRealConversationId(senderId, pageId);
       if (result.conversationId) {
         conversationId = result.conversationId;
@@ -4702,9 +4728,14 @@ async function handlePostbackEvent(pageId, event) {
     }
 
     // Try to get name from Facebook API if still missing
-    if (!participantName || participantName === "Unknown") {
+    if (needsParticipantNameLookup(participantName)) {
       participantName = await fetchFacebookUserName(senderId, pageId);
     }
+
+    participantName = resolveParticipantName({
+      currentName: participantName,
+      fallback: "Customer",
+    });
 
     // Create/update conversation
     const conversationData = {
@@ -4848,7 +4879,7 @@ async function handleReferralEvent(pageId, event) {
     let conversationId = existingConv?.conversation_id;
     let participantName = existingConv?.participant_name;
 
-    if (!conversationId || !participantName || participantName === "Unknown") {
+    if (!conversationId || needsParticipantNameLookup(participantName)) {
       const result = await fetchRealConversationId(senderId, pageId);
       if (result.conversationId) {
         conversationId = result.conversationId;
@@ -4860,9 +4891,14 @@ async function handleReferralEvent(pageId, event) {
       }
     }
 
-    if (!participantName || participantName === "Unknown") {
+    if (needsParticipantNameLookup(participantName)) {
       participantName = await fetchFacebookUserName(senderId, pageId);
     }
+
+    participantName = resolveParticipantName({
+      currentName: participantName,
+      fallback: "Customer",
+    });
 
     // Create welcome message based on source
     const welcomeContext =
@@ -4996,7 +5032,8 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
         extractedDetails = conv.extracted_details;
       }
     } catch (e) { }
-    const greetingName = getFirstName(participantName) || participantName;
+    const greetingName =
+      getDisplayContactName(participantName, getFirstName) || "Friend";
 
     // DEBUG: Log settings to find correct booking URL key
     console.log("[WEBHOOK] Welcome Settings Dump:", JSON.stringify(settings?.value || {}, null, 2));
