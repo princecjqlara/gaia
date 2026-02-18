@@ -12,6 +12,7 @@ import {
   needsParticipantNameLookup,
   resolveParticipantName,
 } from "../src/utils/contactNameUtils.js";
+import { getEvaluationQuestionPlan } from "../src/utils/evaluationQuestionFlow.js";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -2575,6 +2576,9 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     let gatingReason = "";
     let evaluationThreshold = 70;
     let evaluationHalfThreshold = 35;
+    let evaluationQuestions = [];
+    let answeredQuestionNumbers = [];
+    let evaluationQuestionPlan = null;
 
     try {
       // 1. Get threshold setting (default 70%) — NO .single() to avoid PGRST116 when row missing
@@ -2594,10 +2598,9 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       evaluationHalfThreshold = Math.round(threshold / 2);
 
       // 2. Load evaluation questions from config or dedicated settings key
-      let evalQuestions = [];
       if (config.evaluation_questions && Array.isArray(config.evaluation_questions) && config.evaluation_questions.length > 0) {
-        evalQuestions = config.evaluation_questions;
-        console.log(`[WEBHOOK] 📋 Eval questions loaded from ai_chatbot_config: ${evalQuestions.length} questions`);
+        evaluationQuestions = config.evaluation_questions;
+        console.log(`[WEBHOOK] 📋 Eval questions loaded from ai_chatbot_config: ${evaluationQuestions.length} questions`);
       } else {
         try {
           const { data: evalRows } = await db
@@ -2606,22 +2609,22 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
             .eq('key', 'evaluation_questions')
             .limit(1);
           if (evalRows?.[0]?.value?.questions && Array.isArray(evalRows[0].value.questions)) {
-            evalQuestions = evalRows[0].value.questions;
-            console.log(`[WEBHOOK] 📋 Eval questions loaded from settings key: ${evalQuestions.length} questions`);
+            evaluationQuestions = evalRows[0].value.questions;
+            console.log(`[WEBHOOK] 📋 Eval questions loaded from settings key: ${evaluationQuestions.length} questions`);
           }
         } catch (e) { /* no questions */ }
       }
 
-      if (evalQuestions.length === 0) {
+      if (evaluationQuestions.length === 0) {
         // Use default questions if none configured
-        evalQuestions = [
+        evaluationQuestions = [
           'What is your primary business goal?',
           'What is your marketing budget?',
           'Who is your target audience?',
           'What has been your biggest marketing challenge?',
           'Why are you looking for our services now?'
         ];
-        console.log(`[WEBHOOK] 📋 No eval questions found, using ${evalQuestions.length} defaults`);
+        console.log(`[WEBHOOK] 📋 No eval questions found, using ${evaluationQuestions.length} defaults`);
       }
 
       const customerMessagesList = recentMessages
@@ -2639,7 +2642,7 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
 
         if (NVIDIA_API_KEY) {
           try {
-            const questionList = evalQuestions
+            const questionList = evaluationQuestions
               .map((q, i) => `${i + 1}. ${q}`)
               .join('\n');
 
@@ -2677,9 +2680,13 @@ If none answered: []`;
               const match = aiText.match(/\[[\d,\s]*\]/);
               if (match) {
                 const answered = JSON.parse(match[0]);
-                answeredCount = answered.filter(n => n >= 1 && n <= evalQuestions.length).length;
+                answeredQuestionNumbers = answered
+                  .map((n) => Number(n))
+                  .filter((n) => Number.isInteger(n) && n >= 1 && n <= evaluationQuestions.length);
+                answeredQuestionNumbers = Array.from(new Set(answeredQuestionNumbers));
+                answeredCount = answeredQuestionNumbers.length;
               }
-              console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evalQuestions.length} questions answered (AI check)`);
+              console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evaluationQuestions.length} questions answered (AI check)`);
             } else {
               console.log(`[WEBHOOK] 📋 Eval AI call failed: ${aiResp.status} ${aiResp.statusText}`);
             }
@@ -2693,27 +2700,41 @@ If none answered: []`;
         // Keyword fallback if AI didn't produce results
         if (answeredCount === 0) {
           const custText = customerMessages.toLowerCase();
-          for (const q of evalQuestions) {
+          const keywordMatchedNumbers = [];
+          for (let i = 0; i < evaluationQuestions.length; i += 1) {
+            const q = evaluationQuestions[i];
             const keywords = q.toLowerCase()
               .replace(/[?.,!]/g, '')
               .split(/\s+/)
               .filter(w => w.length > 3 && !['what', 'your', 'have', 'been', 'with', 'this', 'that', 'from', 'they', 'will', 'does', 'which'].includes(w));
             const matchCount = keywords.filter(kw => custText.includes(kw)).length;
             if (matchCount >= Math.max(1, Math.floor(keywords.length * 0.3))) {
-              answeredCount++;
+              keywordMatchedNumbers.push(i + 1);
             }
           }
-          console.log(`[WEBHOOK] 📋 Evaluation keyword fallback: ${answeredCount}/${evalQuestions.length}`);
+
+          answeredQuestionNumbers = keywordMatchedNumbers;
+          answeredCount = answeredQuestionNumbers.length;
+          console.log(`[WEBHOOK] 📋 Evaluation keyword fallback: ${answeredCount}/${evaluationQuestions.length}`);
         }
         if (answeredCount === 0 && customerMessagesList.length > 0) {
-          answeredCount = Math.min(customerMessagesList.length, evalQuestions.length);
-          console.log(`[WEBHOOK] 📋 Evaluation reply-count fallback: ${answeredCount}/${evalQuestions.length}`);
+          answeredCount = Math.min(customerMessagesList.length, evaluationQuestions.length);
+          answeredQuestionNumbers = Array.from({ length: answeredCount }, (_, i) => i + 1);
+          console.log(`[WEBHOOK] 📋 Evaluation reply-count fallback: ${answeredCount}/${evaluationQuestions.length}`);
         }
       } else {
         console.log('[WEBHOOK] 📋 No customer messages for evaluation');
       }
 
-      evaluationScore = Math.round((answeredCount / evalQuestions.length) * 100);
+      evaluationQuestionPlan = getEvaluationQuestionPlan({
+        evalQuestions: evaluationQuestions,
+        answeredQuestionNumbers,
+        recentMessages,
+      });
+
+      answeredQuestionNumbers = evaluationQuestionPlan.answeredQuestionNumbers;
+      answeredCount = answeredQuestionNumbers.length;
+      evaluationScore = Math.round((answeredCount / evaluationQuestions.length) * 100);
       console.log(`[WEBHOOK] 📋 Final evaluation score: ${evaluationScore}%`);
 
       // 4. Determine status
@@ -2832,23 +2853,45 @@ The above context was provided by a team member. Use this information to persona
 
     // When evaluation is NOT complete, asking questions is top priority
     if (!canViewProperties) {
-      // Load user-configured evaluation questions from DB
-      let evalQuestions = config.evaluation_questions || [];
-      try {
-        const { data: evalSetting } = await db
-          .from('settings')
-          .select('value')
-          .eq('key', 'evaluation_questions')
-          .single();
-        if (evalSetting?.value?.questions?.length > 0) {
-          evalQuestions = evalSetting.value.questions;
+      let evalQuestions = Array.isArray(evaluationQuestions)
+        ? [...evaluationQuestions]
+        : [];
+
+      if (evalQuestions.length === 0) {
+        // Safety fallback if evaluation section above failed
+        evalQuestions = config.evaluation_questions || [];
+        try {
+          const { data: evalSetting } = await db
+            .from('settings')
+            .select('value')
+            .eq('key', 'evaluation_questions')
+            .single();
+          if (evalSetting?.value?.questions?.length > 0) {
+            evalQuestions = evalSetting.value.questions;
+          }
+        } catch (e) {
+          console.log('[WEBHOOK] Could not load evaluation_questions setting');
         }
-      } catch (e) {
-        console.log('[WEBHOOK] Could not load evaluation_questions setting');
       }
 
-      // Track progress: how many AI replies = roughly how many questions asked
-      const aiReplies = (recentMessages || []).filter(m => m.is_from_page).length;
+      const questionPlan =
+        evaluationQuestionPlan &&
+          Array.isArray(evaluationQuestions) &&
+          evaluationQuestions.length === evalQuestions.length
+          ? evaluationQuestionPlan
+          : getEvaluationQuestionPlan({
+            evalQuestions,
+            answeredQuestionNumbers,
+            recentMessages,
+          });
+      const answeredNumbersText = questionPlan.answeredQuestionNumbers.length > 0
+        ? questionPlan.answeredQuestionNumbers.join(', ')
+        : 'none yet';
+      const unansweredNumbersText = questionPlan.unansweredQuestionNumbers.length > 0
+        ? questionPlan.unansweredQuestionNumbers.join(', ')
+        : 'none';
+      const nextQuestionNumber = questionPlan.nextQuestionNumber || 1;
+      const nextQuestionText = questionPlan.nextQuestion || evalQuestions[0] || '';
 
       // Build a summary of what the customer already told us
       const customerMessages = (recentMessages || []).filter(m => !m.is_from_page && m.message_text);
@@ -2865,18 +2908,26 @@ Here are YOUR evaluation questions. Ask them ONE AT A TIME in order.
 ${evalQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
 **WHAT THE CUSTOMER HAS ALREADY SAID:** "${conversationSummary || 'Nothing yet'}"
+**ANSWERED QUESTION NUMBERS:** ${answeredNumbersText}
+**UNANSWERED QUESTION NUMBERS:** ${unansweredNumbersText}
+**NEXT REQUIRED QUESTION:** Q${nextQuestionNumber}: ${nextQuestionText}
 
 ⚡ CRITICAL RULES:
 - REVIEW the conversation history above carefully — do NOT ask a question the customer already answered
 - If they already said their location, DO NOT ask about location again
 - If they already said their budget, DO NOT ask about budget again
-- Find the NEXT question from the list that has NOT been answered yet, and ask THAT one
+- Ask the NEXT REQUIRED QUESTION shown above
+- If their last reply is unclear or partial, ask ONE short clarification follow-up for that same question
+- Do NOT repeat the exact same question wording twice in a row
 - If ALL questions seem answered, acknowledge their answers and tell them you're finding the best match
 - Ask ONE question per message, wait for their answer
 - Be natural and conversational, like a friendly agent
 - Do NOT ask "Can I ask you some questions?" — just ASK the question directly
 - Do NOT recommend any properties — they are LOCKED
 - Do NOT skip to booking or scheduling
+${questionPlan.shouldAskClarifyingFollowup
+            ? `- IMPORTANT NOW: The customer already replied to Q${nextQuestionNumber}. Ask a clarification follow-up for Q${nextQuestionNumber} using new wording (1 sentence max).`
+            : ''}
 `;
       } else {
         aiPrompt += `
