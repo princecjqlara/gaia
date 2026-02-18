@@ -1,5 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import {
+  DEFAULT_WELCOME_BUTTON_LABEL,
+  buildWelcomeFallbackMessage,
+  buildWelcomeGenerationPrompt,
+  parseWelcomeGenerationOutput,
+  sanitizeWelcomeButtonLabel,
+} from "../src/utils/welcomeMessagePrompt.js";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -2117,7 +2124,7 @@ async function handleIncomingMessage(pageId, event) {
 
     // TRIGGER AI AUTO-RESPONSE for incoming user messages (NOT echoes)
     if (!isFromPage && message.text) {
-      // FOR NEW CONVERSATIONS: Send Welcome Message + Booking Button instead of AI text
+      // FOR NEW CONVERSATIONS: Send welcome trigger instead of immediate AI reply
       // Check isNewConversation OR if total messages are very low (e.g. just this one)
       // We can't easily check total messages here without a query, but isNewConversation should be robust if delete worked.
       // However, let's treat it as new if we just upserted it and it had no previous messages.
@@ -2125,7 +2132,7 @@ async function handleIncomingMessage(pageId, event) {
       const shouldSendWelcome = isNewConversation || (existingConv && existingConv.last_message_time === null);
 
       if (shouldSendWelcome) {
-        console.log("[WEBHOOK] New conversation detected - sending Welcome Message with Booking Button...");
+        console.log("[WEBHOOK] New conversation detected - sending welcome trigger message...");
         const welcomeSent = await sendWelcomeMessage(pageId, participantId, conversationId);
         if (welcomeSent) {
           // Reset recurring notification follow-up timer (7-day countdown restarts)
@@ -4952,7 +4959,7 @@ async function handleReferralEvent(pageId, event) {
 }
 
 /**
- * Send the welcome message with booking button
+ * Send the first-message welcome trigger
  */
 async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
   const db = getSupabase();
@@ -4973,15 +4980,21 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       return false;
     }
 
-    // 3. Get User Name (if available) & Generate Personalized Greeting
+    // 3. Get contact context for personalization
     let participantName = "Friend";
+    let openerMessage = "";
+    let extractedDetails = {};
     try {
       const { data: conv } = await db
         .from("facebook_conversations")
-        .select("participant_name")
+        .select("participant_name,last_message_text,extracted_details")
         .eq("conversation_id", conversationId)
         .single();
       if (conv?.participant_name) participantName = conv.participant_name;
+      if (conv?.last_message_text) openerMessage = conv.last_message_text;
+      if (conv?.extracted_details && typeof conv.extracted_details === "object") {
+        extractedDetails = conv.extracted_details;
+      }
     } catch (e) { }
     const greetingName = getFirstName(participantName) || participantName;
 
@@ -5032,34 +5045,53 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     // Read custom welcome settings
     const customWelcomeText = settings?.value?.welcome_message_text || "";
     const aiGenEnabled = settings?.value?.welcome_ai_generated !== false; // default: true
-    const customButtonLabel = settings?.value?.welcome_button_label || "📅 Book Now";
+    const configuredButtonLabel = settings?.value?.welcome_button_label || "";
+    const hasCustomButtonLabel = configuredButtonLabel.trim().length > 0;
+    let primaryButtonLabel = hasCustomButtonLabel
+      ? sanitizeWelcomeButtonLabel(configuredButtonLabel)
+      : DEFAULT_WELCOME_BUTTON_LABEL;
     const customButtonUrl = settings?.value?.welcome_button_url || bookingUrl;
     const button2Enabled = settings?.value?.welcome_button2_enabled === true;
     const button2Label = settings?.value?.welcome_button2_label || "";
     const button2Url = settings?.value?.welcome_button2_url || "";
 
     // Determine welcome text
-    let welcomeText = "Hello! 👋 Welcome to Gaia. I'm your AI assistant. How can I help you today?";
+    let welcomeText = buildWelcomeFallbackMessage(greetingName);
 
     if (customWelcomeText) {
       // Use user's custom text (replace {{name}} placeholder)
       welcomeText = customWelcomeText.replace(/\{\{name\}\}/gi, greetingName);
     } else if (aiGenEnabled) {
-      // Generate PERSONALIZED Welcome via AI
+      // Generate clickbait + personalized first message via AI
       const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
       const botDos = settings?.value?.bot_rules_dos || "";
       const botDonts = settings?.value?.bot_rules_donts || "";
-      const welcomePrompt = `
-        ${systemPrompt}
-        
-        TASK: Generate a SHORT, friendly, and personalized welcome message for a new user named "${greetingName}".
-        GOAL: Encourage them to book a consultation.
-        TONE: Warm, professional, enthusiastic.
-        LANGUAGE: Taglish (Filipino/English mix).
-        limit: 1-2 sentences max. NO hashtags.
-        ${botDos ? `\n## ✅ DO's (MUST FOLLOW)\n${botDos}` : ''}
-        ${botDonts ? `\n## ❌ DON'Ts (NEVER DO THESE)\n${botDonts}` : ''}
-      `;
+      const recentMessagesToAvoid = Array.isArray(settings?.value?.welcome_recent_messages)
+        ? settings.value.welcome_recent_messages.filter(Boolean).slice(0, 5)
+        : [];
+
+      const { prompt: welcomePrompt, angle: selectedAngle } = buildWelcomeGenerationPrompt({
+        firstName: greetingName,
+        cityOrArea: extractedDetails.city || extractedDetails.location || extractedDetails.area,
+        propertyInterest:
+          extractedDetails.property_interest ||
+          extractedDetails.propertyType ||
+          extractedDetails.property_type ||
+          extractedDetails.intent,
+        budgetRange: extractedDetails.budget || extractedDetails.budget_range,
+        timeline: extractedDetails.timeline,
+        goal: extractedDetails.goal,
+        painPoint: extractedDetails.pain_point || extractedDetails.painPoint,
+        leadSource: extractedDetails.lead_source || "facebook_messenger",
+        openerMessage,
+        recentMessagesToAvoid,
+        lastAngleUsed: settings?.value?.welcome_last_angle || "",
+        systemPrompt,
+        botDos,
+        botDonts,
+      });
+
+      let selectedOutputAngle = selectedAngle;
 
       try {
         const controller = new AbortController();
@@ -5081,12 +5113,44 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
         clearTimeout(timeoutId);
         const data = await completion.json();
         if (data.choices?.[0]?.message?.content) {
-          welcomeText = data.choices[0].message.content.replace(/[""]/g, "").trim();
+          const parsedOutput = parseWelcomeGenerationOutput(data.choices[0].message.content, greetingName);
+          welcomeText = parsedOutput.message;
+          if (!hasCustomButtonLabel && parsedOutput.button) {
+            primaryButtonLabel = parsedOutput.button;
+          }
+          if (parsedOutput.angle) {
+            selectedOutputAngle = parsedOutput.angle;
+          }
+
+          try {
+            const existingMessages = Array.isArray(settings?.value?.welcome_recent_messages)
+              ? settings.value.welcome_recent_messages.filter(Boolean)
+              : [];
+            const updatedRecentMessages = [
+              welcomeText,
+              ...existingMessages.filter((msg) => msg !== welcomeText),
+            ].slice(0, 5);
+
+            await db
+              .from("settings")
+              .update({
+                value: {
+                  ...(settings?.value || {}),
+                  welcome_last_angle: selectedOutputAngle,
+                  welcome_recent_messages: updatedRecentMessages,
+                },
+              })
+              .eq("key", "ai_chatbot_config");
+          } catch (persistErr) {
+            console.warn("[WEBHOOK] Failed to persist welcome angle/history:", persistErr.message);
+          }
         }
       } catch (aiErr) {
         console.error("[WEBHOOK] Welcome AI Gen Failed:", aiErr.message);
-        // Personalized static fallback
-        welcomeText = `Hello ${greetingName !== "Friend" ? greetingName : ""} po! 👋 Welcome! I'm your AI assistant — ready to help you find what you need. Let's get started!`;
+        welcomeText = buildWelcomeFallbackMessage(greetingName);
+        if (!hasCustomButtonLabel) {
+          primaryButtonLabel = DEFAULT_WELCOME_BUTTON_LABEL;
+        }
       }
     }
 
@@ -5095,7 +5159,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     buttons.push({
       type: "web_url",
       url: customButtonUrl,
-      title: customButtonLabel,
+      title: primaryButtonLabel,
       webview_height_ratio: "full"
     });
 
@@ -5141,7 +5205,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
             message_id: `welcome_${recipientId}_${Date.now()}`,
             conversation_id: conversationId,
             sender_id: pageId,
-            message_text: "Hello! 👋 Welcome to Gaia. I'm your AI assistant. I can help you find properties or schedule a consultation.\n\nReady to get started?",
+            message_text: welcomeText,
             is_from_page: true,
             timestamp: new Date().toISOString(),
             sent_source: "app"

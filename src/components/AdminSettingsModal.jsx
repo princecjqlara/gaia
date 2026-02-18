@@ -3424,13 +3424,13 @@ REFERRAL: Customer was referred by someone`}
                 <div style={{ padding: '1rem', background: 'rgba(99, 102, 241, 0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
                   <div style={{ fontWeight: 500, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>🔘 Welcome Buttons</div>
 
-                  {/* Button 1 (Primary - Booking) */}
+                  {/* Button 1 (Primary Action) */}
                   <div style={{ marginBottom: '1rem' }}>
                     <label className="form-label" style={{ fontSize: '0.8rem' }}>Primary Button Label</label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="📅 Book Now"
+                      placeholder="Show Top Picks"
                       defaultValue={(() => {
                         try {
                           const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
@@ -3445,7 +3445,7 @@ REFERRAL: Customer was referred by someone`}
                       style={{ fontSize: '0.875rem' }}
                     />
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                      This button links to your Booking URL set below. Default: "📅 Book Now"
+                      This button links to your primary URL set below. Default: "Show Top Picks"
                     </small>
                   </div>
 
@@ -3470,7 +3470,7 @@ REFERRAL: Customer was referred by someone`}
                       style={{ fontSize: '0.875rem' }}
                     />
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                      Custom URL for the primary button. Falls back to Booking Link URL if empty.
+                      Custom URL for the primary button. Falls back to your default link URL if empty.
                     </small>
                   </div>
 
