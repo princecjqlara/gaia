@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import useFacebookMessenger from "../hooks/useFacebookMessenger";
 import { facebookService } from "../services/facebookService";
+import { buildScopedPropertyUrl } from "../utils/propertyScope";
 
 import AIControlPanel from "./AIControlPanel";
 import AIChatbotSettings from "./AIChatbotSettings";
@@ -849,9 +850,13 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
       alert("This property has no video available.");
       return;
     }
-    const propertyUrl = selectedConversation.participant_name
-      ? `${window.location.origin}/u/${encodeURIComponent(selectedConversation.participant_name)}/property/${property.id}?pid=${selectedConversation.participant_id}`
-      : `${window.location.origin}/property/${property.id}?pid=${selectedConversation.participant_id}`;
+    const propertyUrl = buildScopedPropertyUrl({
+      baseUrl: window.location.origin,
+      propertyId: property.id,
+      participantId: selectedConversation.participant_id,
+      teamId: property.team_id,
+      organizationId: property.organization_id,
+    });
 
     const success = await sendVideoMessage(
       property.videos[0],

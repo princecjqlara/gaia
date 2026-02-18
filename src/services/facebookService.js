@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase';
+import { applyScopeToPropertyQuery, buildScopedPropertyUrl } from '../utils/propertyScope';
 
 // Helper to get supabase client
 const getSupabase = () => {
@@ -109,7 +110,7 @@ async function getCurrentUserScope() {
     const supabase = getSupabase();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.id) {
-        return { organizationId: null, teamId: null };
+        return { organizationId: null, teamId: null, userId: null };
     }
 
     const { data: profile } = await supabase
@@ -120,7 +121,8 @@ async function getCurrentUserScope() {
 
     return {
         organizationId: profile?.organization_id || null,
-        teamId: profile?.team_id || null
+        teamId: profile?.team_id || null,
+        userId: user.id
     };
 }
 
@@ -918,10 +920,19 @@ class FacebookService {
      */
     async getAllProperties() {
         const supabase = getSupabase();
-        const { data, error } = await supabase
+        const scope = await getCurrentUserScope();
+
+        let query = supabase
             .from('properties')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('*');
+
+        if (scope?.teamId || scope?.organizationId) {
+            query = applyScopeToPropertyQuery(query, scope);
+        } else if (scope?.userId) {
+            query = query.eq('created_by', scope.userId);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false });
 
         if (error) {
             console.error('Error fetching properties:', error);
@@ -1847,12 +1858,13 @@ class FacebookService {
             }
 
             const elements = properties.slice(0, 10).map(property => {
-                // Construct URL with visitor tracking if name is available
-                // Include recipientId as pid for more reliable tracking
-                let propertyUrl = `${window.location.origin}/property/${property.id}?pid=${recipientId}`;
-                if (visitorName) {
-                    propertyUrl = `${window.location.origin}/u/${encodeURIComponent(visitorName)}/property/${property.id}?pid=${recipientId}`;
-                }
+                const propertyUrl = buildScopedPropertyUrl({
+                    baseUrl: window.location.origin,
+                    propertyId: property.id,
+                    participantId: recipientId,
+                    teamId: property.team_id,
+                    organizationId: property.organization_id,
+                });
 
                 const imageUrl = (property.images && property.images.length > 0) ? property.images[0] : property.image;
 

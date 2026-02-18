@@ -3,6 +3,7 @@ import { getSupabaseClient } from '../services/supabase';
 import PropertyPreview from './PropertyPreview';
 import TeamBrandingSettings from './TeamBrandingSettings';
 import { getTeamBranding } from '../services/teamBrandingService';
+import { applyScopeToPropertyQuery } from '../utils/propertyScope';
 
 
 import PropertyMediaShowcase from './PropertyMediaShowcase';
@@ -25,19 +26,30 @@ const PropertyManagement = ({ teamId, organizationId }) => {
             const supabase = getSupabaseClient();
             if (!supabase) return;
 
-            const { data: views, error } = await supabase
+            const { data: { user } } = await supabase.auth.getUser();
+
+            let viewsQuery = supabase
                 .from('property_views')
-                .select('*')
+                .select('*');
+
+            if (teamId || organizationId) {
+                viewsQuery = applyScopeToPropertyQuery(viewsQuery, { teamId, organizationId });
+            } else if (user?.id) {
+                viewsQuery = viewsQuery.eq('user_id', user.id);
+            }
+
+            const { data: views, error } = await viewsQuery
                 .order('viewed_at', { ascending: false });
 
             if (error) throw error;
 
-            const totalViews = views.length;
-            const recentViews = views.slice(0, 5); // Last 5 views
+            const safeViews = views || [];
+            const totalViews = safeViews.length;
+            const recentViews = safeViews.slice(0, 5); // Last 5 views
 
             // Group by property
             const viewMap = {};
-            views.forEach(v => {
+            safeViews.forEach(v => {
                 if (!viewMap[v.property_id]) {
                     viewMap[v.property_id] = {
                         id: v.property_id,
@@ -105,16 +117,26 @@ const PropertyManagement = ({ teamId, organizationId }) => {
     // Load properties from Supabase on mount
     useEffect(() => {
         loadProperties();
-    }, []);
+    }, [teamId, organizationId]);
 
     async function loadProperties() {
         try {
             const supabase = getSupabaseClient();
             if (!supabase) return;
 
-            const { data, error } = await supabase
+            const { data: { user } } = await supabase.auth.getUser();
+
+            let propertyQuery = supabase
                 .from('properties')
-                .select('*')
+                .select('*');
+
+            if (teamId || organizationId) {
+                propertyQuery = applyScopeToPropertyQuery(propertyQuery, { teamId, organizationId });
+            } else if (user?.id) {
+                propertyQuery = propertyQuery.eq('created_by', user.id);
+            }
+
+            const { data, error } = await propertyQuery
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -186,6 +208,7 @@ const PropertyManagement = ({ teamId, organizationId }) => {
         setLoading(true);
         try {
             const supabase = getSupabaseClient();
+            const { data: { user } } = await supabase.auth.getUser();
 
             // Map camelCase to snake_case
             const propertyData = {
@@ -212,6 +235,16 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 created_at: editingId ? undefined : new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
+
+            if (teamId) {
+                propertyData.team_id = teamId;
+            }
+            if (organizationId) {
+                propertyData.organization_id = organizationId;
+            }
+            if (!editingId && user?.id) {
+                propertyData.created_by = user.id;
+            }
 
             const { data, error } = await supabase
                 .from('properties')
@@ -253,10 +286,20 @@ const PropertyManagement = ({ teamId, organizationId }) => {
 
         try {
             const supabase = getSupabaseClient();
-            const { error } = await supabase
+            const { data: { user } } = await supabase.auth.getUser();
+
+            let deleteQuery = supabase
                 .from('properties')
                 .delete()
                 .eq('id', id);
+
+            if (teamId || organizationId) {
+                deleteQuery = applyScopeToPropertyQuery(deleteQuery, { teamId, organizationId });
+            } else if (user?.id) {
+                deleteQuery = deleteQuery.eq('created_by', user.id);
+            }
+
+            const { error } = await deleteQuery;
 
             if (error) throw error;
 

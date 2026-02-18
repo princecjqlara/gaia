@@ -85,7 +85,7 @@ const PublicPropertiesContainer = ({ onClose }) => {
             initSupabase();
             const supabase = getSupabaseClient();
 
-            // 1. Load Properties (team -> org -> all)
+            // 1. Load Properties (team -> org, no global fallback)
             let props = [];
 
             if (currentTeamId) {
@@ -118,20 +118,7 @@ const PublicPropertiesContainer = ({ onClose }) => {
                 }
             }
 
-            if (props.length === 0) {
-                const { data: allProps, error: allError } = await supabase
-                    .from('properties')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (allError) {
-                    console.error('Error loading all properties:', allError);
-                }
-
-                props = allProps || [];
-            }
-
-            if (propertyId && !props.some((p) => p.id === propertyId)) {
+            if (!currentTeamId && propertyId && !props.some((p) => p.id === propertyId)) {
                 const { data: singleProp, error: singleError } = await supabase
                     .from('properties')
                     .select('*')
@@ -161,12 +148,7 @@ const PublicPropertiesContainer = ({ onClose }) => {
                 const brand = await getPublicTeamBranding(brandingTeamId);
                 if (brand) setBranding(brand);
             } else {
-                // Fallback: Fetch first team's branding if no team specified
-                const { data: teams } = await supabase.from('teams').select('id').limit(1);
-                if (teams && teams.length > 0) {
-                    const brand = await getPublicTeamBranding(teams[0].id);
-                    setBranding(brand);
-                }
+                setBranding(null);
             }
 
         } catch (err) {

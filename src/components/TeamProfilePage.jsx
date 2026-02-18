@@ -141,7 +141,7 @@ const TeamProfilePage = ({ teamId, onClose }) => {
                 const brand = await getPublicTeamBranding(teamId);
                 if (brand) setBranding(brand);
                 
-                // Load team properties - try team_id first, fall back to all properties
+                // Load team properties with strict tenant scope
                 let props = [];
                 
                 // First try with team_id filter
@@ -171,18 +171,6 @@ const TeamProfilePage = ({ teamId, onClose }) => {
                     
                     if (orgProps && orgProps.length > 0) {
                         props = orgProps;
-                    } else {
-                        // Last resort: load all properties (like PropertyManagement does)
-                        const { data: allProps, error: allError } = await supabase
-                            .from('properties')
-                            .select('*')
-                            .order('created_at', { ascending: false });
-                        
-                        if (allError) {
-                            console.error('Error loading all properties:', allError);
-                        } else {
-                            props = allProps || [];
-                        }
                     }
                 }
                 

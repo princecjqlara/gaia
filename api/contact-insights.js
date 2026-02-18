@@ -404,13 +404,39 @@ export default async function handler(req, res) {
         // 2. Extract preferences from this contact
         const preferences = extractPreferences(conversation);
 
-        // 3. Get all active properties
-        const { data: properties } = await db
-            .from("properties")
-            .select("id, title, address, price, bedrooms, bathrooms, floor_area, description, images, status")
-            .eq("status", "For Sale")
-            .order("created_at", { ascending: false })
-            .limit(50);
+        // Resolve tenant scope from the conversation's page
+        let pageScope = { team_id: null, organization_id: null };
+        if (conversation.page_id) {
+            const { data: pageData } = await db
+                .from("facebook_pages")
+                .select("team_id, organization_id")
+                .eq("page_id", conversation.page_id)
+                .maybeSingle();
+            pageScope = {
+                team_id: pageData?.team_id || null,
+                organization_id: pageData?.organization_id || null,
+            };
+        }
+
+        // 3. Get active properties for the SAME tenant scope
+        let properties = [];
+        if (pageScope.team_id || pageScope.organization_id) {
+            let propertyQuery = db
+                .from("properties")
+                .select("id, title, address, price, bedrooms, bathrooms, floor_area, description, images, status")
+                .eq("status", "For Sale")
+                .order("created_at", { ascending: false })
+                .limit(50);
+
+            if (pageScope.team_id) {
+                propertyQuery = propertyQuery.eq("team_id", pageScope.team_id);
+            } else {
+                propertyQuery = propertyQuery.eq("organization_id", pageScope.organization_id);
+            }
+
+            const { data: scopedProperties } = await propertyQuery;
+            properties = scopedProperties || [];
+        }
 
         // 4. Score and rank properties
         let propertyMatches = [];

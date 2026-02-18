@@ -13,6 +13,10 @@ import {
   resolveParticipantName,
 } from "../src/utils/contactNameUtils.js";
 import { getEvaluationQuestionPlan } from "../src/utils/evaluationQuestionFlow.js";
+import {
+  applyScopeToPropertyQuery,
+  buildScopedPropertyUrl,
+} from "../src/utils/propertyScope.js";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -1289,7 +1293,7 @@ async function handlePropertyClick(req, res, body) {
     // 2. Get the page access token
     const { data: page, error: pageError } = await db
       .from("facebook_pages")
-      .select("page_access_token, page_name")
+      .select("page_access_token, page_name, team_id, organization_id")
       .eq("page_id", conversation.page_id)
       .single();
 
@@ -1482,7 +1486,14 @@ async function handleSendPropertyShowcase(req, res, body) {
 
     // 3. Build the showcase URL with mode=showcase
     const baseUrl = process.env.APP_URL || process.env.VITE_APP_URL || req.headers.origin || "https://gaia-app.com";
-    const showcaseUrl = `${baseUrl}/property/${propertyId}?mode=showcase&pid=${participantId}`;
+    const showcaseBase = buildScopedPropertyUrl({
+      baseUrl,
+      propertyId,
+      participantId,
+      teamId: teamId || page?.team_id,
+      organizationId: page?.organization_id,
+    });
+    const showcaseUrl = `${showcaseBase}${showcaseBase.includes("?") ? "&" : "?"}mode=showcase`;
 
     console.log("[PROPERTY SHOWCASE] Showcase URL:", showcaseUrl);
 
@@ -2524,12 +2535,11 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
 
     console.log(`[WEBHOOK] Checks passed in ${Date.now() - startTime}ms - loading data...`);
 
-    // PARALLEL: Fetch page token, properties, and messages all at once
-    let pageResult, propertiesResult, messagesResult;
+    // PARALLEL: Fetch page context and messages first
+    let pageResult, messagesResult;
     try {
-      [pageResult, propertiesResult, messagesResult] = await Promise.all([
-        db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single(),
-        db.from("properties").select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images").eq("status", "For Sale").order("created_at", { ascending: false }).limit(10),
+      [pageResult, messagesResult] = await Promise.all([
+        db.from("facebook_pages").select("page_access_token,team_id,organization_id").eq("page_id", pageId).single(),
         db.from("facebook_messages").select("message_text,is_from_page,attachments").eq("conversation_id", conversationId).order("timestamp", { ascending: false }).limit(20),
       ]);
     } catch (parallelErr) {
@@ -2538,7 +2548,35 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
     }
 
     const page = pageResult.data;
-    const properties = propertiesResult.data;
+
+    let properties = [];
+    try {
+      if (!page?.team_id && !page?.organization_id) {
+        console.warn("[WEBHOOK] Page has no tenant scope; skipping property recommendations for safety");
+      } else {
+        let propertiesQuery = db
+          .from("properties")
+          .select("id,title,address,price,bedrooms,bathrooms,floor_area,description,images,team_id,organization_id")
+          .eq("status", "For Sale")
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        propertiesQuery = applyScopeToPropertyQuery(propertiesQuery, {
+          teamId: page?.team_id,
+          organizationId: page?.organization_id,
+        });
+
+        const { data: scopedProperties, error: propertiesErr } = await propertiesQuery;
+        if (propertiesErr) {
+          console.error("[WEBHOOK] Failed loading scoped properties:", propertiesErr.message);
+        } else {
+          properties = scopedProperties || [];
+        }
+      }
+    } catch (propertiesErr) {
+      console.error("[WEBHOOK] Property fetch error:", propertiesErr.message);
+    }
+
     const recentMessages = (messagesResult.data || []).reverse();
 
     if (!page?.page_access_token) {
@@ -3971,7 +4009,13 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
       if (part.type === "property_card") {
         // Send property card as generic template
         const prop = part.property;
-        const propertyUrl = `${process.env.APP_URL || window?.location?.origin || ""}/property/${prop.id}?pid=${participantId}`;
+        const propertyUrl = buildScopedPropertyUrl({
+          baseUrl: process.env.APP_URL || process.env.VITE_APP_URL || "",
+          propertyId: prop.id,
+          participantId,
+          teamId: prop.team_id || page?.team_id,
+          organizationId: prop.organization_id || page?.organization_id,
+        });
 
         messageBody = {
           recipient: { id: participantId },
