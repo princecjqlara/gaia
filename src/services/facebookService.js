@@ -105,6 +105,48 @@ const MOCK_MESSAGES = {
     ]
 };
 
+async function getCurrentUserScope() {
+    const supabase = getSupabase();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
+        return { organizationId: null, teamId: null };
+    }
+
+    const { data: profile } = await supabase
+        .from('users')
+        .select('organization_id, team_id')
+        .eq('id', user.id)
+        .single();
+
+    return {
+        organizationId: profile?.organization_id || null,
+        teamId: profile?.team_id || null
+    };
+}
+
+function applyScopeToQuery(query, scope) {
+    if (!scope) return query;
+    if (scope.teamId) {
+        return query.eq('team_id', scope.teamId);
+    }
+    if (scope.organizationId) {
+        return query.eq('organization_id', scope.organizationId);
+    }
+    return query;
+}
+
+async function getScopedActivePageIds() {
+    const scope = await getCurrentUserScope();
+    let pageQuery = getSupabase()
+        .from('facebook_pages')
+        .select('page_id')
+        .eq('is_active', true);
+
+    pageQuery = applyScopeToQuery(pageQuery, scope);
+    const { data } = await pageQuery;
+    return (data || []).map((p) => p.page_id).filter(Boolean);
+}
+
 class FacebookService {
     /**
      * Check if a conversation ID was created by webhook (not from Facebook sync)
@@ -167,11 +209,15 @@ class FacebookService {
      */
     async getConnectedPages() {
         try {
-            const { data, error } = await getSupabase()
+            const scope = await getCurrentUserScope();
+            let query = getSupabase()
                 .from('facebook_pages')
                 .select('*')
                 .eq('is_active', true)
                 .order('created_at', { ascending: false });
+
+            query = applyScopeToQuery(query, scope);
+            const { data, error } = await query;
 
             if (error) throw error;
             return data || [];
@@ -186,6 +232,7 @@ class FacebookService {
      */
     async connectPage(pageData, userId) {
         try {
+            const scope = await getCurrentUserScope();
             // Support both field name formats:
             // App.jsx passes: { page_id, page_name, page_access_token, picture_url }
             // Direct FB SDK: { id, name, access_token, picture }
@@ -199,17 +246,23 @@ class FacebookService {
             }
 
             // First, deactivate any other pages (only one active page at a time)
-            await getSupabase()
+            let deactivatePagesQuery = getSupabase()
                 .from('facebook_pages')
                 .update({ is_active: false, updated_at: new Date().toISOString() })
                 .neq('page_id', resolvedPageId);
 
+            deactivatePagesQuery = applyScopeToQuery(deactivatePagesQuery, scope);
+            await deactivatePagesQuery;
+
             // Archive conversations from old pages so they don't show in messenger
             try {
-                await getSupabase()
+                let archiveQuery = getSupabase()
                     .from('facebook_conversations')
                     .update({ is_archived: true, updated_at: new Date().toISOString() })
                     .neq('page_id', resolvedPageId);
+
+                archiveQuery = applyScopeToQuery(archiveQuery, scope);
+                await archiveQuery;
                 console.log(`[FB] Archived conversations from previous pages`);
             } catch (archiveErr) {
                 console.warn('[FB] Could not archive old conversations (non-fatal):', archiveErr.message);
@@ -223,6 +276,8 @@ class FacebookService {
                     page_access_token: resolvedToken,
                     page_picture_url: resolvedPicture,
                     connected_by: userId,
+                    team_id: scope.teamId || null,
+                    organization_id: scope.organizationId || null,
                     is_active: true,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'page_id' })
@@ -498,6 +553,8 @@ class FacebookService {
      */
     async getConversations(pageId = null) {
         try {
+            const activePageIds = await getScopedActivePageIds();
+
             let query = getSupabase()
                 .from('facebook_conversations')
                 .select(`
@@ -509,14 +566,10 @@ class FacebookService {
 
             if (pageId) {
                 query = query.eq('page_id', pageId);
+            } else if (activePageIds.length > 0) {
+                query = query.in('page_id', activePageIds);
             } else {
-                try {
-                    const { data: activePages } = await getSupabase()
-                        .from('facebook_pages').select('page_id').eq('is_active', true);
-                    if (activePages && activePages.length > 0) {
-                        query = query.in('page_id', activePages.map(p => p.page_id));
-                    }
-                } catch (e) { /* fallback: show all */ }
+                return [];
             }
 
             const { data, error } = await query;
@@ -538,6 +591,7 @@ class FacebookService {
             // const isDemoMode = typeof window !== 'undefined' && localStorage.getItem('gaia_demo_mode') === 'true';
 
             const offset = (page - 1) * limit;
+            const activePageIds = await getScopedActivePageIds();
 
             let query = getSupabase()
                 .from('facebook_conversations')
@@ -548,21 +602,10 @@ class FacebookService {
 
             if (pageId) {
                 query = query.eq('page_id', pageId);
+            } else if (activePageIds.length > 0) {
+                query = query.in('page_id', activePageIds);
             } else {
-                // Filter to only show conversations from currently connected (active) pages
-                try {
-                    const { data: activePages } = await getSupabase()
-                        .from('facebook_pages')
-                        .select('page_id')
-                        .eq('is_active', true);
-
-                    if (activePages && activePages.length > 0) {
-                        const activePageIds = activePages.map(p => p.page_id);
-                        query = query.in('page_id', activePageIds);
-                    }
-                } catch (e) {
-                    console.warn('Could not filter by active pages:', e.message);
-                }
+                return { conversations: [], total: 0, page, hasMore: false };
             }
 
             const { data, error, count } = await query;
@@ -603,6 +646,7 @@ class FacebookService {
             }
 
             const term = searchTerm.trim().toLowerCase();
+            const activePageIds = await getScopedActivePageIds();
 
             let query = getSupabase()
                 .from('facebook_conversations')
@@ -619,14 +663,10 @@ class FacebookService {
 
             if (pageId) {
                 query = query.eq('page_id', pageId);
+            } else if (activePageIds.length > 0) {
+                query = query.in('page_id', activePageIds);
             } else {
-                try {
-                    const { data: activePages } = await getSupabase()
-                        .from('facebook_pages').select('page_id').eq('is_active', true);
-                    if (activePages && activePages.length > 0) {
-                        query = query.in('page_id', activePages.map(p => p.page_id));
-                    }
-                } catch (e) { /* fallback: show all */ }
+                return { conversations: [], total: 0 };
             }
 
             const { data, error, count } = await query;

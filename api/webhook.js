@@ -4317,10 +4317,10 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
-    // 4. Check that the message was sent reasonably recently (within 24h)
+    // 4. Check that the message was sent reasonably recently (within 7 days)
     const msgAge = Date.now() - new Date(lastMsg.timestamp).getTime();
-    if (msgAge > 24 * 60 * 60 * 1000) {
-      console.log('[WEBHOOK] 👁️ Last AI message is older than 24h, skipping read follow-up');
+    if (msgAge > 7 * 24 * 60 * 60 * 1000) {
+      console.log('[WEBHOOK] 👁️ Last AI message is older than 7 days, skipping read follow-up');
       return;
     }
 
@@ -4339,9 +4339,9 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
-    // 6. Schedule a quick read-aware follow-up (5-15 min delay)
-    const delayMinutes = Math.floor(Math.random() * 11) + 5; // 5-15 minutes
-    const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+    // 6. Schedule immediate read-aware follow-up so contact gets a timely nudge
+    const delayMinutes = 0;
+    const scheduledAt = new Date();
 
     const reason = `read_receipt:${new Date(readTimestamp).toISOString()}|delay=${delayMinutes}m`;
     const { error: insertError } = await db.from('ai_followup_schedule').insert({
