@@ -1,4 +1,8 @@
-import { getEvaluationQuestionPlan } from "../utils/evaluationQuestionFlow";
+import {
+  getEvaluationQuestionPlan,
+  mergeAnsweredQuestionNumbers,
+  promoteLastAskedQuestionAsAnswered,
+} from "../utils/evaluationQuestionFlow";
 
 describe("evaluationQuestionFlow", () => {
   test("selects the next unanswered question", () => {
@@ -51,5 +55,47 @@ describe("evaluationQuestionFlow", () => {
     expect(plan.nextQuestionNumber).toBe(2);
     expect(plan.lastAskedQuestionNumber).toBe(1);
     expect(plan.shouldAskClarifyingFollowup).toBe(false);
+  });
+
+  test("merges remembered, ai, and keyword answered question numbers", () => {
+    const merged = mergeAnsweredQuestionNumbers({
+      totalQuestions: 5,
+      rememberedQuestionNumbers: [1, 2],
+      aiAnsweredQuestionNumbers: [2, 4],
+      keywordAnsweredQuestionNumbers: [3],
+    });
+
+    expect(merged).toEqual([1, 2, 3, 4]);
+  });
+
+  test("promotes last asked location-priority question when reply is short direct answer", () => {
+    const promoted = promoteLastAskedQuestionAsAnswered({
+      evalQuestions: [
+        "Are you prioritizing space, budget, or location?",
+        "Anong feature po ang hinahanap ninyo?",
+      ],
+      answeredQuestionNumbers: [],
+      recentMessages: [
+        { is_from_page: true, message_text: "Are you prioritizing space, budget, or location?" },
+        { is_from_page: false, message_text: "Location" },
+      ],
+    });
+
+    expect(promoted).toEqual([1]);
+  });
+
+  test("does not promote last asked question for clarification-type reply", () => {
+    const promoted = promoteLastAskedQuestionAsAnswered({
+      evalQuestions: [
+        "Anong feature po ang hinahanap ninyo sa bahay?",
+      ],
+      answeredQuestionNumbers: [],
+      recentMessages: [
+        { is_from_page: true, message_text: "Anong feature po ang hinahanap ninyo sa bahay?" },
+        { is_from_page: false, message_text: "What do you mean feature?" },
+      ],
+    });
+
+    expect(promoted).toEqual([]);
   });
 });

@@ -18,7 +18,21 @@ const QUESTION_STOP_WORDS = new Set([
   "where",
   "when",
   "how",
+  "or",
+  "and",
+  "priority",
+  "prioritizing",
+  "important",
 ]);
+
+const CLARIFICATION_PATTERNS = [
+  /what\s+do\s+you\s+mean/i,
+  /ano\s+(ang|yung|yun|ibig\s+sabihin)/i,
+  /paano\s+po/i,
+  /di\s+ko\s+gets/i,
+  /hindi\s+ko\s+gets/i,
+  /can\s+you\s+clarify/i,
+];
 
 function normalizeEvalText(value) {
   if (typeof value !== "string") {
@@ -84,6 +98,140 @@ function sanitizeAnsweredNumbers(answeredQuestionNumbers, totalQuestions) {
   }
 
   return Array.from(unique).sort((a, b) => a - b);
+}
+
+function getLatestCustomerReplyAfter(recentMessages, index) {
+  if (index < 0) {
+    return "";
+  }
+
+  for (let i = recentMessages.length - 1; i > index; i -= 1) {
+    const message = recentMessages[i];
+    if (!message?.is_from_page) {
+      const normalized = normalizeEvalText(message?.message_text);
+      if (normalized) {
+        return `${message.message_text || ""}`.trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+function isClarificationReply(replyText) {
+  if (typeof replyText !== "string" || !replyText.trim()) {
+    return false;
+  }
+
+  return CLARIFICATION_PATTERNS.some((pattern) => pattern.test(replyText));
+}
+
+function isLikelyDirectAnswer(questionText, replyText) {
+  const normalizedReply = normalizeEvalText(replyText);
+  if (!normalizedReply) {
+    return false;
+  }
+
+  if (isClarificationReply(replyText)) {
+    return false;
+  }
+
+  const replyTokens = normalizedReply.split(" ").filter(Boolean);
+  if (replyTokens.length === 0) {
+    return false;
+  }
+
+  const questionKeywords = extractQuestionKeywords(questionText);
+  if (questionKeywords.length === 0) {
+    return false;
+  }
+
+  const matchedCount = questionKeywords.filter((keyword) =>
+    normalizedReply.includes(keyword),
+  ).length;
+
+  if (matchedCount === 0) {
+    return false;
+  }
+
+  if (replyTokens.length === 1) {
+    return true;
+  }
+
+  return normalizedReply.length <= 40 && replyTokens.length <= 5;
+}
+
+export function mergeAnsweredQuestionNumbers({
+  totalQuestions,
+  rememberedQuestionNumbers,
+  aiAnsweredQuestionNumbers,
+  keywordAnsweredQuestionNumbers,
+} = {}) {
+  const safeTotal = Number.isInteger(totalQuestions) ? totalQuestions : 0;
+  const combined = [
+    ...(Array.isArray(rememberedQuestionNumbers)
+      ? rememberedQuestionNumbers
+      : []),
+    ...(Array.isArray(aiAnsweredQuestionNumbers)
+      ? aiAnsweredQuestionNumbers
+      : []),
+    ...(Array.isArray(keywordAnsweredQuestionNumbers)
+      ? keywordAnsweredQuestionNumbers
+      : []),
+  ];
+
+  return sanitizeAnsweredNumbers(combined, safeTotal);
+}
+
+export function promoteLastAskedQuestionAsAnswered({
+  evalQuestions,
+  answeredQuestionNumbers,
+  recentMessages,
+} = {}) {
+  const questionList = Array.isArray(evalQuestions)
+    ? evalQuestions.filter((question) => normalizeEvalText(question))
+    : [];
+  const safeRecentMessages = Array.isArray(recentMessages)
+    ? recentMessages
+    : [];
+
+  if (questionList.length === 0 || safeRecentMessages.length === 0) {
+    return [];
+  }
+
+  const sanitizedAnswered = sanitizeAnsweredNumbers(
+    answeredQuestionNumbers,
+    questionList.length,
+  );
+  const answeredSet = new Set(sanitizedAnswered);
+
+  const lastAiMessageIndex = findLastAiMessageIndex(safeRecentMessages);
+  if (!hasCustomerReplyAfter(safeRecentMessages, lastAiMessageIndex)) {
+    return sanitizedAnswered;
+  }
+
+  const lastAskedQuestionNumber = findLastAskedQuestionNumber(
+    questionList,
+    safeRecentMessages,
+    lastAiMessageIndex,
+  );
+
+  if (!lastAskedQuestionNumber || answeredSet.has(lastAskedQuestionNumber)) {
+    return sanitizedAnswered;
+  }
+
+  const latestCustomerReply = getLatestCustomerReplyAfter(
+    safeRecentMessages,
+    lastAiMessageIndex,
+  );
+  const lastQuestion = questionList[lastAskedQuestionNumber - 1] || "";
+
+  if (!isLikelyDirectAnswer(lastQuestion, latestCustomerReply)) {
+    return sanitizedAnswered;
+  }
+
+  answeredSet.add(lastAskedQuestionNumber);
+  return Array.from(answeredSet).sort((a, b) => a - b);
 }
 
 function findLastAiMessageIndex(recentMessages) {

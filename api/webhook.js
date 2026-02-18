@@ -12,7 +12,11 @@ import {
   needsParticipantNameLookup,
   resolveParticipantName,
 } from "../src/utils/contactNameUtils.js";
-import { getEvaluationQuestionPlan } from "../src/utils/evaluationQuestionFlow.js";
+import {
+  getEvaluationQuestionPlan,
+  mergeAnsweredQuestionNumbers,
+  promoteLastAskedQuestionAsAnswered,
+} from "../src/utils/evaluationQuestionFlow.js";
 import {
   applyScopeToPropertyQuery,
   buildScopedPropertyUrl,
@@ -2673,8 +2677,16 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       console.log(`[WEBHOOK] 📋 Customer messages for eval: ${customerMessages.length} chars (${customerMessagesList.length} msgs)`);
 
       let answeredCount = 0;
+      const rememberedAnsweredQuestionNumbers = Array.isArray(
+        conversation?.extracted_details?.evaluation_answered_questions,
+      )
+        ? conversation.extracted_details.evaluation_answered_questions
+        : [];
 
       if (customerMessagesList.length > 0) {
+        let aiAnsweredQuestionNumbers = [];
+        let keywordMatchedNumbers = [];
+
         // Try AI check first
         const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
 
@@ -2718,12 +2730,11 @@ If none answered: []`;
               const match = aiText.match(/\[[\d,\s]*\]/);
               if (match) {
                 const answered = JSON.parse(match[0]);
-                answeredQuestionNumbers = answered
+                aiAnsweredQuestionNumbers = answered
                   .map((n) => Number(n))
                   .filter((n) => Number.isInteger(n) && n >= 1 && n <= evaluationQuestions.length);
-                answeredQuestionNumbers = Array.from(new Set(answeredQuestionNumbers));
-                answeredCount = answeredQuestionNumbers.length;
               }
+              answeredCount = aiAnsweredQuestionNumbers.length;
               console.log(`[WEBHOOK] 📋 Evaluation: ${answeredCount}/${evaluationQuestions.length} questions answered (AI check)`);
             } else {
               console.log(`[WEBHOOK] 📋 Eval AI call failed: ${aiResp.status} ${aiResp.statusText}`);
@@ -2735,33 +2746,53 @@ If none answered: []`;
           console.log('[WEBHOOK] 📋 No NVIDIA_API_KEY — skipping AI eval check');
         }
 
-        // Keyword fallback if AI didn't produce results
-        if (answeredCount === 0) {
-          const custText = customerMessages.toLowerCase();
-          const keywordMatchedNumbers = [];
-          for (let i = 0; i < evaluationQuestions.length; i += 1) {
-            const q = evaluationQuestions[i];
-            const keywords = q.toLowerCase()
-              .replace(/[?.,!]/g, '')
-              .split(/\s+/)
-              .filter(w => w.length > 3 && !['what', 'your', 'have', 'been', 'with', 'this', 'that', 'from', 'they', 'will', 'does', 'which'].includes(w));
-            const matchCount = keywords.filter(kw => custText.includes(kw)).length;
-            if (matchCount >= Math.max(1, Math.floor(keywords.length * 0.3))) {
-              keywordMatchedNumbers.push(i + 1);
-            }
+        // Keyword signal (always compute), then merge with AI + remembered memory
+        const custText = customerMessages.toLowerCase();
+        for (let i = 0; i < evaluationQuestions.length; i += 1) {
+          const q = evaluationQuestions[i];
+          const keywords = q.toLowerCase()
+            .replace(/[?.,!]/g, '')
+            .split(/\s+/)
+            .filter(w => w.length > 3 && !['what', 'your', 'have', 'been', 'with', 'this', 'that', 'from', 'they', 'will', 'does', 'which'].includes(w));
+          const matchCount = keywords.filter(kw => custText.includes(kw)).length;
+          if (matchCount >= Math.max(1, Math.floor(keywords.length * 0.3))) {
+            keywordMatchedNumbers.push(i + 1);
           }
-
-          answeredQuestionNumbers = keywordMatchedNumbers;
-          answeredCount = answeredQuestionNumbers.length;
-          console.log(`[WEBHOOK] 📋 Evaluation keyword fallback: ${answeredCount}/${evaluationQuestions.length}`);
         }
-        if (answeredCount === 0 && customerMessagesList.length > 0) {
+
+        answeredQuestionNumbers = mergeAnsweredQuestionNumbers({
+          totalQuestions: evaluationQuestions.length,
+          rememberedQuestionNumbers: rememberedAnsweredQuestionNumbers,
+          aiAnsweredQuestionNumbers,
+          keywordAnsweredQuestionNumbers: keywordMatchedNumbers,
+        });
+
+        answeredQuestionNumbers = promoteLastAskedQuestionAsAnswered({
+          evalQuestions: evaluationQuestions,
+          answeredQuestionNumbers,
+          recentMessages,
+        });
+
+        answeredCount = answeredQuestionNumbers.length;
+        console.log(
+          `[WEBHOOK] 📋 Evaluation merged answers: ${answeredCount}/${evaluationQuestions.length} (remembered=${rememberedAnsweredQuestionNumbers.length}, ai=${aiAnsweredQuestionNumbers.length}, keyword=${keywordMatchedNumbers.length})`,
+        );
+
+        // Last-resort fallback only if all detectors fail
+        if (answeredCount === 0) {
           answeredCount = Math.min(customerMessagesList.length, evaluationQuestions.length);
           answeredQuestionNumbers = Array.from({ length: answeredCount }, (_, i) => i + 1);
           console.log(`[WEBHOOK] 📋 Evaluation reply-count fallback: ${answeredCount}/${evaluationQuestions.length}`);
         }
       } else {
         console.log('[WEBHOOK] 📋 No customer messages for evaluation');
+
+        answeredQuestionNumbers = mergeAnsweredQuestionNumbers({
+          totalQuestions: evaluationQuestions.length,
+          rememberedQuestionNumbers: rememberedAnsweredQuestionNumbers,
+          aiAnsweredQuestionNumbers: [],
+          keywordAnsweredQuestionNumbers: [],
+        });
       }
 
       evaluationQuestionPlan = getEvaluationQuestionPlan({
@@ -2788,13 +2819,29 @@ If none answered: []`;
       canViewProperties = true;
     }
 
-    // Save evaluation score to conversation for frontend display
+    // Save evaluation score + answered-question memory to conversation
     try {
+      const existingExtractedDetails =
+        conversation?.extracted_details &&
+          typeof conversation.extracted_details === "object"
+          ? conversation.extracted_details
+          : {};
+
+      const mergedExtractedDetails = {
+        ...existingExtractedDetails,
+        evaluation_answered_questions: answeredQuestionNumbers,
+        evaluation_questions_total: evaluationQuestions.length,
+        evaluation_last_updated_at: new Date().toISOString(),
+      };
+
       await db.from("facebook_conversations")
-        .update({ evaluation_score: evaluationScore })
+        .update({
+          evaluation_score: evaluationScore,
+          extracted_details: mergedExtractedDetails,
+        })
         .eq("conversation_id", conversationId);
     } catch (e) {
-      // Column may not exist yet — ignore
+      console.log("[WEBHOOK] Evaluation memory save (non-fatal):", e.message);
     }
 
     // DEBUG: Log what RAG content we have
