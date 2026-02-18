@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import useFacebookMessenger from "../hooks/useFacebookMessenger";
 import { facebookService } from "../services/facebookService";
 import { buildScopedPropertyUrl } from "../utils/propertyScope";
+import { resolveEvaluationPanelData } from "../utils/evaluationPanelData";
 
 import AIControlPanel from "./AIControlPanel";
 import AIChatbotSettings from "./AIChatbotSettings";
@@ -1363,8 +1364,21 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     safeClients.find(
       (client) => client.id === selectedConversation?.linked_client_id,
     ) || existingClient;
-  const evaluationQuestions = evaluationClient?.evaluationQuestions || [];
-  const evaluationAnswers = evaluationClient?.evaluationAnswers || [];
+  const linkedEvaluationQuestions = evaluationClient?.evaluationQuestions || [];
+  const linkedEvaluationAnswers = evaluationClient?.evaluationAnswers || [];
+  const memoryEvaluationQuestions = contactInsights?.evaluation?.questions || [];
+  const memoryEvaluationAnswers = contactInsights?.evaluation?.answers || [];
+  const evaluationPanelData = resolveEvaluationPanelData({
+    linkedQuestions: linkedEvaluationQuestions,
+    linkedAnswers: linkedEvaluationAnswers,
+    memoryQuestions: memoryEvaluationQuestions,
+    memoryAnswers: memoryEvaluationAnswers,
+    evaluationScore:
+      selectedConversation?.evaluation_score ?? contactInsights?.evaluation?.score ?? 0,
+  });
+  const evaluationQuestions = evaluationPanelData.questions;
+  const evaluationAnswers = evaluationPanelData.answers;
+  const evaluationEmptyMessage = evaluationPanelData.emptyMessage;
   const aiContextSummaryRaw =
     conversationInsights?.aiNotes ||
     conversationInsights?.aiSummary ||
@@ -2567,7 +2581,10 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                   )}
                   {/* Evaluation Progress Counter — always visible */}
                   {(() => {
-                    const pct = selectedConversation.evaluation_score ?? 0;
+                    const pct =
+                      selectedConversation.evaluation_score ??
+                      contactInsights?.evaluation?.score ??
+                      0;
                     const color = pct >= 80 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444';
                     return (
                       <div style={{
@@ -4034,7 +4051,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     ))
                   ) : (
                     <div style={{ fontStyle: "italic" }}>
-                      No evaluation questions answered yet.
+                      {evaluationEmptyMessage}
                     </div>
                   )}
                 </div>

@@ -1,4 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+    buildEvaluationMemoryAnswers,
+    sanitizeEvaluationQuestionNumbers,
+} from "../src/utils/evaluationPanelData.js";
 
 let supabase = null;
 function getSupabase() {
@@ -168,6 +172,42 @@ function extractPreferences(conversation) {
     }
 
     return prefs;
+}
+
+async function loadEvaluationQuestions(db) {
+    let questions = [];
+
+    try {
+        const { data: configRows } = await db
+            .from("settings")
+            .select("value")
+            .eq("key", "ai_chatbot_config")
+            .limit(1);
+
+        const configQuestions = configRows?.[0]?.value?.evaluation_questions;
+        if (Array.isArray(configQuestions) && configQuestions.length > 0) {
+            questions = configQuestions;
+        }
+
+        if (questions.length === 0) {
+            const { data: evalRows } = await db
+                .from("settings")
+                .select("value")
+                .eq("key", "evaluation_questions")
+                .limit(1);
+
+            const fallbackQuestions = evalRows?.[0]?.value?.questions;
+            if (Array.isArray(fallbackQuestions) && fallbackQuestions.length > 0) {
+                questions = fallbackQuestions;
+            }
+        }
+    } catch (err) {
+        console.log("[CONTACT-INSIGHTS] Evaluation question lookup (non-fatal):", err.message);
+    }
+
+    return questions
+        .map((question) => `${question || ""}`.trim())
+        .filter(Boolean);
 }
 
 /**
@@ -393,7 +433,7 @@ export default async function handler(req, res) {
         // 1. Get the target conversation
         const { data: conversation, error: convErr } = await db
             .from("facebook_conversations")
-            .select("conversation_id, participant_name, participant_id, page_id, ai_label, pipeline_stage, lead_status, extracted_details, ai_analysis, ai_summary")
+            .select("conversation_id, participant_name, participant_id, page_id, ai_label, pipeline_stage, lead_status, extracted_details, ai_analysis, ai_summary, evaluation_score")
             .eq("conversation_id", conversationId)
             .single();
 
@@ -403,6 +443,25 @@ export default async function handler(req, res) {
 
         // 2. Extract preferences from this contact
         const preferences = extractPreferences(conversation);
+
+        // 2.5 Build evaluation memory payload for the sidebar panel
+        const evaluationQuestions = await loadEvaluationQuestions(db);
+        const answeredQuestionNumbers = sanitizeEvaluationQuestionNumbers(
+            conversation?.extracted_details?.evaluation_answered_questions,
+            evaluationQuestions.length,
+        );
+        const evaluationAnswers = buildEvaluationMemoryAnswers(
+            evaluationQuestions,
+            answeredQuestionNumbers,
+        );
+        const rawEvalScore = Number(conversation?.evaluation_score);
+        const computedEvalScore =
+            evaluationQuestions.length > 0
+                ? Math.round((answeredQuestionNumbers.length / evaluationQuestions.length) * 100)
+                : 0;
+        const evaluationScore = Number.isFinite(rawEvalScore)
+            ? rawEvalScore
+            : computedEvalScore;
 
         // Resolve tenant scope from the conversation's page
         let pageScope = { team_id: null, organization_id: null };
@@ -504,6 +563,13 @@ export default async function handler(req, res) {
             preferences,
             propertyMatches,
             similarContacts,
+            evaluation: {
+                score: evaluationScore,
+                questions: evaluationQuestions,
+                answers: evaluationAnswers,
+                answeredQuestionNumbers,
+                answeredCount: answeredQuestionNumbers.length,
+            },
         });
     } catch (error) {
         console.error("[CONTACT-INSIGHTS] Error:", error);
