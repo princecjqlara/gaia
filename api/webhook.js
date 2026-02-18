@@ -21,6 +21,11 @@ import {
   applyScopeToPropertyQuery,
   buildScopedPropertyUrl,
 } from "../src/utils/propertyScope.js";
+import {
+  buildNotificationOptinMessage,
+  buildOptinFallbackText,
+  isUnsupportedNotificationOptinError,
+} from "../src/utils/messengerOptin.js";
 
 // Lazy-load Supabase client
 let supabase = null;
@@ -4101,31 +4106,11 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           messaging_type: "RESPONSE"
         };
       } else if (part.type === "optin_button") {
-        // Send notification_messages opt-in template (triggers native Facebook opt-in dialog)
-        messageBody = {
-          recipient: { id: participantId },
-          message: {
-            attachment: {
-              type: "template",
-              payload: {
-                template_type: "notification_messages",
-                title: part.content || "🏠 Get Property Updates & Deals!",
-                image_url: config.page_picture_url || undefined,
-                payload: "MARKETING_OPTIN_PROPERTIES",
-                notification_messages_frequency: "DAILY",
-                notification_messages_reoptin: "ENABLED",
-                notification_messages_timezone: "Asia/Manila"
-              }
-            }
-          },
-          messaging_type: "RESPONSE"
-        };
-
-        // Mark as sent in DB
-        db.from("facebook_conversations").update({
-          recurring_optin_status: "sent",
-          updated_at: new Date().toISOString(),
-        }).eq("conversation_id", conversationId).then(() => { });
+        // Send notification_messages opt-in template using minimal schema
+        messageBody = buildNotificationOptinMessage({
+          participantId,
+          title: part.content || "Get property updates?",
+        });
 
       } else if (part.type === "profile_card") {
         // Instagram-style profile summary card (MANUAL trigger only)
@@ -4172,6 +4157,42 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
         const err = await sendResponse.text();
         console.error(`[WEBHOOK] Send part ${i + 1} failed:`, err);
 
+        if (
+          part.type === "optin_button" &&
+          isUnsupportedNotificationOptinError(err)
+        ) {
+          console.warn(
+            "[WEBHOOK] Opt-in template schema unsupported by page/app; falling back to text hook",
+          );
+
+          const fallbackTextBody = {
+            recipient: { id: participantId },
+            message: {
+              text: buildOptinFallbackText(part.content),
+            },
+            messaging_type: "RESPONSE",
+          };
+
+          const fallbackResponse = await fetch(
+            `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(fallbackTextBody),
+            },
+          );
+
+          if (!fallbackResponse.ok) {
+            const fallbackErr = await fallbackResponse.text();
+            console.error(
+              "[WEBHOOK] Opt-in fallback text send failed:",
+              fallbackErr,
+            );
+          }
+
+          continue;
+        }
+
         // Try with HUMAN_AGENT tag if 24h window issue (allows 7-day window)
         if (err.includes("allowed window") || err.includes("outside")) {
           console.log("[WEBHOOK] Retrying with HUMAN_AGENT tag...");
@@ -4194,6 +4215,23 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
           }
         } else {
           return;
+        }
+      }
+
+      if (part.type === "optin_button") {
+        try {
+          await db
+            .from("facebook_conversations")
+            .update({
+              recurring_optin_status: "sent",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("conversation_id", conversationId);
+        } catch (optinStatusErr) {
+          console.log(
+            "[WEBHOOK] Opt-in sent-status update failed (non-fatal):",
+            optinStatusErr.message,
+          );
         }
       }
 
