@@ -209,8 +209,7 @@ export default async function handler(req, res) {
             .neq('pipeline_stage', 'booked') // Also skip if pipeline_stage is 'booked'
             // Follow up any conversation that's been inactive for the silence period
             .lt('last_message_time', cutoffTime.toISOString())
-            // Only include conversations within the 7-day Facebook messaging window (HUMAN_AGENT tag limit)
-            .gt('last_message_time', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString())
+            // Allow older conversations; delivery switches to UTILITY templates outside 7-day window
             .order('last_message_time', { ascending: true }) // Oldest first (most in need of follow-up)
             .limit(maxPerRun);
 
