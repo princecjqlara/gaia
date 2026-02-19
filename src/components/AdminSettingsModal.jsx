@@ -47,10 +47,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   const [messagePrompts, setMessagePrompts] = useState([]);
   const [sequencePerformance, setSequencePerformance] = useState([]);
   const [loadingSequences, setLoadingSequences] = useState(false);
-  const [savingSequence, setSavingSequence] = useState(false);
   const [expandedSequenceId, setExpandedSequenceId] = useState(null);
-  const [rawPrompts, setRawPrompts] = useState(['']);
-  const [generatingSequences, setGeneratingSequences] = useState(false);
 
   // Test Chat State
   const [testMessages, setTestMessages] = useState([]);
@@ -447,6 +444,34 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     return createClient(supabaseUrl, supabaseKey);
   };
 
+  const createSequence = async ({ label = '⚡ Live Prompt Pool', db: dbClient = null, skipStateUpdate = false } = {}) => {
+    const db = dbClient || await getDb();
+    const { data, error } = await db
+      .from('message_sequences')
+      .insert({ label, is_active: true })
+      .select()
+      .single();
+    if (error) throw error;
+
+    if (!skipStateUpdate) {
+      setSequences(prev => [...prev, data]);
+      setExpandedSequenceId(data.id);
+    }
+
+    return data;
+  };
+
+  const addSequence = async () => {
+    try {
+      const sequenceNumber = sequences.length + 1;
+      const label = sequenceNumber === 1 ? '⚡ Live Prompt Pool' : `⚡ Live Prompt Pool ${sequenceNumber}`;
+      await createSequence({ label });
+    } catch (err) {
+      console.error('Error creating sequence:', err);
+      alert(`Failed to create sequence: ${err.message}`);
+    }
+  };
+
   const loadSequences = async () => {
     try {
       setLoadingSequences(true);
@@ -457,7 +482,17 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         .select('*')
         .order('created_at', { ascending: true });
       if (seqErr) throw seqErr;
-      setSequences(seqs || []);
+
+      let resolvedSequences = seqs || [];
+      if (resolvedSequences.length === 0) {
+        const created = await createSequence({ db, skipStateUpdate: true });
+        resolvedSequences = created ? [created] : [];
+      }
+
+      setSequences(resolvedSequences);
+      if (resolvedSequences.length > 0) {
+        setExpandedSequenceId(prev => prev || resolvedSequences[0].id);
+      }
 
       // Load all prompts (with sequence info)
       const { data: prompts, error: promptErr } = await db
@@ -484,139 +519,6 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       setSequencePerformance(data || []);
     } catch (err) {
       console.error('Error loading sequence performance:', err);
-    }
-  };
-
-  const generateSequences = async (prompts) => {
-    const validPrompts = prompts.filter(p => p.trim());
-    if (validPrompts.length < 2) {
-      alert('Please enter at least 2 message prompts to generate sequences.');
-      return;
-    }
-
-    try {
-      setGeneratingSequences(true);
-      setSavingSequence(true);
-      const db = await getDb();
-
-      // Helper: extract "hook" (first sentence) from a prompt
-      const getHook = (text) => {
-        const match = text.match(/^[^.!?]+[.!?]/);
-        return match ? match[0].trim() : text.substring(0, Math.min(80, text.length)).trim();
-      };
-
-      // Helper: shuffle array (Fisher-Yates)
-      const shuffle = (arr) => {
-        const a = [...arr];
-        for (let i = a.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [a[i], a[j]] = [a[j], a[i]];
-        }
-        return a;
-      };
-
-      // Build variation plans
-      const variations = [];
-
-      // 1. Original order
-      variations.push({
-        label: '📋 Original Order',
-        steps: validPrompts.map((p, i) => ({ text: p, label: `Step ${i + 1}` }))
-      });
-
-      // 2. Hook-First — first step is hook-only, rest are full
-      const hookFirst = [
-        { text: getHook(validPrompts[0]), label: 'Step 1 (Hook)' },
-        ...validPrompts.slice(1).map((p, i) => ({ text: p, label: `Step ${i + 2}` }))
-      ];
-      variations.push({ label: '🎣 Hook-First', steps: hookFirst });
-
-      // 3. Hook + Full Message — hook as step 1, then full version as step 2, then rest
-      if (validPrompts.length >= 2) {
-        const hookFull = [
-          { text: getHook(validPrompts[0]), label: 'Step 1 (Hook)' },
-          { text: validPrompts[0], label: 'Step 2 (Full)' },
-          ...validPrompts.slice(1).map((p, i) => ({ text: p, label: `Step ${i + 3}` }))
-        ];
-        variations.push({ label: '🎣📝 Hook + Full Message', steps: hookFull });
-      }
-
-      // 4. Reversed order
-      const reversed = [...validPrompts].reverse();
-      variations.push({
-        label: '🔄 Reversed Order',
-        steps: reversed.map((p, i) => ({ text: p, label: `Step ${i + 1}` }))
-      });
-
-      // 5. Shuffled — random order
-      const shuffled = shuffle(validPrompts);
-      // Ensure shuffled is actually different from original
-      const isDifferent = shuffled.some((p, i) => p !== validPrompts[i]);
-      if (isDifferent) {
-        variations.push({
-          label: '🔀 Shuffled',
-          steps: shuffled.map((p, i) => ({ text: p, label: `Step ${i + 1}` }))
-        });
-      }
-
-      // 6. Aggressive (skip middle steps — first + last only)
-      if (validPrompts.length >= 3) {
-        variations.push({
-          label: '⚡ Aggressive (Skip Middle)',
-          steps: [
-            { text: validPrompts[0], label: 'Step 1' },
-            { text: validPrompts[validPrompts.length - 1], label: 'Step 2' }
-          ]
-        });
-      }
-
-      // Insert all variations into DB
-      const newSequences = [];
-      const newPrompts = [];
-
-      for (const variation of variations) {
-        const { data: seq, error: seqErr } = await db
-          .from('message_sequences')
-          .insert({ label: variation.label, is_active: true })
-          .select()
-          .single();
-        if (seqErr) {
-          console.error('Error creating sequence:', seqErr);
-          continue;
-        }
-        newSequences.push(seq);
-
-        for (let i = 0; i < variation.steps.length; i++) {
-          const { data: step, error: stepErr } = await db
-            .from('message_prompts')
-            .insert({
-              prompt_text: variation.steps[i].text,
-              label: variation.steps[i].label,
-              sequence_id: seq.id,
-              sequence_position: i + 1,
-              is_active: true
-            })
-            .select()
-            .single();
-          if (!stepErr && step) {
-            newPrompts.push(step);
-          }
-        }
-      }
-
-      setSequences(prev => [...prev, ...newSequences]);
-      setMessagePrompts(prev => [...prev, ...newPrompts]);
-      if (newSequences.length > 0) {
-        setExpandedSequenceId(newSequences[0].id);
-      }
-
-      alert(`✅ Generated ${newSequences.length} sequence variations from ${validPrompts.length} prompts!`);
-    } catch (err) {
-      console.error('Error generating sequences:', err);
-      alert('Failed to generate sequences: ' + err.message);
-    } finally {
-      setGeneratingSequences(false);
-      setSavingSequence(false);
     }
   };
 
@@ -1322,7 +1224,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                           // Facebook OAuth flow - open in popup window
                           const appId = import.meta.env.VITE_FACEBOOK_APP_ID || '2887110501632122';
                           const redirectUri = encodeURIComponent(window.location.origin + '/api/facebook/callback');
-                          const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata';
+                          const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata,pages_utility_messaging';
                           const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
 
                           // Open popup window
@@ -2662,96 +2564,36 @@ REFERRAL: Customer was referred by someone`}
               {/* 🧪 SEQUENCE A/B TESTING                    */}
               {/* ============================================ */}
               <div style={{ marginBottom: '2rem' }}>
-                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>🧪 Follow-up Sequences & A/B Testing</h5>
+                <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚡ Follow-up Prompt Optimizer</h5>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Enter your follow-up message prompts below. The system will auto-generate different sequence orderings and A/B test them to find the highest-converting combination.
+                  Prompt selection now runs in real time. Each contact gets one prompt per follow-up send, the top reply-rate prompt becomes the base, the second-highest is used next, and later steps generate fresh variations from the winning base.
                 </p>
 
                 <div style={{ padding: '0.75rem 1rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
                   <span style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>
-                    🎰 <strong>Thompson Sampling:</strong> The system tests variations like hook-first, hook+full, reversed, and shuffled orders. Higher-performing sequences get more traffic automatically.
+                    🔄 <strong>Live ranking:</strong> Step 1 sends the highest-performing prompt, step 2 uses the runner-up, step 3+ keeps the base winner and asks AI to generate new variations from it.
                   </span>
                 </div>
 
-                {/* ============ Prompt Input Area ============ */}
                 <div style={{
-                  background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)', padding: '1rem', marginBottom: '1.5rem'
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginBottom: '1rem'
                 }}>
-                  <div style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-                    ✏️ Message Prompts
-                    <span style={{ fontWeight: '400', fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                      (Enter at least 2 — these are instructions the AI uses to write follow-ups)
-                    </span>
-                  </div>
-
-                  {rawPrompts.map((prompt, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                      <div style={{
-                        minWidth: '28px', height: '28px', borderRadius: '50%',
-                        background: 'var(--primary)', color: 'white',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '0.75rem', fontWeight: '700', marginTop: '6px'
-                      }}>
-                        {idx + 1}
-                      </div>
-                      <textarea
-                        className="form-input"
-                        rows={2}
-                        placeholder={
-                          idx === 0 ? 'e.g. Check in warmly, reference the property they asked about'
-                            : idx === 1 ? 'e.g. Share a success story, ask if they want to see similar properties'
-                              : 'e.g. Create gentle urgency — mention limited availability'
-                        }
-                        value={prompt}
-                        onChange={(e) => {
-                          const updated = [...rawPrompts];
-                          updated[idx] = e.target.value;
-                          setRawPrompts(updated);
-                        }}
-                        style={{ flex: 1, resize: 'vertical', fontSize: '0.85rem' }}
-                      />
-                      {rawPrompts.length > 1 && (
-                        <button
-                          onClick={() => setRawPrompts(rawPrompts.filter((_, i) => i !== idx))}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            fontSize: '0.9rem', padding: '4px', color: '#ef4444', marginTop: '6px'
-                          }}
-                          title="Remove prompt"
-                        >✕</button>
-                      )}
-                    </div>
-                  ))}
-
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <button
-                      onClick={() => setRawPrompts([...rawPrompts, ''])}
-                      style={{
-                        flex: 1, padding: '8px', background: 'transparent',
-                        border: '1px dashed rgba(99, 102, 241, 0.4)', borderRadius: 'var(--radius-md)',
-                        color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500'
-                      }}
-                    >
-                      + Add Another Prompt
-                    </button>
-                  </div>
-
                   <button
-                    onClick={() => generateSequences(rawPrompts)}
-                    disabled={generatingSequences || rawPrompts.filter(p => p.trim()).length < 2}
+                    onClick={addSequence}
                     style={{
-                      width: '100%', padding: '12px', marginTop: '0.75rem',
-                      background: rawPrompts.filter(p => p.trim()).length >= 2
-                        ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(100,100,100,0.2)',
-                      border: 'none', borderRadius: 'var(--radius-md)',
-                      color: 'white', cursor: rawPrompts.filter(p => p.trim()).length >= 2 ? 'pointer' : 'not-allowed',
-                      fontSize: '0.9rem', fontWeight: '700',
-                      opacity: generatingSequences ? 0.6 : 1,
-                      transition: 'all 0.2s ease'
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid rgba(99, 102, 241, 0.4)',
+                      background: 'rgba(99, 102, 241, 0.12)',
+                      color: 'var(--primary)',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: '600'
                     }}
                   >
-                    {generatingSequences ? '⏳ Generating Variations...' : `🧪 Generate Sequences (${rawPrompts.filter(p => p.trim()).length} prompts)`}
+                    + Add Prompt Sequence
                   </button>
                 </div>
 
@@ -2760,7 +2602,7 @@ REFERRAL: Customer was referred by someone`}
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading sequences...</div>
                 ) : sequences.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
-                    No sequences yet. Enter your message prompts above and click "Generate Sequences" to get started!
+                    No prompt sequences yet. Click "Add Prompt Sequence" to start adding follow-up prompt instructions.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
@@ -2986,11 +2828,11 @@ REFERRAL: Customer was referred by someone`}
                 }}>
                   <div style={{ fontWeight: '600', fontSize: '0.8rem', color: '#22c55e', marginBottom: '0.25rem' }}>📊 How It Works</div>
                   <ul style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, paddingLeft: '1.25rem' }}>
-                    <li>Enter your message prompts → click "Generate Sequences" → system creates variations</li>
-                    <li>Variations include: original order, hook-first, hook + full message, reversed, shuffled, aggressive</li>
-                    <li>Each new contact is assigned to a sequence via Thompson Sampling (best performers get more traffic)</li>
-                    <li>Steps fire in order at follow-up intervals. Scoring: +30 reply, +20 fast (&lt;1h), +10 medium (&lt;6h)</li>
-                    <li>You can still edit, pause, or delete any generated sequence</li>
+                    <li>Add prompt instructions in the sequence cards below (each step is one strategic angle).</li>
+                    <li>When AI sends follow-ups, step 1 uses the highest reply-rate prompt in real time.</li>
+                    <li>Step 2 uses the second-highest prompt, then later steps generate fresh variations from the base winner.</li>
+                    <li>One contact follow-up send uses one prompt instruction, and performance updates immediately after replies.</li>
+                    <li>You can still edit, pause, or delete any sequence at any time.</li>
                   </ul>
                 </div>
               </div>

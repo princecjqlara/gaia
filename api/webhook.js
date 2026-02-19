@@ -4522,6 +4522,55 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
   }
 }
 
+function getInternalAppBaseUrl() {
+  const rawBaseUrl =
+    process.env.APP_BASE_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL ||
+    "";
+
+  if (!rawBaseUrl) return null;
+
+  const trimmed = rawBaseUrl.trim().replace(/\/$/, "");
+  if (!trimmed) return null;
+
+  return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+}
+
+async function triggerImmediateScheduledProcessing() {
+  const baseUrl = getInternalAppBaseUrl();
+  if (!baseUrl) {
+    console.log("[WEBHOOK] Read receipt: APP base URL missing, waiting for regular scheduler");
+    return false;
+  }
+
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), 4000);
+
+  try {
+    const response = await fetch(`${baseUrl}/api/scheduled/process`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "read_receipt_auto" }),
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.log("[WEBHOOK] Read receipt immediate process failed:", errText.slice(0, 160));
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.log("[WEBHOOK] Read receipt immediate process error:", err.message);
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Handle Facebook Read Receipt
  * When a contact reads/sees our message, schedule a quick follow-up
@@ -4559,10 +4608,9 @@ async function handleReadReceipt(pageId, event) {
       .eq('conversation_id', conv.conversation_id)
       .eq('status', 'pending')
       .eq('follow_up_type', 'read_receipt')
-      .limit(1)
-      .single();
+      .limit(1);
 
-    if (existingFollow) {
+    if (existingFollow?.length > 0) {
       console.log('[WEBHOOK] 👁️ Read-triggered follow-up already pending, skipping');
       return;
     }
@@ -4591,6 +4639,24 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
+    const sourceAiTimestamp = new Date(lastMsg.timestamp).toISOString();
+    const sourceMessageTag = `source_ai_ts=${sourceAiTimestamp}`;
+
+    // 4b. Avoid duplicate auto-replies for repeated read events of the same outbound message
+    const { data: existingForSource } = await db
+      .from('ai_followup_schedule')
+      .select('id, status')
+      .eq('conversation_id', conv.conversation_id)
+      .eq('follow_up_type', 'read_receipt')
+      .in('status', ['pending', 'sent'])
+      .ilike('reason', `%${sourceMessageTag}%`)
+      .limit(1);
+
+    if (existingForSource?.length > 0) {
+      console.log('[WEBHOOK] 👁️ Read-triggered follow-up already handled for this message, skipping');
+      return;
+    }
+
     // 5. Check that the customer hasn't already replied to this message
     const { data: replyAfter } = await db
       .from('facebook_messages')
@@ -4610,7 +4676,7 @@ async function handleReadReceipt(pageId, event) {
     const delayMinutes = 0;
     const scheduledAt = new Date();
 
-    const reason = `read_receipt:${new Date(readTimestamp).toISOString()}|delay=${delayMinutes}m`;
+    const reason = `read_receipt:${new Date(readTimestamp).toISOString()}|${sourceMessageTag}|delay=${delayMinutes}m`;
     const { error: insertError } = await db.from('ai_followup_schedule').insert(
       buildAiFollowupSchedulePayload({
         conversationId: conv.conversation_id,
@@ -4641,6 +4707,11 @@ async function handleReadReceipt(pageId, event) {
     }
 
     console.log(`[WEBHOOK] 👁️ Read-triggered follow-up scheduled for ${conv.participant_name || senderId} in ${delayMinutes} min`);
+
+    const immediateProcessed = await triggerImmediateScheduledProcessing();
+    if (immediateProcessed) {
+      console.log('[WEBHOOK] 👁️ Immediate follow-up processor triggered after read event');
+    }
   } catch (err) {
     // Non-fatal — follow_up_type column might not exist yet, or table missing
     console.log('[WEBHOOK] Read receipt handling (non-fatal):', err.message);

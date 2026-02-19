@@ -1,5 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import {
+    rankPromptsByReplyPerformance,
+    selectPromptForRealtimeStep
+} from './followupPromptStrategy.js';
+import {
+    alignToHourOnOrAfter,
+    getFibonacciDelayHours,
+    shouldAlignToBestTime
+} from '../../src/utils/followUpCadence.js';
+import {
+    buildUtilityTemplateParameters,
+    countTemplatePlaceholders
+} from '../../src/utils/utilityTemplateParams.js';
 
 function getFirstName(name) {
     if (!name || typeof name !== 'string') return '';
@@ -14,16 +27,17 @@ function getFirstName(name) {
 }
 
 const UTILITY_WRAPPER_FALLBACKS = [
-    'Update: {{1}} Reply anytime.',
-    'Just checking in: {{1}} Let me know.',
-    'Quick update: {{1}} I am here to help.',
-    'Follow-up: {{1}} Reply when you can.',
-    'Hi! {{1}} Let me know if you need anything.'
+    '{{1}} — Message from {page name} support team. {{2}}'
 ];
 
 function normalizeTemplateBody(body) {
     if (!body || typeof body !== 'string') return '';
     return body.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function isStrictUtilityTemplateFormat(body) {
+    const normalized = normalizeTemplateBody(body).replace(/—/g, '-');
+    return normalized === '{{1}} - message from {page name} support team. {{2}}';
 }
 
 function hashTemplateBody(body) {
@@ -45,15 +59,29 @@ function sanitizeUtilityText(text, maxChars) {
 function isValidUtilityWrapper(wrapper) {
     if (!wrapper || typeof wrapper !== 'string') return false;
     const trimmed = wrapper.trim();
-    const matches = trimmed.match(/{{1}}/g) || [];
-    if (matches.length !== 1) return false;
-    if (trimmed.startsWith('{{1}}') || trimmed.endsWith('{{1}}')) return false;
+    const placeholderOneCount = (trimmed.match(/{{1}}/g) || []).length;
+    const placeholderTwoCount = (trimmed.match(/{{2}}/g) || []).length;
+    if (placeholderOneCount !== 1) return false;
+    if (placeholderTwoCount > 1) return false;
+    if (placeholderTwoCount === 1 && trimmed.indexOf('{{1}}') > trimmed.indexOf('{{2}}')) return false;
     if (trimmed.includes('\n')) return false;
     return true;
 }
 
 function buildUtilityTemplateName(hash) {
     return `utility_followup_${hash.slice(0, 18)}`;
+}
+
+function pickPreferredUtilityTemplate(templates) {
+    if (!Array.isArray(templates) || templates.length === 0) return null;
+
+    const strictTemplate = templates.find((template) => isStrictUtilityTemplateFormat(template.template_body));
+    if (strictTemplate) return strictTemplate;
+
+    const twoPlaceholderTemplate = templates.find((template) => countTemplatePlaceholders(template.template_body) >= 2);
+    if (twoPlaceholderTemplate) return twoPlaceholderTemplate;
+
+    return templates[0];
 }
 
 async function selectApprovedUtilityTemplate(supabase, pageId, language) {
@@ -63,7 +91,7 @@ async function selectApprovedUtilityTemplate(supabase, pageId, language) {
         .eq('page_id', pageId)
         .eq('status', 'APPROVED')
         .order('last_used_at', { ascending: true, nullsFirst: true })
-        .limit(1);
+        .limit(25);
 
     if (language) {
         query = query.eq('language', language);
@@ -75,7 +103,7 @@ async function selectApprovedUtilityTemplate(supabase, pageId, language) {
     }
 
     if (data && data.length > 0) {
-        return { template: data[0], error: null };
+        return { template: pickPreferredUtilityTemplate(data), error: null };
     }
 
     if (language) {
@@ -85,14 +113,14 @@ async function selectApprovedUtilityTemplate(supabase, pageId, language) {
             .eq('page_id', pageId)
             .eq('status', 'APPROVED')
             .order('last_used_at', { ascending: true, nullsFirst: true })
-            .limit(1);
+            .limit(25);
 
         if (fallbackError) {
             return { template: null, error: fallbackError.message };
         }
 
         if (fallbackData && fallbackData.length > 0) {
-            return { template: fallbackData[0], error: null };
+            return { template: pickPreferredUtilityTemplate(fallbackData), error: null };
         }
     }
 
@@ -113,9 +141,10 @@ async function markUtilityTemplateUsed(supabase, template) {
 
 async function generateUtilityWrapper(nvidiaKey, languageLabel) {
     if (!nvidiaKey) return null;
-    const prompt = `Create a short utility follow-up wrapper in ${languageLabel || 'English'}.
-It must include the placeholder {{1}} exactly once and cannot start or end with {{1}}.
-Keep it under 80 characters, no emojis, no marketing, no sensitive requests.
+    const prompt = `Create a one-paragraph utility follow-up wrapper in ${languageLabel || 'English'}.
+Use this exact format and placeholders:
+{{1}} — Message from {page name} support team. {{2}}
+Do not add any extra words or line breaks.
 Return ONLY the wrapper text.`;
 
     try {
@@ -206,7 +235,12 @@ async function maybeAutoCreateUtilityTemplate({
     if (existing && existing.length > 0) return;
 
     const templateName = buildUtilityTemplateName(templateHash);
-    const exampleText = sanitizeUtilityText(messageText || 'Quick update.', 60) || 'Quick update.';
+    const exampleParams = buildUtilityTemplateParameters({
+        templateBody: wrapper,
+        messageText: sanitizeUtilityText(messageText || 'Quick update.', 120) || 'Quick update.',
+        maxBodyChars: 120,
+        maxHeaderChars: 60
+    });
 
     const payload = {
         name: templateName,
@@ -216,7 +250,7 @@ async function maybeAutoCreateUtilityTemplate({
             {
                 type: 'BODY',
                 text: wrapper,
-                example: { body_text: [[exampleText]] }
+                example: { body_text: [exampleParams] }
             }
         ]
     };
@@ -266,8 +300,16 @@ async function sendUtilityTemplateMessage({
     recipientId,
     templateName,
     language,
+    templateBody,
     bodyText
 }) {
+    const templateParams = buildUtilityTemplateParameters({
+        templateBody,
+        messageText: bodyText || 'Quick update.',
+        maxBodyChars: 320,
+        maxHeaderChars: 80
+    });
+
     const response = await fetch(
         `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${pageAccessToken}`,
         {
@@ -282,9 +324,10 @@ async function sendUtilityTemplateMessage({
                     components: [
                         {
                             type: 'body',
-                            parameters: [
-                                { type: 'text', text: bodyText }
-                            ]
+                            parameters: templateParams.map((textParam) => ({
+                                type: 'text',
+                                text: textParam
+                            }))
                         }
                     ]
                 }
@@ -300,10 +343,71 @@ async function sendUtilityTemplateMessage({
     return { ok: true, data };
 }
 
+function getDefaultBestContactHour(conversationId) {
+    const seed = (conversationId || '')
+        .split('')
+        .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+
+    return 9 + (Math.abs(seed) % 8);
+}
+
+async function getBestContactHour(supabase, conversationId) {
+    const fallbackHour = getDefaultBestContactHour(conversationId);
+
+    try {
+        const { data: engagements, error } = await supabase
+            .from('contact_engagement')
+            .select('hour_of_day, response_latency_seconds')
+            .eq('conversation_id', conversationId)
+            .eq('message_direction', 'inbound')
+            .order('message_timestamp', { ascending: false })
+            .limit(50);
+
+        if (error || !engagements || engagements.length === 0) {
+            return fallbackHour;
+        }
+
+        const hourStats = new Map();
+        for (const engagement of engagements) {
+            const hour = Number.parseInt(engagement.hour_of_day, 10);
+            if (!Number.isFinite(hour) || hour < 0 || hour > 23) continue;
+
+            const stats = hourStats.get(hour) || { count: 0, latencyTotal: 0 };
+            stats.count += 1;
+            stats.latencyTotal += Number.isFinite(engagement.response_latency_seconds)
+                ? engagement.response_latency_seconds
+                : 0;
+            hourStats.set(hour, stats);
+        }
+
+        if (hourStats.size === 0) {
+            return fallbackHour;
+        }
+
+        let bestHour = fallbackHour;
+        let bestScore = -Infinity;
+        for (const [hour, stats] of hourStats.entries()) {
+            const avgLatency = stats.count > 0 ? stats.latencyTotal / stats.count : 0;
+            const latencyFactor = 1 - Math.min(avgLatency / 7200, 0.8);
+            const score = stats.count * latencyFactor;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestHour = hour;
+            }
+        }
+
+        return bestHour;
+    } catch (error) {
+        console.log('[AI FOLLOWUP] Best-time lookup fallback:', error.message);
+        return fallbackHour;
+    }
+}
+
 /**
  * Process due scheduled messages AND AI intuition follow-ups
  * This endpoint is called by cron-job.org or similar services
- * Updated: 2026-02-15 - Added A/B testing with Thompson Sampling for follow-up prompts
+ * Updated: 2026-02-18 - Follow-up prompt selection now uses live reply-rate ranking
  */
 export default async function handler(req, res) {
     // Disable caching for this API route
@@ -798,88 +902,52 @@ export default async function handler(req, res) {
                         }
 
                         // ============================================
-                        // A/B TESTING: Sequence-Based Thompson Sampling
+                        // A/B TESTING: Real-time prompt ranking
                         // ============================================
                         let selectedPrompt = null;
                         let selectedPromptId = null;
                         let selectedSequenceId = null;
+                        let selectedVariantLabel = 'default';
                         let abSequenceStep = 1;
+                        let followUpInstruction = 'Generate a natural follow-up message. Reference what was discussed, keep it short, feel natural, and gently move the conversation forward.';
 
                         try {
-                            // 1. Count previous messages to determine which step we're on
+                            // Count previous sends to determine current step
                             const { count: prevSent } = await supabase
                                 .from('message_ab_results')
                                 .select('id', { count: 'exact', head: true })
                                 .eq('conversation_id', followup.conversation_id);
                             abSequenceStep = (prevSent || 0) + 1;
 
-                            // 2. Check if contact already has an assigned sequence
-                            const { data: prevResult } = await supabase
-                                .from('message_ab_results')
-                                .select('sequence_id')
-                                .eq('conversation_id', followup.conversation_id)
-                                .not('sequence_id', 'is', null)
-                                .order('sent_at', { ascending: false })
-                                .limit(1)
-                                .single();
+                            // Pull all active prompt instructions and rank by live performance
+                            const { data: activePrompts, error: promptError } = await supabase
+                                .from('message_prompts')
+                                .select('id, sequence_id, prompt_text, label, total_sent, total_replies, created_at')
+                                .eq('is_active', true);
 
-                            let chosenSequenceId = prevResult?.sequence_id || null;
-
-                            // 3. If no assigned sequence, use Thompson Sampling to pick one
-                            if (!chosenSequenceId) {
-                                const { data: activeSequences } = await supabase
-                                    .from('message_sequences')
-                                    .select('id, label, total_sent, total_replies')
-                                    .eq('is_active', true);
-
-                                if (activeSequences && activeSequences.length > 0) {
-                                    const sampleGamma = (shape) => {
-                                        let sum = 0;
-                                        for (let i = 0; i < Math.ceil(shape); i++) {
-                                            sum -= Math.log(Math.random());
-                                        }
-                                        return sum;
-                                    };
-                                    const samples = activeSequences.map(seq => {
-                                        const successes = seq.total_replies || 0;
-                                        const failures = Math.max(0, (seq.total_sent || 0) - successes);
-                                        const x = sampleGamma(successes + 1);
-                                        const y = sampleGamma(failures + 1);
-                                        return { seq, sample: x / (x + y) };
-                                    });
-                                    samples.sort((a, b) => b.sample - a.sample);
-                                    chosenSequenceId = samples[0].seq.id;
-                                    console.log(`[AI FOLLOWUP] 🧪 Thompson Sampling selected sequence "${samples[0].seq.label}" (score: ${samples[0].sample.toFixed(3)}, ${activeSequences.length} sequences)`);
-                                }
+                            if (promptError) {
+                                throw promptError;
                             }
 
-                            // 4. Get the prompt at the correct step for this sequence
-                            if (chosenSequenceId) {
-                                selectedSequenceId = chosenSequenceId;
-                                const { data: stepPrompt } = await supabase
-                                    .from('message_prompts')
-                                    .select('id, prompt_text, label, total_sent, total_replies')
-                                    .eq('sequence_id', chosenSequenceId)
-                                    .eq('sequence_position', abSequenceStep)
-                                    .eq('is_active', true)
-                                    .single();
+                            const rankedPrompts = rankPromptsByReplyPerformance(activePrompts || []);
+                            const promptPlan = selectPromptForRealtimeStep(rankedPrompts, abSequenceStep);
 
-                                if (stepPrompt) {
-                                    selectedPrompt = stepPrompt;
-                                    selectedPromptId = stepPrompt.id;
-                                    console.log(`[AI FOLLOWUP] 🧪 Using step ${abSequenceStep} prompt: "${stepPrompt.label || 'unlabeled'}"`);
-                                } else {
-                                    console.log(`[AI FOLLOWUP] 🧪 No prompt at step ${abSequenceStep} — sequence exhausted, using default`);
-                                }
+                            if (promptPlan?.selectedPrompt) {
+                                selectedPrompt = promptPlan.selectedPrompt;
+                                selectedPromptId = selectedPrompt.id;
+                                selectedSequenceId = selectedPrompt.sequence_id || null;
+                                selectedVariantLabel = promptPlan.variantLabel || selectedPrompt.label || 'live-ranked';
+                                followUpInstruction = promptPlan.followUpInstruction || selectedPrompt.prompt_text;
+
+                                console.log(
+                                    `[AI FOLLOWUP] ⚡ Live prompt selection: step=${abSequenceStep}, mode=${promptPlan.selectionMode}, prompt="${selectedPrompt.label || 'unlabeled'}", score=${(selectedPrompt.replyRate * 100).toFixed(1)}%`
+                                );
+                            } else {
+                                console.log('[AI FOLLOWUP] ⚡ No active follow-up prompts found, using default instruction');
                             }
                         } catch (abErr) {
-                            console.log(`[AI FOLLOWUP] A/B selection error, using default: ${abErr.message}`);
+                            console.log(`[AI FOLLOWUP] Live prompt selection error, using default: ${abErr.message}`);
                         }
-
-                        // Build follow-up instruction from selected prompt or use default
-                        const followUpInstruction = selectedPrompt
-                            ? selectedPrompt.prompt_text
-                            : 'Generate a natural follow-up message. Reference what was discussed, keep it short, feel natural, and gently move the conversation forward.';
 
                         // Get ALL conversation messages for context (no limit)
                         const { data: recentMessages } = await supabase
@@ -1082,6 +1150,7 @@ Generate ONLY the follow-up message, nothing else:`;
                                     recipientId,
                                     templateName: utilityTemplate.template_name,
                                     language: utilityTemplate.language || utilityLanguage,
+                                    templateBody: utilityTemplate.template_body,
                                     bodyText: part
                                 });
 
@@ -1156,7 +1225,7 @@ Generate ONLY the follow-up message, nothing else:`;
                                         prompt_id: selectedPromptId,
                                         sequence_id: selectedSequenceId,
                                         conversation_id: followup.conversation_id,
-                                        variant_label: selectedPrompt?.label || 'default',
+                                        variant_label: selectedVariantLabel,
                                         message_sent: message,
                                         sent_at: new Date().toISOString(),
                                         sequence_step: abSequenceStep
@@ -1194,46 +1263,58 @@ Generate ONLY the follow-up message, nothing else:`;
 
                             // Only schedule the NEXT follow-up if no pending one exists
                             if (!existingPending || existingPending.length === 0) {
-                                // Get last customer message time to determine appropriate interval
-                                const { data: convData } = await supabase
-                                    .from('facebook_conversations')
-                                    .select('last_message_time, last_message_from_page')
+                                const { data: lastInbound } = await supabase
+                                    .from('facebook_messages')
+                                    .select('timestamp')
                                     .eq('conversation_id', followup.conversation_id)
+                                    .eq('is_from_page', false)
+                                    .order('timestamp', { ascending: false })
+                                    .limit(1)
                                     .single();
 
-                                const lastMsgTime = convData?.last_message_time ? new Date(convData.last_message_time) : null;
-                                const now = new Date();
-                                const hoursSinceLastMsg = lastMsgTime ? (now - lastMsgTime) / (1000 * 60 * 60) : 999;
+                                let sentCountQuery = supabase
+                                    .from('ai_followup_schedule')
+                                    .select('id', { count: 'exact', head: true })
+                                    .eq('conversation_id', followup.conversation_id)
+                                    .eq('status', 'sent');
 
-                                // Determine next follow-up time based on graduated strategy:
-                                // 0-1h: 30min, 1-4h: 1h, 4-24h: 6h, 24h+: 24h (once per day)
-                                let nextIntervalHours;
-                                if (hoursSinceLastMsg < 1) {
-                                    nextIntervalHours = 0.5; // 30 mins
-                                } else if (hoursSinceLastMsg < 4) {
-                                    nextIntervalHours = 1;
-                                } else if (hoursSinceLastMsg < 24) {
-                                    nextIntervalHours = 6;
-                                } else {
-                                    nextIntervalHours = 24; // Once per day for 24h+ silent contacts
+                                if (lastInbound?.timestamp) {
+                                    sentCountQuery = sentCountQuery.gte('sent_at', new Date(lastInbound.timestamp).toISOString());
                                 }
 
-                                const nextFollowupTime = new Date(Date.now() + nextIntervalHours * 60 * 60 * 1000);
+                                const { count: sentCountSinceLastInbound } = await sentCountQuery;
+                                const nextStep = (sentCountSinceLastInbound || 0) + 1;
+                                const aggressivenessShift = Number.isFinite(aiConfig.intuition_fibonacci_shift)
+                                    ? aiConfig.intuition_fibonacci_shift
+                                    : 0;
+                                const fibonacciHours = getFibonacciDelayHours(nextStep, aggressivenessShift);
+
+                                let nextFollowupTime = new Date(Date.now() + fibonacciHours * 60 * 60 * 1000);
+                                let nextFollowupType = 'intuition';
+                                let scheduleReason = `Auto-scheduled Fibonacci step ${nextStep} (${fibonacciHours}h delay)`;
+
+                                if (shouldAlignToBestTime(fibonacciHours) && conversation?.best_time_scheduling_disabled !== true) {
+                                    const bestHour = await getBestContactHour(supabase, followup.conversation_id);
+                                    nextFollowupTime = alignToHourOnOrAfter(nextFollowupTime, bestHour);
+                                    nextFollowupType = 'best_time';
+                                    scheduleReason += ` aligned to best hour ${bestHour}:00`;
+                                }
+
                                 const { error: scheduleError } = await supabase
                                     .from('ai_followup_schedule')
                                     .insert({
                                         conversation_id: followup.conversation_id,
                                         page_id: followup.page_id,
                                         scheduled_at: nextFollowupTime.toISOString(),
-                                        follow_up_type: hoursSinceLastMsg >= 24 ? 'best_time' : 'intuition',
-                                        reason: `Auto-scheduled: ${nextIntervalHours}h interval (${Math.round(hoursSinceLastMsg)}h since last customer msg)`,
+                                        follow_up_type: nextFollowupType,
+                                        reason: scheduleReason,
                                         status: 'pending'
                                     });
 
                                 if (scheduleError) {
                                     console.log(`[AI FOLLOWUP] Could not schedule next: ${scheduleError.message}`);
                                 } else {
-                                    console.log(`[AI FOLLOWUP] 📅 Next follow-up in ${nextIntervalHours}h at ${nextFollowupTime.toISOString()}`);
+                                    console.log(`[AI FOLLOWUP] 📅 Next follow-up (step ${nextStep}) in ${fibonacciHours}h at ${nextFollowupTime.toISOString()}`);
                                 }
                             } else {
                                 console.log(`[AI FOLLOWUP] ⏭️ Pending follow-up already exists for ${followup.conversation_id} - skipping reschedule`);
