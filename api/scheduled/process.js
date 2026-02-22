@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import {
     rankPromptsByReplyPerformance,
     selectPromptForRealtimeStep
-} from './followupPromptStrategy.js';
+} from '../../src/utils/followupPromptStrategy.js';
 import {
     alignToHourOnOrAfter,
     getFibonacciDelayHours,

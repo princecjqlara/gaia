@@ -3,7 +3,7 @@ import {
     selectPromptForRealtimeStep,
     thompsonSample,
     betaSample
-} from '../followupPromptStrategy.js';
+} from '../utils/followupPromptStrategy.js';
 
 describe('followupPromptStrategy — Thompson Sampling', () => {
     test('betaSample returns values between 0 and 1', () => {
