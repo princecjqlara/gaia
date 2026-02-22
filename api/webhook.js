@@ -4524,6 +4524,8 @@ AGGRESSIVE FOLLOW-UP GUIDELINES (use minutes, not hours):
 
 function getInternalAppBaseUrl() {
   const rawBaseUrl =
+    process.env.APP_URL ||
+    process.env.VITE_APP_URL ||
     process.env.APP_BASE_URL ||
     process.env.PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -4541,7 +4543,7 @@ function getInternalAppBaseUrl() {
 async function triggerImmediateScheduledProcessing() {
   const baseUrl = getInternalAppBaseUrl();
   if (!baseUrl) {
-    console.log("[WEBHOOK] Read receipt: APP base URL missing, waiting for regular scheduler");
+    console.log("[WEBHOOK] Read receipt: No APP_URL/VITE_APP_URL/VERCEL_URL configured — follow-up will wait for next cron cycle");
     return false;
   }
 
@@ -4672,7 +4674,8 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
-    // 6. Schedule immediate read-aware follow-up so contact gets a timely nudge
+    // 6. Schedule read-aware follow-up immediately so triggerImmediateScheduledProcessing picks it up
+    // The natural-feeling delay comes from the AI message generation, not the scheduling
     const delayMinutes = 0;
     const scheduledAt = new Date();
 

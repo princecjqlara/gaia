@@ -405,9 +405,203 @@ async function getBestContactHour(supabase, conversationId) {
 }
 
 /**
+ * Auto-create prompts from conversation history when none exist.
+ * Analyzes recent conversations that received customer replies and
+ * uses AI to generate 3 diverse follow-up prompt variants.
+ */
+async function autoCreatePromptsFromHistory(supabase) {
+    const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY;
+    if (!NVIDIA_API_KEY) {
+        console.log('[AUTO-SEQUENCE] No NVIDIA API key, skipping auto-creation');
+        return [];
+    }
+
+    try {
+        // 1. Find recent outbound messages that received replies
+        const { data: repliedConvos, error: convError } = await supabase
+            .from('facebook_conversations')
+            .select('conversation_id')
+            .not('last_message_time', 'is', null)
+            .order('last_message_time', { ascending: false })
+            .limit(20);
+
+        if (convError || !repliedConvos?.length) {
+            console.log('[AUTO-SEQUENCE] No conversations found for analysis');
+            return [];
+        }
+
+        // 2. Gather successful follow-up patterns (outbound msgs that got replies)
+        const successfulPatterns = [];
+        for (const conv of repliedConvos.slice(0, 10)) {
+            const { data: msgs } = await supabase
+                .from('facebook_messages')
+                .select('message_text, is_from_page, timestamp')
+                .eq('conversation_id', conv.conversation_id)
+                .order('timestamp', { ascending: true })
+                .limit(20);
+
+            if (!msgs || msgs.length < 2) continue;
+
+            // Find AI messages that were followed by customer replies
+            for (let i = 0; i < msgs.length - 1; i++) {
+                if (msgs[i].is_from_page && !msgs[i + 1].is_from_page && msgs[i].message_text) {
+                    successfulPatterns.push(msgs[i].message_text.substring(0, 200));
+                    if (successfulPatterns.length >= 5) break;
+                }
+            }
+            if (successfulPatterns.length >= 5) break;
+        }
+
+        if (successfulPatterns.length === 0) {
+            console.log('[AUTO-SEQUENCE] No successful reply patterns found, using defaults');
+            // Use default prompts if no history available
+            return await insertDefaultPrompts(supabase);
+        }
+
+        // 3. Use AI to generate 3 diverse prompt variants
+        const analysisPrompt = `Analyze these follow-up messages that successfully got customer replies:
+
+${successfulPatterns.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+Based on these patterns, generate exactly 3 SHORT follow-up prompt INSTRUCTIONS (not the messages themselves).
+Each instruction tells an AI how to write a follow-up message using a different angle:
+1. Empathetic/friendly approach
+2. Value/benefit-driven approach
+3. Urgency/scarcity approach
+
+Respond in valid JSON: [{"label": "...", "prompt": "..."}]
+Keep each prompt under 100 words. Return ONLY the JSON array.`;
+
+        const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${NVIDIA_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'meta/llama-3.1-8b-instruct',
+                messages: [{ role: 'user', content: analysisPrompt }],
+                temperature: 0.7,
+                max_tokens: 600
+            })
+        });
+
+        if (!aiResponse.ok) {
+            console.log('[AUTO-SEQUENCE] AI generation failed, using defaults');
+            return await insertDefaultPrompts(supabase);
+        }
+
+        const aiData = await aiResponse.json();
+        const rawText = aiData.choices?.[0]?.message?.content?.trim();
+        if (!rawText) return await insertDefaultPrompts(supabase);
+
+        // Parse AI response
+        let variants;
+        try {
+            const jsonMatch = rawText.match(/\[.*\]/s);
+            variants = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+        } catch {
+            console.log('[AUTO-SEQUENCE] Could not parse AI response, using defaults');
+            return await insertDefaultPrompts(supabase);
+        }
+
+        if (!Array.isArray(variants) || variants.length === 0) {
+            return await insertDefaultPrompts(supabase);
+        }
+
+        // 4. Create a default sequence
+        const { data: seq, error: seqErr } = await supabase
+            .from('message_sequences')
+            .insert({
+                name: 'Auto-Generated Sequence',
+                is_active: true,
+                total_sent: 0,
+                total_replies: 0
+            })
+            .select()
+            .single();
+
+        if (seqErr) {
+            console.log('[AUTO-SEQUENCE] Sequence creation failed:', seqErr.message);
+            return [];
+        }
+
+        // 5. Insert prompt variants
+        const createdPrompts = [];
+        for (let i = 0; i < Math.min(variants.length, 3); i++) {
+            const v = variants[i];
+            const { data: prompt, error: promptErr } = await supabase
+                .from('message_prompts')
+                .insert({
+                    prompt_text: v.prompt || v.instruction || `Generate a natural follow-up message using approach ${i + 1}`,
+                    label: v.label || `Auto Variant ${i + 1}`,
+                    sequence_id: seq.id,
+                    sequence_position: i + 1,
+                    is_active: true,
+                    total_sent: 0,
+                    total_replies: 0
+                })
+                .select()
+                .single();
+
+            if (!promptErr && prompt) {
+                createdPrompts.push(prompt);
+            }
+        }
+
+        console.log(`[AUTO-SEQUENCE] ✅ Created sequence "${seq.name}" with ${createdPrompts.length} prompts from conversation history`);
+        return createdPrompts;
+    } catch (err) {
+        console.log('[AUTO-SEQUENCE] Error:', err.message);
+        return [];
+    }
+}
+
+async function insertDefaultPrompts(supabase) {
+    const defaults = [
+        { label: 'Friendly Check-in', prompt: 'Write a warm, friendly follow-up. Ask how they are doing and gently remind them about the conversation topic. Keep it casual like texting a friend.' },
+        { label: 'Value Highlight', prompt: 'Write a follow-up that highlights a specific benefit or value related to what was discussed. Include one concrete detail that makes the offer compelling.' },
+        { label: 'Gentle Urgency', prompt: 'Write a follow-up with gentle urgency. Mention limited availability or time sensitivity without being pushy. Keep the tone helpful and caring.' }
+    ];
+
+    try {
+        const { data: seq } = await supabase
+            .from('message_sequences')
+            .insert({ name: 'Default Sequence', is_active: true, total_sent: 0, total_replies: 0 })
+            .select()
+            .single();
+
+        if (!seq) return [];
+
+        const created = [];
+        for (let i = 0; i < defaults.length; i++) {
+            const { data: p } = await supabase
+                .from('message_prompts')
+                .insert({
+                    prompt_text: defaults[i].prompt,
+                    label: defaults[i].label,
+                    sequence_id: seq.id,
+                    sequence_position: i + 1,
+                    is_active: true,
+                    total_sent: 0,
+                    total_replies: 0
+                })
+                .select()
+                .single();
+            if (p) created.push(p);
+        }
+        console.log(`[AUTO-SEQUENCE] ✅ Created default sequence with ${created.length} prompts`);
+        return created;
+    } catch (err) {
+        console.log('[AUTO-SEQUENCE] Default prompt insertion failed:', err.message);
+        return [];
+    }
+}
+
+/**
  * Process due scheduled messages AND AI intuition follow-ups
  * This endpoint is called by cron-job.org or similar services
- * Updated: 2026-02-18 - Follow-up prompt selection now uses live reply-rate ranking
+ * Updated: 2026-02-22 - Thompson sampling + auto-sequence creation
  */
 export default async function handler(req, res) {
     // Disable caching for this API route
@@ -809,7 +1003,10 @@ export default async function handler(req, res) {
                         }
 
                         // Check if intuition follow-ups are specifically disabled (bot still responds to messages)
-                        if (conversation?.intuition_followup_disabled === true) {
+                        // Read receipt follow-ups are exempt — they should work even if intuition is disabled
+                        const isReadReceipt = followup.follow_up_type === 'read_receipt'
+                            || (typeof followup.reason === 'string' && followup.reason.startsWith('read_receipt:'));
+                        if (conversation?.intuition_followup_disabled === true && !isReadReceipt) {
                             console.log(`[AI FOLLOWUP] Intuition follow-ups disabled for ${followup.conversation_id} - cancelling`);
                             await supabase
                                 .from('ai_followup_schedule')
@@ -943,7 +1140,23 @@ export default async function handler(req, res) {
                                     `[AI FOLLOWUP] ⚡ Live prompt selection: step=${abSequenceStep}, mode=${promptPlan.selectionMode}, prompt="${selectedPrompt.label || 'unlabeled'}", score=${(selectedPrompt.replyRate * 100).toFixed(1)}%`
                                 );
                             } else {
-                                console.log('[AI FOLLOWUP] ⚡ No active follow-up prompts found, using default instruction');
+                                // Auto-create prompts from conversation history
+                                console.log('[AI FOLLOWUP] ⚡ No active prompts found — auto-creating from history...');
+                                const autoCreated = await autoCreatePromptsFromHistory(supabase);
+                                if (autoCreated.length > 0) {
+                                    const reRanked = rankPromptsByReplyPerformance(autoCreated);
+                                    const rePlan = selectPromptForRealtimeStep(reRanked, abSequenceStep);
+                                    if (rePlan?.selectedPrompt) {
+                                        selectedPrompt = rePlan.selectedPrompt;
+                                        selectedPromptId = selectedPrompt.id;
+                                        selectedSequenceId = selectedPrompt.sequence_id || null;
+                                        selectedVariantLabel = rePlan.variantLabel || selectedPrompt.label || 'auto-created';
+                                        followUpInstruction = rePlan.followUpInstruction || selectedPrompt.prompt_text;
+                                        console.log(`[AI FOLLOWUP] ⚡ Using auto-created prompt: "${selectedPrompt.label}"`);
+                                    }
+                                } else {
+                                    console.log('[AI FOLLOWUP] ⚡ Auto-creation returned no prompts, using default instruction');
+                                }
                             }
                         } catch (abErr) {
                             console.log(`[AI FOLLOWUP] Live prompt selection error, using default: ${abErr.message}`);
