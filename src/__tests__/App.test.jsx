@@ -203,6 +203,8 @@ jest.mock("../components/AIAssistantWidget", () => () => null);
 jest.mock("../components/BookingPage", () => () => null);
 jest.mock("../components/TeamOnlinePanel", () => () => null);
 jest.mock("../components/DeadlineAlerts", () => () => null);
+jest.mock("../components/EvaluationQuestionsModal", () => () => null);
+jest.mock("../components/EvaluationModal", () => () => null);
 jest.mock("../components/UnassignedClientsPanel", () => () => null);
 jest.mock("../components/PropertyManagement", () => () => (
   <div>PropertyManagement</div>
