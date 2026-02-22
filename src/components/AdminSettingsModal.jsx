@@ -1191,25 +1191,59 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
                       <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                         Page ID: {connectedPages[0].page_id}
                       </p>
-                      <button
-                        className="btn btn-danger"
-                        onClick={async () => {
-                          if (confirm('Are you sure you want to disconnect this page?')) {
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          className="btn btn-primary"
+                          onClick={async () => {
                             try {
-                              await facebookService.disconnectPage(connectedPages[0].page_id);
-                              setConnectedPages([]);
-                              localStorage.removeItem('connected_facebook_pages');
-                              localStorage.removeItem('selectedPageId');
-                              alert('Page disconnected successfully');
+                              const page = connectedPages[0];
+                              const token = page.page_access_token;
+                              if (!token) {
+                                alert('No access token found. Please reconnect your page via Facebook OAuth.');
+                                return;
+                              }
+                              const resp = await fetch(`https://graph.facebook.com/v21.0/${page.page_id}/subscribed_apps`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,messaging_optins,messaging_handovers,message_reads,feed',
+                                  access_token: token
+                                })
+                              });
+                              const result = await resp.json();
+                              if (result.success) {
+                                alert('Webhooks re-subscribed successfully! Read receipts are now enabled.');
+                              } else {
+                                alert('Re-subscription failed: ' + JSON.stringify(result));
+                              }
                             } catch (err) {
-                              alert('Failed to disconnect page');
+                              alert('Failed to re-subscribe: ' + err.message);
                               console.error(err);
                             }
-                          }
-                        }}
-                      >
-                        Disconnect Page
-                      </button>
+                          }}
+                        >
+                          Re-subscribe Webhooks
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={async () => {
+                            if (confirm('Are you sure you want to disconnect this page?')) {
+                              try {
+                                await facebookService.disconnectPage(connectedPages[0].page_id);
+                                setConnectedPages([]);
+                                localStorage.removeItem('connected_facebook_pages');
+                                localStorage.removeItem('selectedPageId');
+                                alert('Page disconnected successfully');
+                              } catch (err) {
+                                alert('Failed to disconnect page');
+                                console.error(err);
+                              }
+                            }
+                          }}
+                        >
+                          Disconnect Page
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div>
