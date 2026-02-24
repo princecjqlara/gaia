@@ -1393,6 +1393,25 @@ Generate ONLY the follow-up message, nothing else:`;
                                     allPartsSent = false;
                                     break;
                                 }
+
+                                // Save sent message to facebook_messages so read receipts can find it
+                                try {
+                                    const sendResult = await response.json();
+                                    if (sendResult.message_id) {
+                                        await supabase.from('facebook_messages').insert({
+                                            message_id: sendResult.message_id,
+                                            conversation_id: followup.conversation_id,
+                                            sender_id: followup.page_id,
+                                            message_text: part,
+                                            timestamp: new Date().toISOString(),
+                                            is_from_page: true,
+                                            is_read: true,
+                                            sent_source: 'ai_followup',
+                                        });
+                                    }
+                                } catch (saveErr) {
+                                    console.log('[AI FOLLOWUP] Message save failed (non-fatal):', saveErr.message);
+                                }
                             }
 
                             // Small delay between messages to maintain order
