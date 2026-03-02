@@ -1,5 +1,6 @@
 import {
   DEFAULT_WELCOME_BUTTON_LABEL,
+  WELCOME_HOOK_ANGLES,
   buildWelcomeGenerationPrompt,
   parseWelcomeGenerationOutput,
   pickWelcomeHookAngle,
@@ -49,5 +50,26 @@ describe("welcomeMessagePrompt", () => {
   test("pickWelcomeHookAngle avoids the previous angle", () => {
     const angle = pickWelcomeHookAngle("budget match alert", () => 0);
     expect(angle).not.toBe("budget match alert");
+  });
+
+  test("buildWelcomeGenerationPrompt includes custom welcome prompt instruction", () => {
+    const { prompt } = buildWelcomeGenerationPrompt({
+      firstName: "Mia",
+      welcomePromptInstruction: "Sound premium and ask one short qualifying question.",
+      randomFn: () => 0,
+    });
+
+    expect(prompt).toContain("Custom welcome prompt instruction");
+    expect(prompt).toContain("Sound premium and ask one short qualifying question.");
+  });
+
+  test("pickWelcomeHookAngle explores under-tested angles first", () => {
+    const angleStats = Object.fromEntries(
+      WELCOME_HOOK_ANGLES.map((angle) => [angle, { sent: 5, replies: 2 }]),
+    );
+    angleStats["budget match alert"] = { sent: 0, replies: 0 };
+
+    const angle = pickWelcomeHookAngle("", () => 0, angleStats);
+    expect(angle).toBe("budget match alert");
   });
 });

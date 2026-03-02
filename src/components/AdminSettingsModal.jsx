@@ -444,7 +444,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     return createClient(supabaseUrl, supabaseKey);
   };
 
-  const createSequence = async ({ label = '⚡ Live Prompt Pool', db: dbClient = null, skipStateUpdate = false } = {}) => {
+  const createSequence = async ({ label = '⚡ Prompt Pool', db: dbClient = null, skipStateUpdate = false } = {}) => {
     const db = dbClient || await getDb();
     const { data, error } = await db
       .from('message_sequences')
@@ -464,7 +464,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   const addSequence = async () => {
     try {
       const sequenceNumber = sequences.length + 1;
-      const label = sequenceNumber === 1 ? '⚡ Live Prompt Pool' : `⚡ Live Prompt Pool ${sequenceNumber}`;
+      const label = sequenceNumber === 1 ? '⚡ Prompt Pool' : `⚡ Prompt Pool ${sequenceNumber}`;
       await createSequence({ label });
     } catch (err) {
       console.error('Error creating sequence:', err);
@@ -498,7 +498,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       const { data: prompts, error: promptErr } = await db
         .from('message_prompts')
         .select('*')
-        .order('sequence_position', { ascending: true });
+        .order('created_at', { ascending: true });
       if (promptErr) throw promptErr;
       setMessagePrompts(prompts || []);
     } catch (err) {
@@ -523,7 +523,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
   };
 
   const removeSequence = async (seqId) => {
-    if (!confirm('Delete this sequence and all its steps?')) return;
+    if (!confirm('Delete this prompt pool and all prompts inside it?')) return;
     try {
       const db = await getDb();
       const { error } = await db
@@ -574,12 +574,12 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     try {
       const db = await getDb();
       const existingSteps = messagePrompts.filter(p => p.sequence_id === seqId);
-      const nextPos = existingSteps.length + 1;
+      const nextPos = existingSteps.reduce((max, step) => Math.max(max, Number(step.sequence_position) || 0), 0) + 1;
       const { data, error } = await db
         .from('message_prompts')
         .insert({
           prompt_text: '',
-          label: `Step ${nextPos}`,
+          label: `Prompt ${nextPos}`,
           sequence_id: seqId,
           sequence_position: nextPos,
           is_active: true
@@ -593,7 +593,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
     }
   };
 
-  const removeStep = async (promptId, seqId) => {
+  const removeStep = async (promptId) => {
     try {
       const db = await getDb();
       const { error } = await db
@@ -601,26 +601,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         .delete()
         .eq('id', promptId);
       if (error) throw error;
-      // Remove and re-number remaining steps
-      const remaining = messagePrompts
-        .filter(p => p.id !== promptId && p.sequence_id === seqId)
-        .sort((a, b) => a.sequence_position - b.sequence_position);
-      for (let i = 0; i < remaining.length; i++) {
-        if (remaining[i].sequence_position !== i + 1) {
-          await db.from('message_prompts')
-            .update({ sequence_position: i + 1, label: `Step ${i + 1}` })
-            .eq('id', remaining[i].id);
-          remaining[i].sequence_position = i + 1;
-          remaining[i].label = `Step ${i + 1}`;
-        }
-      }
-      setMessagePrompts(prev => {
-        const withoutDeleted = prev.filter(p => p.id !== promptId);
-        return withoutDeleted.map(p => {
-          const updated = remaining.find(r => r.id === p.id);
-          return updated ? { ...p, ...updated } : p;
-        });
-      });
+      setMessagePrompts(prev => prev.filter(p => p.id !== promptId));
     } catch (err) {
       console.error('Error removing step:', err);
     }
@@ -2600,12 +2581,12 @@ REFERRAL: Customer was referred by someone`}
               <div style={{ marginBottom: '2rem' }}>
                 <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>⚡ Follow-up Prompt Optimizer</h5>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Prompt selection now runs in real time. Each contact gets one prompt per follow-up send, the top reply-rate prompt becomes the base, the second-highest is used next, and later steps generate fresh variations from the winning base.
+                  Add follow-up prompts in any order. The AI tests them across contacts, explores under-tested prompts first, then automatically favors the winners by reply rate.
                 </p>
 
                 <div style={{ padding: '0.75rem 1rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
                   <span style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>
-                    🔄 <strong>Live ranking:</strong> Step 1 sends the highest-performing prompt, step 2 uses the runner-up, step 3+ keeps the base winner and asks AI to generate new variations from it.
+                    🔄 <strong>Live optimizer:</strong> Prompt order does not matter. Every active prompt joins one testing pool, and the system keeps improving toward the best-performing prompt set.
                   </span>
                 </div>
 
@@ -2627,7 +2608,7 @@ REFERRAL: Customer was referred by someone`}
                       fontWeight: '600'
                     }}
                   >
-                    + Add Prompt Sequence
+                    + Add Prompt Pool
                   </button>
                 </div>
 
@@ -2636,7 +2617,7 @@ REFERRAL: Customer was referred by someone`}
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading sequences...</div>
                 ) : sequences.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
-                    No prompt sequences yet. Click "Add Prompt Sequence" to start adding follow-up prompt instructions.
+                    No prompt pools yet. Click "Add Prompt Pool" to start adding follow-up prompt instructions.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
@@ -2655,16 +2636,59 @@ REFERRAL: Customer was referred by someone`}
                           <span>📤 <strong>{totalSent}</strong> total sent</span>
                           <span>💬 <strong>{totalReplies}</strong> total replies</span>
                           <span>📊 <strong>{overallRate}%</strong> overall reply rate</span>
-                          <span>🧪 <strong>{sequences.filter(s => s.is_active).length}</strong> active sequences</span>
+                          <span>🧪 <strong>{sequences.filter(s => s.is_active).length}</strong> active pools</span>
                         </div>
                       ) : null;
                     })()}
 
-                    {/* Sequence Cards */}
+                    {(() => {
+                      const leaderboard = messagePrompts
+                        .filter((prompt) => typeof prompt.prompt_text === 'string' && prompt.prompt_text.trim().length > 0)
+                        .map((prompt) => {
+                          const sent = Number(prompt.total_sent) || 0;
+                          const replies = Number(prompt.total_replies) || 0;
+                          const replyRate = sent > 0 ? (replies / sent) * 100 : 0;
+                          return {
+                            ...prompt,
+                            sent,
+                            replies,
+                            replyRate,
+                          };
+                        })
+                        .sort((a, b) => {
+                          if (b.replyRate !== a.replyRate) return b.replyRate - a.replyRate;
+                          if (b.sent !== a.sent) return b.sent - a.sent;
+                          return (b.replies || 0) - (a.replies || 0);
+                        });
+
+                      const topPrompt = leaderboard.find((item) => item.sent > 0);
+                      if (!topPrompt) return null;
+
+                      return (
+                        <div style={{
+                          padding: '0.75rem 1rem',
+                          background: 'rgba(34, 197, 94, 0.1)',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid rgba(34, 197, 94, 0.25)',
+                        }}>
+                          <div style={{ fontSize: '0.78rem', fontWeight: '600', color: '#22c55e', marginBottom: '0.35rem' }}>
+                            🏆 Current Top Prompt
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
+                            {topPrompt.label || 'Untitled prompt'}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                            Tried on <strong>{topPrompt.sent}</strong> sends • Success rate <strong>{topPrompt.replyRate.toFixed(1)}%</strong> • Replies <strong>{topPrompt.replies}</strong>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Prompt Pool Cards */}
                     {sequences.map((seq) => {
                       const steps = messagePrompts
                         .filter(p => p.sequence_id === seq.id)
-                        .sort((a, b) => a.sequence_position - b.sequence_position);
+                        .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
                       const perf = sequencePerformance.find(p => p.sequence_id === seq.id);
                       const isChampion = sequencePerformance.length > 0 && sequencePerformance[0]?.sequence_id === seq.id && (perf?.total_sent || 0) >= 5;
                       const isExpanded = expandedSequenceId === seq.id;
@@ -2689,7 +2713,7 @@ REFERRAL: Customer was referred by someone`}
                             overflow: 'hidden', transition: 'all 0.2s ease'
                           }}
                         >
-                          {/* Sequence Header */}
+                          {/* Prompt Pool Header */}
                           <div
                             onClick={() => setExpandedSequenceId(isExpanded ? null : seq.id)}
                             style={{
@@ -2712,7 +2736,7 @@ REFERRAL: Customer was referred by someone`}
                                 }}
                               />
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                {steps.length} step{steps.length !== 1 ? 's' : ''}
+                                {steps.length} prompt{steps.length !== 1 ? 's' : ''}
                               </span>
                               {isChampion && (
                                 <span style={{
@@ -2743,21 +2767,21 @@ REFERRAL: Customer was referred by someone`}
                               <button
                                 onClick={() => toggleSequenceActive(seq.id, seq.is_active)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', padding: '2px' }}
-                                title={seq.is_active ? 'Pause sequence' : 'Activate sequence'}
+                                title={seq.is_active ? 'Pause pool' : 'Activate pool'}
                               >
                                 {seq.is_active ? '⏸️' : '▶️'}
                               </button>
                               <button
                                 onClick={() => removeSequence(seq.id)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '2px', color: '#ef4444' }}
-                                title="Delete sequence"
+                                title="Delete pool"
                               >
                                 🗑️
                               </button>
                             </div>
                           </div>
 
-                          {/* Expanded: Metrics + Steps */}
+                          {/* Expanded: Metrics + Prompts */}
                           {isExpanded && (
                             <div style={{ padding: '1rem' }}>
                               {/* Metrics Dashboard */}
@@ -2786,7 +2810,7 @@ REFERRAL: Customer was referred by someone`}
                                 </div>
                               )}
 
-                              {/* Steps list */}
+                              {/* Prompt list */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                 {steps.map((step) => (
                                   <div key={step.id} style={{
@@ -2799,12 +2823,12 @@ REFERRAL: Customer was referred by someone`}
                                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                                       fontSize: '0.75rem', fontWeight: '700', marginTop: '4px'
                                     }}>
-                                      {step.sequence_position}
+                                      🧪
                                     </div>
                                     <textarea
                                       className="form-input"
                                       rows={2}
-                                      placeholder="Prompt instruction for this step..."
+                                      placeholder="Follow-up prompt instruction (order does not matter)..."
                                       defaultValue={step.prompt_text}
                                       onBlur={(e) => {
                                         if (e.target.value !== step.prompt_text) {
@@ -2815,24 +2839,24 @@ REFERRAL: Customer was referred by someone`}
                                     />
                                     {step.total_sent > 0 && (
                                       <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', minWidth: '50px', textAlign: 'right', marginTop: '6px' }}>
-                                        📤{step.total_sent} 💬{step.total_replies || 0}
+                                        📤{step.total_sent} 💬{step.total_replies || 0} ({(((step.total_replies || 0) / Math.max(step.total_sent, 1)) * 100).toFixed(1)}%)
                                       </div>
                                     )}
                                     {steps.length > 1 && (
                                       <button
-                                        onClick={() => removeStep(step.id, seq.id)}
+                                        onClick={() => removeStep(step.id)}
                                         style={{
                                           background: 'none', border: 'none', cursor: 'pointer',
                                           fontSize: '0.9rem', padding: '4px', color: '#ef4444', marginTop: '4px'
                                         }}
-                                        title="Remove step"
+                                        title="Remove prompt"
                                       >✕</button>
                                     )}
                                   </div>
                                 ))}
                               </div>
 
-                              {/* Add step button */}
+                              {/* Add prompt button */}
                               <button
                                 onClick={() => addStepToSequence(seq.id)}
                                 style={{
@@ -2844,7 +2868,7 @@ REFERRAL: Customer was referred by someone`}
                                 onMouseOver={(e) => e.target.style.background = 'rgba(99, 102, 241, 0.1)'}
                                 onMouseOut={(e) => e.target.style.background = 'transparent'}
                               >
-                                + Add Step {steps.length + 1}
+                                + Add Prompt
                               </button>
                             </div>
                           )}
@@ -2862,11 +2886,11 @@ REFERRAL: Customer was referred by someone`}
                 }}>
                   <div style={{ fontWeight: '600', fontSize: '0.8rem', color: '#22c55e', marginBottom: '0.25rem' }}>📊 How It Works</div>
                   <ul style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, paddingLeft: '1.25rem' }}>
-                    <li>Add prompt instructions in the sequence cards below (each step is one strategic angle).</li>
-                    <li>When AI sends follow-ups, step 1 uses the highest reply-rate prompt in real time.</li>
-                    <li>Step 2 uses the second-highest prompt, then later steps generate fresh variations from the base winner.</li>
-                    <li>One contact follow-up send uses one prompt instruction, and performance updates immediately after replies.</li>
-                    <li>You can still edit, pause, or delete any sequence at any time.</li>
+                    <li>Add prompt instructions in any order. There is no fixed step order.</li>
+                    <li>The optimizer first ensures under-tested prompts get traffic, then shifts to top performers.</li>
+                    <li>Each follow-up send uses one prompt from the pool and logs its result.</li>
+                    <li>The top prompt card shows which prompt is currently winning, how many sends tried it, and success rate.</li>
+                    <li>You can still edit, pause, or delete any prompt pool anytime.</li>
                   </ul>
                 </div>
               </div>
@@ -3243,31 +3267,31 @@ REFERRAL: Customer was referred by someone`}
               <div style={{ marginBottom: '2rem' }}>
                 <h5 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>👋 Welcome Message</h5>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Customize the message and buttons shown to new contacts when they first message your page
+                  Customize the welcome prompt and buttons shown to new contacts when they first message your page
                 </p>
 
-                {/* Welcome Text */}
+                {/* Welcome Prompt */}
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Welcome Message Text</label>
+                  <label className="form-label">Welcome Prompt</label>
                   <textarea
                     className="form-input"
                     rows={3}
-                    placeholder="Hello! 👋 Welcome! I'm your AI assistant. How can I help you today?"
+                    placeholder="Write the style you want. Example: Warm, curiosity-driven Taglish welcome that mentions location + budget and ends with one short question."
                     defaultValue={(() => {
                       try {
                         const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                        return config.welcome_message_text || '';
+                        return config.welcome_message_prompt || config.welcome_message_text || '';
                       } catch { return ''; }
                     })()}
                     onChange={(e) => {
                       const config = JSON.parse(localStorage.getItem('ai_chatbot_config') || '{}');
-                      config.welcome_message_text = e.target.value;
+                      config.welcome_message_prompt = e.target.value;
                       localStorage.setItem('ai_chatbot_config', JSON.stringify(config));
                     }}
                     style={{ resize: 'vertical', fontSize: '0.875rem' }}
                   />
                   <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                    Leave empty to let AI generate a personalized greeting. Use <code>{'{{name}}'}</code> to insert the contact's name.
+                    AI uses this as instruction, tests multiple welcome angles automatically, and keeps improving winners over time.
                   </small>
                 </div>
 

@@ -54,6 +54,74 @@ function getSupabase() {
   return supabase;
 }
 
+function toNonNegativeInt(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.floor(parsed));
+}
+
+function parseWelcomeVariantLabel(variantLabel) {
+  if (typeof variantLabel !== "string") return "";
+  const trimmed = variantLabel.trim();
+  if (!trimmed.toLowerCase().startsWith("welcome:")) return "";
+  return trimmed.slice("welcome:".length).trim().toLowerCase();
+}
+
+async function incrementWelcomeAngleStat(db, angleKey, metric = "sent") {
+  const cleanedAngle = `${angleKey || ""}`.trim().toLowerCase();
+  if (!db || !cleanedAngle) return;
+
+  try {
+    const { data: settingsRow, error: settingsErr } = await db
+      .from("settings")
+      .select("value")
+      .eq("key", "ai_chatbot_config")
+      .single();
+
+    if (settingsErr) {
+      throw settingsErr;
+    }
+
+    const currentValue = settingsRow?.value || {};
+    const currentStats =
+      currentValue.welcome_angle_stats && typeof currentValue.welcome_angle_stats === "object"
+        ? currentValue.welcome_angle_stats
+        : {};
+    const currentAngleStats =
+      currentStats[cleanedAngle] && typeof currentStats[cleanedAngle] === "object"
+        ? currentStats[cleanedAngle]
+        : {};
+
+    let nextSent = toNonNegativeInt(currentAngleStats.sent);
+    let nextReplies = toNonNegativeInt(currentAngleStats.replies);
+    if (metric === "replies") {
+      nextReplies += 1;
+      nextSent = Math.max(nextSent, nextReplies);
+    } else {
+      nextSent += 1;
+    }
+
+    await db
+      .from("settings")
+      .update({
+        value: {
+          ...currentValue,
+          welcome_last_angle: cleanedAngle,
+          welcome_angle_stats: {
+            ...currentStats,
+            [cleanedAngle]: {
+              sent: nextSent,
+              replies: Math.min(nextReplies, nextSent),
+            },
+          },
+        },
+      })
+      .eq("key", "ai_chatbot_config");
+  } catch (err) {
+    console.warn("[WEBHOOK] Failed to update welcome angle stat:", err.message);
+  }
+}
+
 /**
  * Extract name from message text using common patterns
  * Examples: "I'm John", "My name is Maria", "This is Pedro here"
@@ -2145,7 +2213,7 @@ async function handleIncomingMessage(pageId, event) {
         // Find the most recent unreplied A/B test result for this conversation
         const { data: abResult } = await db
           .from("message_ab_results")
-          .select("id, prompt_id, sequence_id, sent_at")
+          .select("id, prompt_id, sequence_id, sent_at, variant_label")
           .eq("conversation_id", conversationId)
           .eq("got_reply", false)
           .order("sent_at", { ascending: false })
@@ -2169,6 +2237,11 @@ async function handleIncomingMessage(pageId, event) {
             reply_latency_minutes: replyLatencyMins,
             conversion_score: conversionScore,
           }).eq("id", abResult.id);
+
+          const welcomeAngleFromVariant = parseWelcomeVariantLabel(abResult.variant_label);
+          if (welcomeAngleFromVariant) {
+            await incrementWelcomeAngleStat(db, welcomeAngleFromVariant, "replies");
+          }
 
           // Increment total_replies on the prompt
           if (abResult.prompt_id) {
@@ -2196,7 +2269,7 @@ async function handleIncomingMessage(pageId, event) {
             }
           }
 
-          console.log(`[WEBHOOK] 📊 A/B reply tracked: seq=${abResult.sequence_id?.substring(0, 8) || 'none'}, prompt=${abResult.prompt_id?.substring(0, 8) || 'none'}, latency=${replyLatencyMins}min, score=${conversionScore}`);
+          console.log(`[WEBHOOK] 📊 A/B reply tracked: seq=${abResult.sequence_id?.substring(0, 8) || 'none'}, prompt=${abResult.prompt_id?.substring(0, 8) || 'none'}, variant=${abResult.variant_label || 'none'}, latency=${replyLatencyMins}min, score=${conversionScore}`);
         }
       } catch (abErr) {
         // Non-fatal - table might not exist yet
@@ -5441,8 +5514,15 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
     console.log("[WEBHOOK] Final booking URL:", bookingUrl);
 
     // Read custom welcome settings
-    const customWelcomeText = settings?.value?.welcome_message_text || "";
+    const configuredWelcomePrompt = `${settings?.value?.welcome_message_prompt || ""}`.trim();
+    const legacyCustomWelcomeText = settings?.value?.welcome_message_text || "";
     const aiGenEnabled = settings?.value?.welcome_ai_generated !== false; // default: true
+    const shouldUseLegacyStaticWelcome =
+      !configuredWelcomePrompt &&
+      legacyCustomWelcomeText.trim().length > 0 &&
+      aiGenEnabled === false;
+    const welcomePromptInstruction =
+      configuredWelcomePrompt || (shouldUseLegacyStaticWelcome ? "" : legacyCustomWelcomeText.trim());
     const configuredButtonLabel = settings?.value?.welcome_button_label || "";
     const hasCustomButtonLabel = configuredButtonLabel.trim().length > 0;
     let primaryButtonLabel = hasCustomButtonLabel
@@ -5455,11 +5535,13 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
 
     // Determine welcome text
     let welcomeText = buildWelcomeFallbackMessage(greetingName);
+    let selectedOutputAngle = "fallback";
 
-    if (customWelcomeText) {
-      // Use user's custom text (replace {{name}} placeholder)
-      welcomeText = customWelcomeText.replace(/\{\{name\}\}/gi, greetingName);
-    } else if (aiGenEnabled) {
+    if (shouldUseLegacyStaticWelcome) {
+      // Backward-compatibility path for older installs that explicitly disabled AI.
+      welcomeText = legacyCustomWelcomeText.replace(/\{\{name\}\}/gi, greetingName);
+      selectedOutputAngle = "custom-text";
+    } else if (aiGenEnabled || welcomePromptInstruction) {
       // Generate clickbait + personalized first message via AI
       const systemPrompt = settings?.value?.system_prompt || "You are a helpful real estate assistant.";
       const botDos = settings?.value?.bot_rules_dos || "";
@@ -5467,6 +5549,10 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
       const recentMessagesToAvoid = Array.isArray(settings?.value?.welcome_recent_messages)
         ? settings.value.welcome_recent_messages.filter(Boolean).slice(0, 5)
         : [];
+      const welcomeAngleStats =
+        settings?.value?.welcome_angle_stats && typeof settings.value.welcome_angle_stats === "object"
+          ? settings.value.welcome_angle_stats
+          : {};
 
       const { prompt: welcomePrompt, angle: selectedAngle } = buildWelcomeGenerationPrompt({
         firstName: greetingName,
@@ -5484,12 +5570,14 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
         openerMessage,
         recentMessagesToAvoid,
         lastAngleUsed: settings?.value?.welcome_last_angle || "",
+        angleStats: welcomeAngleStats,
         systemPrompt,
         botDos,
         botDonts,
+        welcomePromptInstruction,
       });
 
-      let selectedOutputAngle = selectedAngle;
+      selectedOutputAngle = selectedAngle || "ai-generated";
 
       try {
         const controller = new AbortController();
@@ -5534,7 +5622,7 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
               .update({
                 value: {
                   ...(settings?.value || {}),
-                  welcome_last_angle: selectedOutputAngle,
+                  welcome_last_angle: selectedOutputAngle || selectedAngle || "ai-generated",
                   welcome_recent_messages: updatedRecentMessages,
                 },
               })
@@ -5596,6 +5684,8 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
 
     if (resp.ok) {
       console.log(`[WEBHOOK] Welcome message sent to ${recipientId} (Booking URL: ${bookingUrl})`);
+      await incrementWelcomeAngleStat(db, selectedOutputAngle, "sent");
+
       // Log to DB if we have conversationId
       if (conversationId) {
         try {
@@ -5609,6 +5699,17 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
             sent_source: "app"
           });
         } catch (e) { console.warn("Failed to log welcome msg", e); }
+
+        try {
+          await db.from("message_ab_results").insert({
+            conversation_id: conversationId,
+            variant_label: `welcome:${selectedOutputAngle || "fallback"}`,
+            message_sent: welcomeText,
+            sent_at: new Date().toISOString(),
+          });
+        } catch (abErr) {
+          console.log("[WEBHOOK] Welcome A/B record (non-fatal):", abErr.message);
+        }
       }
       return true;
     } else {

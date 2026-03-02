@@ -1,5 +1,8 @@
+import { betaSample } from "./followupPromptStrategy.js";
+
 const PROHIBITED_WELCOME_TERMS = /\b(consultation|consult|booking|book|schedule|appointment|meeting|call)\b/i;
 const MESSENGER_BUTTON_MAX_LENGTH = 20;
+const WELCOME_MIN_EXPLORATION_SENDS = 2;
 
 export const DEFAULT_WELCOME_BUTTON_LABEL = "Show Top Picks";
 
@@ -79,11 +82,54 @@ export function sanitizeWelcomeButtonLabel(rawLabel) {
   return cleaned || DEFAULT_WELCOME_BUTTON_LABEL;
 }
 
-export function pickWelcomeHookAngle(lastAngleUsed = "", randomFn = Math.random) {
+function normalizeAngleStats(angleStats = {}, angle) {
+  const rawStats = angleStats && typeof angleStats === "object" ? angleStats[angle] : null;
+  const sent = Number(rawStats?.sent);
+  const replies = Number(rawStats?.replies);
+  const safeSent = Number.isFinite(sent) ? Math.max(0, Math.floor(sent)) : 0;
+  const safeReplies = Number.isFinite(replies) ? Math.max(0, Math.floor(replies)) : 0;
+  return {
+    sent: safeSent,
+    replies: Math.min(safeReplies, safeSent),
+  };
+}
+
+export function pickWelcomeHookAngle(lastAngleUsed = "", randomFn = Math.random, angleStats = {}) {
   const cleanedLastAngle = `${lastAngleUsed || ""}`.trim().toLowerCase();
   const candidates = WELCOME_HOOK_ANGLES.filter((angle) => angle !== cleanedLastAngle);
   const pool = candidates.length ? candidates : WELCOME_HOOK_ANGLES;
   const safeRandomFn = typeof randomFn === "function" ? randomFn : Math.random;
+
+  const underTestedAngles = pool.filter((angle) => {
+    const stats = normalizeAngleStats(angleStats, angle);
+    return stats.sent < WELCOME_MIN_EXPLORATION_SENDS;
+  });
+
+  if (underTestedAngles.length > 0) {
+    const rawRandom = Number(safeRandomFn());
+    const normalizedRandom = Number.isFinite(rawRandom)
+      ? Math.min(Math.max(rawRandom, 0), 0.999999)
+      : 0;
+    const index = Math.floor(normalizedRandom * underTestedAngles.length);
+    return underTestedAngles[index] || underTestedAngles[0] || WELCOME_HOOK_ANGLES[0];
+  }
+
+  let bestAngle = pool[0] || WELCOME_HOOK_ANGLES[0];
+  let bestScore = -1;
+  for (const angle of pool) {
+    const stats = normalizeAngleStats(angleStats, angle);
+    const failures = Math.max(0, stats.sent - stats.replies);
+    const score = betaSample(stats.replies + 1, failures + 1);
+    if (score > bestScore) {
+      bestScore = score;
+      bestAngle = angle;
+    }
+  }
+
+  if (bestAngle) {
+    return bestAngle;
+  }
+
   const rawRandom = Number(safeRandomFn());
   const normalizedRandom = Number.isFinite(rawRandom)
     ? Math.min(Math.max(rawRandom, 0), 0.999999)
@@ -105,11 +151,13 @@ export function buildWelcomeGenerationPrompt({
   recentMessagesToAvoid,
   lastAngleUsed,
   randomFn,
+  angleStats,
   systemPrompt,
   botDos,
   botDonts,
+  welcomePromptInstruction,
 } = {}) {
-  const selectedAngle = pickWelcomeHookAngle(lastAngleUsed, randomFn);
+  const selectedAngle = pickWelcomeHookAngle(lastAngleUsed, randomFn, angleStats);
 
   const prompt = `You are a high-converting Messenger copywriter for real estate leads in the Philippines.
 
@@ -143,7 +191,7 @@ Rules:
 8) Use a different hook angle from last_angle_used.
 9) Add 1 CTA button label (2-4 words), no booking language.
 
-${botDos ? `MUST DO:\n${botDos}\n` : ""}${botDonts ? `MUST NOT DO:\n${botDonts}\n` : ""}Allowed hook angles:
+${welcomePromptInstruction ? `Custom welcome prompt instruction:\n${welcomePromptInstruction}\n\n` : ""}${botDos ? `MUST DO:\n${botDos}\n` : ""}${botDonts ? `MUST NOT DO:\n${botDonts}\n` : ""}Allowed hook angles:
 - insider drop
 - hidden listing
 - budget match alert

@@ -680,7 +680,7 @@ Keep each prompt under 100 words. Return ONLY the JSON array.`;
         const { data: seq, error: seqErr } = await supabase
             .from('message_sequences')
             .insert({
-                name: 'Auto-Generated Sequence',
+                label: 'Auto-Generated Prompt Pool',
                 is_active: true,
                 total_sent: 0,
                 total_replies: 0
@@ -716,7 +716,7 @@ Keep each prompt under 100 words. Return ONLY the JSON array.`;
             }
         }
 
-        console.log(`[AUTO-SEQUENCE] ✅ Created sequence "${seq.name}" with ${createdPrompts.length} prompts from conversation history`);
+        console.log(`[AUTO-SEQUENCE] ✅ Created prompt pool "${seq.label}" with ${createdPrompts.length} prompts from conversation history`);
         return createdPrompts;
     } catch (err) {
         console.log('[AUTO-SEQUENCE] Error:', err.message);
@@ -734,7 +734,7 @@ async function insertDefaultPrompts(supabase) {
     try {
         const { data: seq } = await supabase
             .from('message_sequences')
-            .insert({ name: 'Default Sequence', is_active: true, total_sent: 0, total_replies: 0 })
+            .insert({ label: 'Default Prompt Pool', is_active: true, total_sent: 0, total_replies: 0 })
             .select()
             .single();
 
@@ -1283,7 +1283,7 @@ export default async function handler(req, res) {
                         }
 
                         // ============================================
-                        // A/B TESTING: Real-time prompt ranking
+                        // A/B TESTING: Live prompt-pool optimization
                         // ============================================
                         let selectedPrompt = null;
                         let selectedPromptId = null;
@@ -1293,14 +1293,15 @@ export default async function handler(req, res) {
                         let followUpInstruction = 'Generate a natural follow-up message. Reference what was discussed, keep it short, feel natural, and gently move the conversation forward.';
 
                         try {
-                            // Count previous sends to determine current step
+                            // Count previous sends for this conversation (tracking only)
                             const { count: prevSent } = await supabase
                                 .from('message_ab_results')
                                 .select('id', { count: 'exact', head: true })
                                 .eq('conversation_id', followup.conversation_id);
                             abSequenceStep = (prevSent || 0) + 1;
 
-                            // Pull all active prompt instructions and rank by live performance
+                            // Pull all active prompts and choose from a live testing pool.
+                            // Prompt order/step is ignored; optimizer explores then exploits winners.
                             const { data: activePrompts, error: promptError } = await supabase
                                 .from('message_prompts')
                                 .select('id, sequence_id, prompt_text, label, total_sent, total_replies, created_at')
@@ -1321,7 +1322,7 @@ export default async function handler(req, res) {
                                 followUpInstruction = promptPlan.followUpInstruction || selectedPrompt.prompt_text;
 
                                 console.log(
-                                    `[AI FOLLOWUP] ⚡ Live prompt selection: step=${abSequenceStep}, mode=${promptPlan.selectionMode}, prompt="${selectedPrompt.label || 'unlabeled'}", score=${(selectedPrompt.replyRate * 100).toFixed(1)}%`
+                                    `[AI FOLLOWUP] ⚡ Prompt pool pick: send#=${abSequenceStep}, mode=${promptPlan.selectionMode}, prompt="${selectedPrompt.label || 'unlabeled'}", sent=${selectedPrompt.sentCount || 0}, replies=${selectedPrompt.replyCount || 0}`
                                 );
                             } else {
                                 // Auto-create prompts from conversation history

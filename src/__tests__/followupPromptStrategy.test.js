@@ -79,37 +79,27 @@ describe('followupPromptStrategy — Thompson Sampling', () => {
         expect(orderings.size).toBe(2);
     });
 
-    test('step 1 uses thompson-winner selection mode', () => {
-        const ranked = rankPromptsByReplyPerformance([
-            { id: 'a', label: 'Winner', prompt_text: 'Use social proof', total_sent: 12, total_replies: 9 },
-            { id: 'b', label: 'Second', prompt_text: 'Use urgency', total_sent: 10, total_replies: 5 }
-        ]);
+    test('uses minimum exploration mode for under-tested prompts', () => {
+        const selected = selectPromptForRealtimeStep([
+            { id: 'a', label: 'Prompt A', prompt_text: 'A', sentCount: 7, thompsonScore: 0.9 },
+            { id: 'b', label: 'Prompt B', prompt_text: 'B', sentCount: 1, thompsonScore: 0.2 }
+        ], 4, { minExplorationSends: 2, randomFn: () => 0 });
 
-        const selected = selectPromptForRealtimeStep(ranked, 1);
-        expect(selected.selectionMode).toBe('thompson-winner');
-        expect(selected.followUpInstruction).toBeTruthy();
+        expect(selected.selectionMode).toBe('minimum-exploration');
+        expect(selected.selectedPrompt.id).toBe('b');
     });
 
-    test('step 2 uses thompson-runner-up selection mode', () => {
-        const ranked = rankPromptsByReplyPerformance([
-            { id: 'a', prompt_text: 'Base prompt', total_sent: 10, total_replies: 7 },
-            { id: 'b', prompt_text: 'Second prompt', total_sent: 10, total_replies: 6 }
-        ]);
+    test('ignores sequence step ordering once prompts are tested', () => {
+        const ranked = [
+            { id: 'a', label: 'Winner', prompt_text: 'Use social proof', sentCount: 12, thompsonScore: 0.7 },
+            { id: 'b', label: 'Second', prompt_text: 'Use urgency', sentCount: 10, thompsonScore: 0.6 }
+        ];
 
-        const selected = selectPromptForRealtimeStep(ranked, 2);
-        expect(selected.selectionMode).toBe('thompson-runner-up');
-    });
-
-    test('step 3+ creates thompson-variation', () => {
-        const ranked = rankPromptsByReplyPerformance([
-            { id: 'a', prompt_text: 'Champion prompt', total_sent: 12, total_replies: 10 },
-            { id: 'b', prompt_text: 'Runner-up prompt', total_sent: 12, total_replies: 7 },
-            { id: 'c', prompt_text: 'Alternative angle', total_sent: 12, total_replies: 5 }
-        ]);
-
-        const selected = selectPromptForRealtimeStep(ranked, 3);
-        expect(selected.selectionMode).toBe('thompson-variation');
-        expect(selected.followUpInstruction).toContain('step 3');
+        const step1 = selectPromptForRealtimeStep(ranked, 1);
+        const step5 = selectPromptForRealtimeStep(ranked, 5);
+        expect(step1.selectionMode).toBe('thompson-live-pool');
+        expect(step1.selectedPrompt.id).toBe('a');
+        expect(step5.selectedPrompt.id).toBe('a');
     });
 
     test('filters out prompts with empty prompt_text', () => {

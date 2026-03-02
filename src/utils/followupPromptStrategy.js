@@ -113,62 +113,47 @@ export function rankPromptsByReplyPerformance(prompts = []) {
         });
 }
 
-export function selectPromptForRealtimeStep(rankedPrompts = [], stepNumber = 1) {
+export function selectPromptForRealtimeStep(rankedPrompts = [], stepNumber = 1, options = {}) {
     const safeStep = Math.max(1, Number.parseInt(stepNumber, 10) || 1);
+    const minExplorationSends = Number.isFinite(options.minExplorationSends)
+        ? Math.max(0, Number(options.minExplorationSends))
+        : 2;
+    const randomFn = typeof options.randomFn === 'function' ? options.randomFn : Math.random;
+
     if (!Array.isArray(rankedPrompts) || rankedPrompts.length === 0) {
         return null;
     }
 
-    const basePrompt = rankedPrompts[0];
-    const secondaryPrompt = rankedPrompts[1] || null;
+    const normalizeSentCount = (prompt) => {
+        if (Number.isFinite(prompt?.sentCount)) return Math.max(0, prompt.sentCount);
+        return Math.max(0, toFiniteNumber(prompt?.total_sent));
+    };
 
-    if (safeStep === 1 || !secondaryPrompt) {
+    const underTested = rankedPrompts.filter((prompt) => normalizeSentCount(prompt) < minExplorationSends);
+
+    if (underTested.length > 0) {
+        const rawRandom = Number(randomFn());
+        const normalizedRandom = Number.isFinite(rawRandom)
+            ? Math.min(Math.max(rawRandom, 0), 0.999999)
+            : 0;
+        const index = Math.floor(normalizedRandom * underTested.length);
+        const selectedPrompt = underTested[index] || underTested[0];
+
         return {
-            selectedPrompt: basePrompt,
-            followUpInstruction: basePrompt.prompt_text,
-            selectionMode: 'thompson-winner',
-            variantLabel: basePrompt.label || 'thompson-winner',
-            basePrompt,
-            secondaryPrompt
+            selectedPrompt,
+            followUpInstruction: selectedPrompt.prompt_text,
+            selectionMode: 'minimum-exploration',
+            variantLabel: selectedPrompt.label || 'minimum-exploration',
+            stepNumber: safeStep
         };
     }
 
-    if (safeStep === 2) {
-        return {
-            selectedPrompt: secondaryPrompt,
-            followUpInstruction: secondaryPrompt.prompt_text,
-            selectionMode: 'thompson-runner-up',
-            variantLabel: secondaryPrompt.label || 'thompson-runner-up',
-            basePrompt,
-            secondaryPrompt
-        };
-    }
-
-    const additionalAngles = rankedPrompts
-        .slice(2, 5)
-        .map((prompt) => prompt.prompt_text?.trim())
-        .filter(Boolean);
-
-    const variationInstructions = [
-        `Base winning prompt (highest Thompson score): ${basePrompt.prompt_text}`,
-        `Second-highest prompt angle: ${secondaryPrompt.prompt_text}`,
-        `Create ONE fresh follow-up variation for step ${safeStep}.`,
-        'Keep the base intent, but change hook/wording so it feels new and natural.'
-    ];
-
-    if (additionalAngles.length > 0) {
-        variationInstructions.push('Optional extra high-performing angles to blend:');
-        additionalAngles.forEach((angle, idx) => {
-            variationInstructions.push(`${idx + 1}. ${angle}`);
-        });
-    }
-
+    const selectedPrompt = rankedPrompts[0];
     return {
-        selectedPrompt: basePrompt,
-        followUpInstruction: variationInstructions.join('\n'),
-        selectionMode: 'thompson-variation',
-        variantLabel: `thompson-variation-step-${safeStep}`,
-        basePrompt,
-        secondaryPrompt
+        selectedPrompt,
+        followUpInstruction: selectedPrompt.prompt_text,
+        selectionMode: 'thompson-live-pool',
+        variantLabel: selectedPrompt.label || 'thompson-live-pool',
+        stepNumber: safeStep
     };
 }
