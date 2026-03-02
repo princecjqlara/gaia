@@ -4540,6 +4540,45 @@ function getInternalAppBaseUrl() {
   return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
 }
 
+function parseDateSafe(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export function shouldSkipReadReceiptFollowup(
+  sourceMessageTimestamp,
+  now = new Date(),
+  maxAgeDays = null,
+) {
+  const sourceTime = parseDateSafe(sourceMessageTimestamp);
+  const referenceNow = parseDateSafe(now);
+
+  if (!sourceTime || !referenceNow) {
+    return { skip: true, reason: "invalid_timestamp", ageDays: null };
+  }
+
+  const ageMs = referenceNow.getTime() - sourceTime.getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+  if (ageMs < 0) {
+    return { skip: true, reason: "source_message_in_future", ageDays };
+  }
+
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+    if (ageMs > maxAgeMs) {
+      return {
+        skip: true,
+        reason: `source_message_older_than_${maxAgeDays}d`,
+        ageDays,
+      };
+    }
+  }
+
+  return { skip: false, reason: "ok", ageDays };
+}
+
 async function triggerImmediateScheduledProcessing() {
   const baseUrl = getInternalAppBaseUrl();
   if (!baseUrl) {
@@ -4634,10 +4673,20 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
-    // 4. Check that the message was sent reasonably recently (within 7 days)
-    const msgAge = Date.now() - new Date(lastMsg.timestamp).getTime();
-    if (msgAge > 7 * 24 * 60 * 60 * 1000) {
-      console.log('[WEBHOOK] 👁️ Last AI message is older than 7 days, skipping read follow-up');
+    // 4. Do not enforce 7-day here.
+    // Delivery mode (HUMAN_AGENT vs UTILITY template) is decided later in /api/scheduled/process.
+    const readEligibility = shouldSkipReadReceiptFollowup(
+      lastMsg.timestamp,
+      new Date(readTimestamp),
+    );
+    if (readEligibility.skip) {
+      console.log(
+        `[WEBHOOK] 👁️ Read follow-up skipped: ${readEligibility.reason} (age=${
+          Number.isFinite(readEligibility.ageDays)
+            ? `${readEligibility.ageDays.toFixed(1)}d`
+            : "unknown"
+        })`,
+      );
       return;
     }
 

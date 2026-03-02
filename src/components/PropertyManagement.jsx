@@ -4,6 +4,7 @@ import PropertyPreview from './PropertyPreview';
 import TeamBrandingSettings from './TeamBrandingSettings';
 import { getTeamBranding } from '../services/teamBrandingService';
 import { applyScopeToPropertyQuery } from '../utils/propertyScope';
+import { upsertPropertyWithCreatedByFallback } from '../services/propertyService';
 
 
 import PropertyMediaShowcase from './PropertyMediaShowcase';
@@ -246,16 +247,10 @@ const PropertyManagement = ({ teamId, organizationId }) => {
                 propertyData.created_by = user.id;
             }
 
-            const { data, error } = await supabase
-                .from('properties')
-                .upsert({
-                    id: editingId || undefined,
-                    ...propertyData
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
+            await upsertPropertyWithCreatedByFallback(supabase, {
+                id: editingId || undefined,
+                ...propertyData
+            });
 
             await loadProperties();
             setView('list');

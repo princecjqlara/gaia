@@ -18,16 +18,29 @@ function getSupabase() {
     return supabase;
 }
 
+function getNextDailyOccurrence(hourOfDay, referenceTime = new Date()) {
+    const next = new Date(referenceTime);
+    next.setHours(hourOfDay, 0, 0, 0);
+
+    if (next.getTime() <= referenceTime.getTime()) {
+        next.setDate(next.getDate() + 1);
+    }
+
+    return next;
+}
+
 /**
  * Calculate best time to contact based on engagement data
- * Returns optimal day/hour when customer typically responds
+ * Returns the next daily occurrence of the best hour
  */
-async function calculateBestTimeToContact(db, conversationId, pageId) {
+export async function calculateBestTimeToContact(db, conversationId, pageId) {
+    void pageId;
+
     try {
         // Get engagement history for this contact
         const { data: engagements } = await db
             .from('contact_engagement')
-            .select('day_of_week, hour_of_day, response_latency_seconds')
+            .select('hour_of_day, response_latency_seconds')
             .eq('conversation_id', conversationId)
             .eq('message_direction', 'inbound')
             .order('message_timestamp', { ascending: false })
@@ -36,62 +49,311 @@ async function calculateBestTimeToContact(db, conversationId, pageId) {
         let bestSlots = [];
 
         if (engagements && engagements.length >= 3) {
-            // Calculate scores for each day/hour
+            // Calculate scores by hour only (daily pattern)
             const timeScores = {};
             for (const eng of engagements) {
-                const key = `${eng.day_of_week}-${eng.hour_of_day}`;
-                if (!timeScores[key]) {
-                    timeScores[key] = { day: eng.day_of_week, hour: eng.hour_of_day, count: 0, latency: 0 };
+                const hour = Number.parseInt(eng.hour_of_day, 10);
+                if (!Number.isFinite(hour) || hour < 0 || hour > 23) continue;
+
+                if (!timeScores[hour]) {
+                    timeScores[hour] = { hour, count: 0, latency: 0 };
                 }
-                timeScores[key].count++;
-                timeScores[key].latency += eng.response_latency_seconds || 0;
+                timeScores[hour].count++;
+                timeScores[hour].latency += eng.response_latency_seconds || 0;
             }
 
             // Rank by frequency and low latency
             bestSlots = Object.values(timeScores)
-                .map(s => ({
-                    ...s,
-                    score: s.count * (1 - Math.min(s.latency / s.count / 7200, 0.8))
+                .map((slot) => ({
+                    ...slot,
+                    score: slot.count * (1 - Math.min(slot.latency / slot.count / 7200, 0.8))
                 }))
                 .sort((a, b) => b.score - a.score)
                 .slice(0, 3);
         }
 
-        // If not enough data, use defaults (business hours)
+        // If not enough data, use deterministic defaults (business hours)
         if (bestSlots.length === 0) {
-            const now = new Date();
-            const hash = conversationId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+            const hash = (conversationId || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
             bestSlots = [
-                { day: 1 + (hash % 5), hour: 9 + ((hash >> 4) % 7) },
-                { day: 1 + ((hash + 2) % 5), hour: 10 + ((hash >> 2) % 6) }
+                { hour: 9 + (Math.abs(hash) % 8), score: 0, count: 0 }
             ];
         }
 
-        // Find next occurrence of best time
         const now = new Date();
-        const best = bestSlots[0];
-        let nextTime = new Date(now);
-        nextTime.setHours(best.hour, 0, 0, 0);
-
-        let daysUntil = best.day - now.getDay();
-        if (daysUntil < 0 || (daysUntil === 0 && now.getHours() >= best.hour)) {
-            daysUntil += 7;
-        }
-        nextTime.setDate(nextTime.getDate() + daysUntil);
+        const bestHour = bestSlots[0].hour;
 
         return {
             bestSlots,
-            nextBestTime: nextTime,
+            nextBestTime: getNextDailyOccurrence(bestHour, now),
             hasData: engagements && engagements.length >= 3
         };
     } catch (err) {
         console.log('[CRON] Best time calc error:', err.message);
-        // Return default
         const now = new Date();
-        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-        tomorrow.setHours(10, 0, 0, 0);
-        return { bestSlots: [], nextBestTime: tomorrow, hasData: false };
+        return {
+            bestSlots: [],
+            nextBestTime: getNextDailyOccurrence(10, now),
+            hasData: false
+        };
     }
+}
+
+function parseTimestampToIso(value) {
+    if (!value) return null;
+    const parsed = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
+function getConversationMessages(conversation, maxMessagesPerConversation = 25) {
+    const rawMessages = Array.isArray(conversation?.messages?.data)
+        ? conversation.messages.data
+        : [];
+
+    return rawMessages
+        .filter((msg) => msg?.id && parseTimestampToIso(msg.created_time))
+        .sort((a, b) => {
+            const aTime = new Date(a.created_time).getTime();
+            const bTime = new Date(b.created_time).getTime();
+            return bTime - aTime;
+        })
+        .slice(0, Math.max(1, maxMessagesPerConversation));
+}
+
+function getPrimaryParticipant(participants = [], pageId) {
+    const normalizedPageId = String(pageId || '');
+    const nonPageParticipant = participants.find((p) => p?.id && String(p.id) !== normalizedPageId);
+    if (nonPageParticipant) return nonPageParticipant;
+    return participants.find((p) => p?.id) || null;
+}
+
+export function buildBackfillConversationRecords({
+    pageId,
+    conversations,
+    now = new Date(),
+    maxMessagesPerConversation = 25
+} = {}) {
+    const nowIso = parseTimestampToIso(now) || new Date().toISOString();
+    const records = {
+        conversations: [],
+        messages: [],
+        engagements: []
+    };
+
+    const safeConversations = Array.isArray(conversations) ? conversations : [];
+
+    for (const conversation of safeConversations) {
+        const conversationId = conversation?.id;
+        if (!conversationId) continue;
+
+        const participants = Array.isArray(conversation?.participants?.data)
+            ? conversation.participants.data
+            : [];
+        const participant = getPrimaryParticipant(participants, pageId);
+        const participantId = participant?.id || `unknown_${conversationId}`;
+        const participantName = participant?.name || 'Facebook Contact';
+
+        const messages = getConversationMessages(conversation, maxMessagesPerConversation);
+        const latestMessage = messages[0] || null;
+
+        const latestTimestamp = parseTimestampToIso(latestMessage?.created_time)
+            || parseTimestampToIso(conversation?.updated_time);
+
+        if (!latestTimestamp) continue;
+
+        const latestSenderId = latestMessage?.from?.id;
+        const latestFromPage = latestSenderId
+            ? String(latestSenderId) === String(pageId)
+            : null;
+
+        records.conversations.push({
+            conversation_id: conversationId,
+            page_id: pageId,
+            participant_id: participantId,
+            participant_name: participantName,
+            last_message_text: latestMessage?.message || conversation?.snippet || null,
+            last_message_time: latestTimestamp,
+            last_message_from_page: latestFromPage,
+            unread_count: Number.isFinite(conversation?.unread_count) ? conversation.unread_count : 0,
+            updated_at: nowIso
+        });
+
+        for (const message of messages) {
+            const messageTimestamp = parseTimestampToIso(message?.created_time);
+            if (!message?.id || !messageTimestamp) continue;
+
+            const isFromPage = String(message?.from?.id || '') === String(pageId);
+
+            records.messages.push({
+                conversation_id: conversationId,
+                message_id: message.id,
+                sender_id: message?.from?.id || null,
+                sender_name: message?.from?.name || null,
+                is_from_page: isFromPage,
+                is_read: isFromPage ? true : false,
+                message_text: message?.message || null,
+                attachments: message?.attachments?.data || [],
+                timestamp: messageTimestamp
+            });
+
+            const msgDate = new Date(messageTimestamp);
+            records.engagements.push({
+                conversation_id: conversationId,
+                page_id: pageId,
+                participant_id: message?.from?.id || participantId,
+                message_direction: isFromPage ? 'outbound' : 'inbound',
+                day_of_week: msgDate.getDay(),
+                hour_of_day: msgDate.getHours(),
+                engagement_score: 1,
+                message_timestamp: messageTimestamp
+            });
+        }
+    }
+
+    return records;
+}
+
+async function fetchConversationsForBackfill(pageId, accessToken, options = {}) {
+    const {
+        limit = 40,
+        afterCursor = null,
+        maxMessagesPerConversation = 25
+    } = options;
+
+    const params = new URLSearchParams();
+    params.set('fields', `id,updated_time,unread_count,participants.limit(10){id,name},messages.limit(${maxMessagesPerConversation}){id,message,from,created_time,attachments}`);
+    params.set('limit', String(limit));
+    params.set('access_token', accessToken);
+    if (afterCursor) params.set('after', afterCursor);
+
+    const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/conversations?${params.toString()}`);
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || payload?.error) {
+        const errorMessage = payload?.error?.message || `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+    }
+
+    return {
+        conversations: Array.isArray(payload?.data) ? payload.data : [],
+        nextCursor: payload?.paging?.cursors?.after || null
+    };
+}
+
+async function hydrateOldContactsForFollowups(db, checkTimeout, options = {}) {
+    const maxConversations = Number.isFinite(options?.maxConversations)
+        ? Math.max(0, options.maxConversations)
+        : 120;
+    const maxPages = Number.isFinite(options?.maxPages)
+        ? Math.max(1, options.maxPages)
+        : 5;
+    const maxPageBatches = Number.isFinite(options?.maxPageBatches)
+        ? Math.max(1, options.maxPageBatches)
+        : 2;
+
+    const metrics = {
+        hydratedConversations: 0,
+        hydratedMessages: 0,
+        hydratedPages: 0
+    };
+
+    if (maxConversations === 0) {
+        return metrics;
+    }
+
+    try {
+        const { data: pages, error: pagesError } = await db
+            .from('facebook_pages')
+            .select('page_id, page_access_token, is_active')
+            .neq('page_access_token', 'pending')
+            .order('last_synced_at', { ascending: true, nullsFirst: true })
+            .limit(maxPages);
+
+        if (pagesError) {
+            console.log('[CRON] Old-contact hydration skipped (pages query):', pagesError.message);
+            return metrics;
+        }
+
+        const activePages = (pages || []).filter((page) => page?.page_id && page?.page_access_token && page?.is_active !== false);
+
+        for (const page of activePages) {
+            if (checkTimeout()) break;
+            if (metrics.hydratedConversations >= maxConversations) break;
+
+            let hydratedThisPage = false;
+            let pageBatches = 0;
+            let afterCursor = null;
+
+            while (pageBatches < maxPageBatches && metrics.hydratedConversations < maxConversations) {
+                if (checkTimeout()) break;
+
+                const remaining = maxConversations - metrics.hydratedConversations;
+                const fetchLimit = Math.max(1, Math.min(40, remaining));
+
+                let batch;
+                try {
+                    batch = await fetchConversationsForBackfill(page.page_id, page.page_access_token, {
+                        limit: fetchLimit,
+                        afterCursor
+                    });
+                } catch (fetchError) {
+                    console.log(`[CRON] Old-contact hydration failed for page ${page.page_id}: ${fetchError.message}`);
+                    break;
+                }
+
+                const records = buildBackfillConversationRecords({
+                    pageId: page.page_id,
+                    conversations: batch.conversations
+                });
+
+                if (records.conversations.length > 0) {
+                    const { error: conversationError } = await db
+                        .from('facebook_conversations')
+                        .upsert(records.conversations, { onConflict: 'conversation_id' });
+
+                    if (!conversationError) {
+                        metrics.hydratedConversations += records.conversations.length;
+                        hydratedThisPage = true;
+                    } else {
+                        console.log(`[CRON] Old-contact conversation upsert failed for page ${page.page_id}: ${conversationError.message}`);
+                    }
+                }
+
+                if (records.messages.length > 0) {
+                    const { error: messageError } = await db
+                        .from('facebook_messages')
+                        .upsert(records.messages, { onConflict: 'message_id' });
+
+                    if (!messageError) {
+                        metrics.hydratedMessages += records.messages.length;
+                    } else {
+                        console.log(`[CRON] Old-contact message upsert failed for page ${page.page_id}: ${messageError.message}`);
+                    }
+                }
+
+                if (records.engagements.length > 0) {
+                    const { error: engagementError } = await db
+                        .from('contact_engagement')
+                        .upsert(records.engagements, { onConflict: 'conversation_id,message_timestamp', ignoreDuplicates: true });
+                    if (engagementError) {
+                        console.log(`[CRON] Old-contact engagement upsert failed for page ${page.page_id}: ${engagementError.message}`);
+                    }
+                }
+
+                pageBatches += 1;
+                afterCursor = batch.nextCursor;
+                if (!afterCursor) break;
+            }
+
+            if (hydratedThisPage) {
+                metrics.hydratedPages += 1;
+            }
+        }
+    } catch (error) {
+        console.log('[CRON] Old-contact hydration error:', error.message);
+    }
+
+    return metrics;
 }
 
 export default async function handler(req, res) {
@@ -171,6 +433,23 @@ export default async function handler(req, res) {
         // Use configured silence hours OR default to 0.5 hours (30 mins) for aggressive first follow-up
         const silenceHours = config.intuition_silence_hours || 0.5;
         const maxPerRun = 50; // Increased batch size to process more users per run
+
+        if (config.include_old_page_contacts !== false && !checkTimeout()) {
+            const hydrationMetrics = await hydrateOldContactsForFollowups(db, checkTimeout, {
+                maxConversations: Number.isFinite(config.old_contact_backfill_limit)
+                    ? config.old_contact_backfill_limit
+                    : 120,
+                maxPages: Number.isFinite(config.old_contact_backfill_page_limit)
+                    ? config.old_contact_backfill_page_limit
+                    : 5,
+                maxPageBatches: Number.isFinite(config.old_contact_backfill_batches_per_page)
+                    ? config.old_contact_backfill_batches_per_page
+                    : 2
+            });
+            results.hydratedConversations = hydrationMetrics.hydratedConversations;
+            results.hydratedMessages = hydrationMetrics.hydratedMessages;
+            results.hydratedPages = hydrationMetrics.hydratedPages;
+        }
 
         // Calculate cutoff time (conversations inactive for X hours)
         const cutoffTime = new Date(now.getTime() - (silenceHours * 60 * 60 * 1000));
@@ -298,10 +577,10 @@ export default async function handler(req, res) {
                     const bestTime = await calculateBestTimeToContact(db, conv.conversation_id, conv.page_id);
                     const msTilBest = bestTime.nextBestTime.getTime() - now.getTime();
 
-                    // Ensure at least 1 hour wait and schedule for best time
-                    waitMinutes = Math.max(60, Math.floor(msTilBest / (1000 * 60)));
+                    // Keep scheduling close to the best hour while avoiding immediate sends
+                    waitMinutes = Math.max(5, Math.floor(msTilBest / (1000 * 60)));
 
-                    // If best time is very far away (more than 24h), cap at 24h
+                    // Safety cap (best-time function should already stay within 24h)
                     waitMinutes = Math.min(waitMinutes, 24 * 60);
 
                     if (bestTime.hasData) {

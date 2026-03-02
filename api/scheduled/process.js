@@ -26,6 +26,173 @@ function getFirstName(name) {
     return parts[0] || commaSplit;
 }
 
+function parseTimestamp(value) {
+    if (!value) return null;
+    const parsed = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+export function evaluateSevenDayWindow({
+    lastInboundTimestamp,
+    conversationLastMessageTimestamp,
+    now = new Date()
+} = {}) {
+    const lastInbound = parseTimestamp(lastInboundTimestamp);
+    const conversationLastMessage = parseTimestamp(conversationLastMessageTimestamp);
+    const nowDate = parseTimestamp(now);
+
+    if (!nowDate) {
+        return {
+            daysSinceLastMsg: null,
+            outside7DayWindow: false,
+            referenceSource: null
+        };
+    }
+
+    const referenceTime = lastInbound || conversationLastMessage;
+    if (!referenceTime) {
+        return {
+            daysSinceLastMsg: null,
+            outside7DayWindow: false,
+            referenceSource: null
+        };
+    }
+
+    const daysSinceLastMsg = (nowDate.getTime() - referenceTime.getTime()) / (1000 * 60 * 60 * 24);
+
+    return {
+        daysSinceLastMsg,
+        outside7DayWindow: daysSinceLastMsg > 7,
+        referenceSource: lastInbound ? 'inbound' : 'conversation_last_message'
+    };
+}
+
+export function buildFollowupCounterSummary({
+    pendingTotal = 0,
+    pendingDue = 0,
+    pendingReadReceipt = 0,
+    failedUtilityNoTemplate = 0,
+    cancelledUtilityDisabled = 0,
+    utilitySentInWindow = 0,
+    sentRows = []
+} = {}) {
+    const safeRows = Array.isArray(sentRows) ? sentRows : [];
+    const sentByType = safeRows.reduce((acc, row) => {
+        const type = row?.follow_up_type || 'unknown';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+    }, {});
+
+    return {
+        pending: {
+            total: pendingTotal || 0,
+            dueNow: pendingDue || 0,
+            readReceipt: pendingReadReceipt || 0
+        },
+        utilityFailures: {
+            noApprovedTemplate: failedUtilityNoTemplate || 0,
+            disabledOutsideWindow: cancelledUtilityDisabled || 0
+        },
+        sent: {
+            total: safeRows.length,
+            byType: sentByType,
+            utilityTemplatesLastWindow: utilitySentInWindow || 0
+        }
+    };
+}
+
+export function getCounterResultCount(result, defaultValue = 0) {
+    if (!result || result.error) return defaultValue;
+    return Number.isFinite(result.count) ? result.count : defaultValue;
+}
+
+async function fetchFollowupCounterSummary(supabase, windowHours = 24) {
+    const normalizedWindowHours = Number.isFinite(windowHours)
+        ? Math.min(Math.max(Math.floor(windowHours), 1), 24 * 30)
+        : 24;
+
+    const since = new Date(Date.now() - normalizedWindowHours * 60 * 60 * 1000).toISOString();
+    const nowIso = new Date().toISOString();
+
+    const [
+        pendingTotalResult,
+        pendingDueResult,
+        pendingReadReceiptResult,
+        failedUtilityNoTemplateResult,
+        cancelledUtilityDisabledResult,
+        utilitySentInWindowResult,
+        sentRowsResult
+    ] = await Promise.all([
+        supabase
+            .from('ai_followup_schedule')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending'),
+        supabase
+            .from('ai_followup_schedule')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending')
+            .lte('scheduled_at', nowIso),
+        supabase
+            .from('ai_followup_schedule')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending')
+            .eq('follow_up_type', 'read_receipt'),
+        supabase
+            .from('ai_followup_schedule')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'failed')
+            .ilike('error_message', '%No approved utility templates%'),
+        supabase
+            .from('ai_followup_schedule')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'cancelled')
+            .ilike('error_message', '%Utility follow-ups disabled%'),
+        supabase
+            .from('facebook_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('is_from_page', true)
+            .eq('sent_source', 'ai_followup_utility')
+            .gte('timestamp', since),
+        supabase
+            .from('ai_followup_schedule')
+            .select('follow_up_type, sent_at')
+            .eq('status', 'sent')
+            .gte('sent_at', since)
+            .limit(1000)
+    ]);
+
+    const firstError = [
+        pendingTotalResult.error,
+        pendingDueResult.error,
+        pendingReadReceiptResult.error,
+        failedUtilityNoTemplateResult.error,
+        cancelledUtilityDisabledResult.error,
+        sentRowsResult.error
+    ].find(Boolean);
+
+    if (firstError) {
+        throw new Error(firstError.message);
+    }
+
+    if (utilitySentInWindowResult.error) {
+        console.log('[SCHEDULED] Utility sent counter unavailable, defaulting to 0:', utilitySentInWindowResult.error.message || 'unknown error');
+    }
+
+    return {
+        windowHours: normalizedWindowHours,
+        generatedAt: new Date().toISOString(),
+        ...buildFollowupCounterSummary({
+            pendingTotal: getCounterResultCount(pendingTotalResult, 0),
+            pendingDue: getCounterResultCount(pendingDueResult, 0),
+            pendingReadReceipt: getCounterResultCount(pendingReadReceiptResult, 0),
+            failedUtilityNoTemplate: getCounterResultCount(failedUtilityNoTemplateResult, 0),
+            cancelledUtilityDisabled: getCounterResultCount(cancelledUtilityDisabledResult, 0),
+            utilitySentInWindow: getCounterResultCount(utilitySentInWindowResult, 0),
+            sentRows: sentRowsResult.data
+        })
+    };
+}
+
 const UTILITY_WRAPPER_FALLBACKS = [
     '{{1}} — Message from {page name} support team. {{2}}'
 ];
@@ -631,6 +798,15 @@ export default async function handler(req, res) {
 
         const supabase = createClient(supabaseUrl, supabaseKey);
 
+        if (req.method === 'GET' && req.query?.action === 'counters') {
+            const requestedWindow = Number.parseInt(req.query?.window_hours, 10);
+            const summary = await fetchFollowupCounterSummary(supabase, requestedWindow);
+            return res.status(200).json({
+                success: true,
+                counters: summary
+            });
+        }
+
         // Get all pending scheduled messages that are due
         const now = new Date().toISOString();
         const { data: pendingMessages, error: fetchError } = await supabase
@@ -988,7 +1164,7 @@ export default async function handler(req, res) {
                         // Get conversation details and check if AI is enabled
                         const { data: conversation } = await supabase
                             .from('facebook_conversations')
-                            .select('participant_id, participant_name, ai_enabled, lead_status, pipeline_stage, human_takeover, intuition_followup_disabled, best_time_scheduling_disabled')
+                            .select('participant_id, participant_name, ai_enabled, lead_status, pipeline_stage, human_takeover, intuition_followup_disabled, best_time_scheduling_disabled, last_message_time')
                             .eq('conversation_id', followup.conversation_id)
                             .single();
 
@@ -1063,12 +1239,20 @@ export default async function handler(req, res) {
                             .limit(1)
                             .single();
 
-                        if (lastCustomerMsg?.timestamp) {
-                            daysSinceLastMsg = (Date.now() - new Date(lastCustomerMsg.timestamp).getTime()) / (1000 * 60 * 60 * 24);
-                            outside7DayWindow = daysSinceLastMsg > 7;
-                            if (outside7DayWindow) {
-                                console.log(`[AI FOLLOWUP] Outside 7-day window (${daysSinceLastMsg.toFixed(1)} days) for ${followup.conversation_id} - switching to utility template`);
-                            }
+                        const windowStatus = evaluateSevenDayWindow({
+                            lastInboundTimestamp: lastCustomerMsg?.timestamp,
+                            conversationLastMessageTimestamp: conversation?.last_message_time,
+                            now: new Date(now)
+                        });
+
+                        daysSinceLastMsg = windowStatus.daysSinceLastMsg;
+                        outside7DayWindow = windowStatus.outside7DayWindow;
+
+                        if (outside7DayWindow) {
+                            const dayLabel = Number.isFinite(daysSinceLastMsg)
+                                ? `${daysSinceLastMsg.toFixed(1)} days`
+                                : 'unknown duration';
+                            console.log(`[AI FOLLOWUP] Outside 7-day window (${dayLabel}) for ${followup.conversation_id} - switching to utility template (${windowStatus.referenceSource || 'unknown source'})`);
                         }
 
                         // Generate AI-powered contextual follow-up
@@ -1371,6 +1555,24 @@ Generate ONLY the follow-up message, nothing else:`;
                                     console.error(`[AI FOLLOWUP] Utility send failed for ${followup.conversation_id}:`, sendResult.error);
                                     allPartsSent = false;
                                     break;
+                                }
+
+                                // Save sent utility message so read-receipt triggers can find latest outbound
+                                try {
+                                    if (sendResult.data?.message_id) {
+                                        await supabase.from('facebook_messages').insert({
+                                            message_id: sendResult.data.message_id,
+                                            conversation_id: followup.conversation_id,
+                                            sender_id: followup.page_id,
+                                            message_text: part,
+                                            timestamp: new Date().toISOString(),
+                                            is_from_page: true,
+                                            is_read: true,
+                                            sent_source: 'ai_followup_utility'
+                                        });
+                                    }
+                                } catch (saveErr) {
+                                    console.log('[AI FOLLOWUP] Utility message save failed (non-fatal):', saveErr.message);
                                 }
                             } else {
                                 const response = await fetch(
