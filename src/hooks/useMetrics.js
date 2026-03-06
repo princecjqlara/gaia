@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react';
 import { getPackagePrice } from '../utils/clients';
 
+const DEPRECATED_STAGE_KEYS = new Set(['followup', 'preparing', 'testing', 'running']);
+
+const normalizeStageToken = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const isDeprecatedStage = (stage) => {
+  const keyToken = normalizeStageToken(stage?.stage_key);
+  const labelToken = normalizeStageToken(stage?.display_name);
+  return DEPRECATED_STAGE_KEYS.has(keyToken) || DEPRECATED_STAGE_KEYS.has(labelToken);
+};
+
 export const useMetrics = (clients) => {
   const [metrics, setMetrics] = useState({
     totalClients: 0,
+    evaluated: 0,
     booked: 0,
     followUp: 0,
     preparing: 0,
@@ -21,7 +32,8 @@ export const useMetrics = (clients) => {
     try {
       const stored = localStorage.getItem('custom_stages');
       if (stored) {
-        setCustomStages(JSON.parse(stored) || []);
+        const parsed = JSON.parse(stored) || [];
+        setCustomStages(parsed.filter((stage) => !isDeprecatedStage(stage)));
       }
     } catch (err) {
       console.error('Error loading custom stages:', err);
@@ -58,15 +70,13 @@ export const useMetrics = (clients) => {
       });
     } else {
       // Fallback to default stages
+      stageMetrics.evaluated = clients.filter(c => c.phase === 'evaluated').length;
       stageMetrics.booked = clients.filter(c => c.phase === 'booked').length;
-      stageMetrics['follow-up'] = clients.filter(c => c.phase === 'follow-up').length;
-      stageMetrics.preparing = clients.filter(c => c.phase === 'preparing').length;
-      stageMetrics.testing = clients.filter(c => c.phase === 'testing').length;
-      stageMetrics.running = clients.filter(c => c.phase === 'running').length;
     }
 
     setMetrics({
       totalClients: clients.length,
+      evaluated: stageMetrics.evaluated || 0,
       booked: stageMetrics.booked || 0,
       followUp: stageMetrics['follow-up'] || 0,
       preparing: stageMetrics.preparing || 0,

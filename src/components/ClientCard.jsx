@@ -91,20 +91,6 @@ const ClientCard = ({ client, onView, onEdit, onEvaluate, onManageQuestions }) =
           <span>👤 {client.assignedUser?.name || client.assignedUser?.email || client.assignedTo}</span>
         )}
       </div>
-      {client.phase === 'testing' && (
-        <div className="testing-progress">
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${client.subscriptionUsage || 0}%` }}
-            />
-          </div>
-          <div className="progress-label">
-            <span>Usage: {client.subscriptionUsage || 0}%</span>
-            <span>Round #{client.testingRound || 1}</span>
-          </div>
-        </div>
-      )}
       {client.tags && client.tags.length > 0 && (
         <div className="client-tags" style={{ marginTop: 'var(--space-sm)' }}>
           {client.tags.map(tag => (

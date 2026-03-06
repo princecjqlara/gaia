@@ -50,11 +50,8 @@ const FiltersBar = ({
         onChange={(e) => onPhaseFilterChange(e.target.value)}
       >
         <option value="">All Phases</option>
+        <option value="evaluated">✅ Evaluated</option>
         <option value="booked">📅 Booked</option>
-        <option value="follow-up">📞 Follow Up</option>
-        <option value="preparing">⏳ Preparing</option>
-        <option value="testing">🧪 Testing</option>
-        <option value="running">🚀 Running</option>
       </select>
 
       {onAssignedToFilterChange && (

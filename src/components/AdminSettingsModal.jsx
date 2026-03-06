@@ -3,6 +3,16 @@ import TagManagementModal from './TagManagementModal';
 
 import facebookService from '../services/facebookService';
 
+const DEPRECATED_STAGE_KEYS = new Set(['followup', 'preparing', 'testing', 'running']);
+
+const normalizeStageToken = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const isDeprecatedStage = (stage) => {
+  const keyToken = normalizeStageToken(stage?.stage_key);
+  const labelToken = normalizeStageToken(stage?.display_name);
+  return DEPRECATED_STAGE_KEYS.has(keyToken) || DEPRECATED_STAGE_KEYS.has(labelToken);
+};
+
 const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, saveAIPrompts, getPackagePrices, savePackagePrices, getPackageDetails, savePackageDetails, onTeamPerformance }) => {
   const [showTagManagement, setShowTagManagement] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState('facebook'); // facebook, booking, aichatbot, stages, invitecodes
@@ -653,14 +663,14 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true }
       ];
 
-      const finalStages = data || [];
+      const finalStages = (data || []).filter((stage) => !isDeprecatedStage(stage));
+      const hasDeprecatedStages = finalStages.length !== (data || []).length;
       const hasEvaluated = finalStages.some(s => s.stage_key === 'evaluated');
       const hasBooked = finalStages.some(s => s.stage_key === 'booked');
 
       let stagesToSave = finalStages;
-      if (!hasEvaluated || !hasBooked) {
+      if (!hasEvaluated || !hasBooked || hasDeprecatedStages) {
         // Add missing system default stages
-        const existingSystem = finalStages.filter(s => s.is_system_default);
         const existingCustom = finalStages.filter(s => !s.is_system_default);
         stagesToSave = [...defaultSystemStages, ...existingCustom];
 
@@ -677,18 +687,20 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       const localStages = localStorage.getItem('custom_stages');
       if (localStages) {
         const parsed = JSON.parse(localStages);
+        const filteredParsed = parsed.filter((stage) => !isDeprecatedStage(stage));
+        const hasDeprecatedStages = filteredParsed.length !== parsed.length;
 
         // Verify system defaults exist in localStorage too
-        const hasEvaluated = parsed.some(s => s.stage_key === 'evaluated');
-        const hasBooked = parsed.some(s => s.stage_key === 'booked');
+        const hasEvaluated = filteredParsed.some(s => s.stage_key === 'evaluated');
+        const hasBooked = filteredParsed.some(s => s.stage_key === 'booked');
 
-        let stagesToUse = parsed;
-        if (!hasEvaluated || !hasBooked) {
+        let stagesToUse = filteredParsed;
+        if (!hasEvaluated || !hasBooked || hasDeprecatedStages) {
           const defaultSystemStages = [
             { id: '0', stage_key: 'evaluated', display_name: 'Evaluated', emoji: '✅', color: '#22c55e', order_position: 0, is_system_default: true },
             { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true }
           ];
-          const existingCustom = parsed.filter(s => !s.is_system_default);
+          const existingCustom = filteredParsed.filter(s => !s.is_system_default);
           stagesToUse = [...defaultSystemStages, ...existingCustom];
           localStorage.setItem('custom_stages', JSON.stringify(stagesToUse));
         }
@@ -698,11 +710,7 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
         // Default stages
         setCustomStages([
           { id: '0', stage_key: 'evaluated', display_name: 'Evaluated', emoji: '✅', color: '#22c55e', order_position: 0, is_system_default: true },
-          { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true },
-          { id: '2', stage_key: 'follow-up', display_name: 'Follow-up', emoji: '💬', color: '#f59e0b', order_position: 2, is_system_default: false },
-          { id: '3', stage_key: 'preparing', display_name: 'Preparing', emoji: '⏳', color: '#8b5cf6', order_position: 3, is_system_default: false },
-          { id: '4', stage_key: 'testing', display_name: 'Testing', emoji: '🧪', color: '#ec4899', order_position: 4, is_system_default: false },
-          { id: '5', stage_key: 'running', display_name: 'Running', emoji: '🚀', color: '#10b981', order_position: 5, is_system_default: false }
+          { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true }
         ]);
       }
     } finally {
@@ -726,6 +734,10 @@ const AdminSettingsModal = ({ onClose, getExpenses, saveExpenses, getAIPrompts, 
       const db = createClient(supabaseUrl, supabaseKey);
 
       const stageKey = newStageName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      if (DEPRECATED_STAGE_KEYS.has(normalizeStageToken(stageKey))) {
+        alert(`"${newStageName}" is a deprecated stage and cannot be added.`);
+        return;
+      }
       const maxOrder = Math.max(...customStages.map(s => s.order_position || 0), 0);
 
       const { data, error } = await db

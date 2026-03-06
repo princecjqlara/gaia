@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { formatPrice } from '../utils/clients';
 
+const DEPRECATED_STAGE_KEYS = new Set(['followup', 'preparing', 'testing', 'running']);
+
+const normalizeStageToken = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const isDeprecatedStage = (stage) => {
+  const keyToken = normalizeStageToken(stage?.stage_key);
+  const labelToken = normalizeStageToken(stage?.display_name);
+  return DEPRECATED_STAGE_KEYS.has(keyToken) || DEPRECATED_STAGE_KEYS.has(labelToken);
+};
+
 const StatsGrid = ({ metrics, role }) => {
   const [customStages, setCustomStages] = useState([]);
 
@@ -9,7 +19,8 @@ const StatsGrid = ({ metrics, role }) => {
     try {
       const stored = localStorage.getItem('custom_stages');
       if (stored) {
-        setCustomStages(JSON.parse(stored) || []);
+        const parsed = JSON.parse(stored) || [];
+        setCustomStages(parsed.filter((stage) => !isDeprecatedStage(stage)));
       }
     } catch (err) {
       console.error('Error loading custom stages:', err);
@@ -30,9 +41,8 @@ const StatsGrid = ({ metrics, role }) => {
     }
     // Fallback to default stages
     return [
+      { icon: '✅', label: 'Evaluated', value: metrics.evaluated },
       { icon: '📅', label: 'Booked', value: metrics.booked },
-      { icon: '📞', label: 'Follow Up', value: metrics.followUp },
-      { icon: '⏳', label: 'Preparing', value: metrics.preparing }
     ];
   };
 

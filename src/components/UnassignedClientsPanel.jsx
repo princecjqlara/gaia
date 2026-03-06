@@ -110,12 +110,9 @@ const UnassignedClientsPanel = ({ clients, users, onAssign, onViewClient, onEdit
                                                 fontSize: '0.75rem',
                                                 background: 'var(--bg-tertiary)'
                                             }}>
+                                                {client.phase === 'evaluated' && '✅ Evaluated'}
                                                 {client.phase === 'booked' && '📅 Booked'}
-                                                {client.phase === 'follow-up' && '📞 Follow Up'}
-                                                {client.phase === 'preparing' && '⏳ Preparing'}
-                                                {client.phase === 'testing' && '🧪 Testing'}
-                                                {client.phase === 'running' && '🚀 Running'}
-                                                {!['booked', 'follow-up', 'preparing', 'testing', 'running'].includes(client.phase) && (client.phase || '—')}
+                                                {!['evaluated', 'booked'].includes(client.phase) && (client.phase || '—')}
                                             </span>
                                         </td>
                                         <td style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>

@@ -56,6 +56,17 @@ describe("ai follow-up scheduling compliance", () => {
     expect(status.daysSinceLastMsg).toBeGreaterThan(7);
   });
 
+  test("7-day check defaults to outside window when inbound is missing and last message is from page", () => {
+    const status = evaluateSevenDayWindow({
+      lastInboundTimestamp: null,
+      conversationLastMessageTimestamp: "2026-03-01T00:00:00.000Z",
+      conversationLastMessageFromPage: true,
+      now: new Date("2026-03-02T00:00:00.000Z"),
+    });
+
+    expect(status.outside7DayWindow).toBe(true);
+  });
+
   test("read receipt is still eligible beyond 7 days so utility fallback can send", () => {
     const status = shouldSkipReadReceiptFollowup(
       "2026-02-20T00:00:00.000Z",

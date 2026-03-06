@@ -311,7 +311,7 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
           photosUsed: formData.photosUsed || 0,
           meetingMinutesUsed: formData.meetingMinutesUsed || 0
         },
-        subscriptionStarted: formData.phase === 'testing' || formData.phase === 'running'
+        subscriptionStarted: Boolean(client?.subscriptionStarted) || formData.phase === 'booked'
       });
     } catch (error) {
       // Error handling is done in App.jsx, but we don't close the modal on error
@@ -576,11 +576,8 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                     value={formData.phase}
                     onChange={(e) => setFormData({ ...formData, phase: e.target.value })}
                   >
+                    <option value="evaluated">✅ Evaluated</option>
                     <option value="booked">📅 Booked</option>
-                    <option value="follow-up">📞 Follow Up</option>
-                    <option value="preparing">⏳ Preparing</option>
-                    <option value="testing">🧪 Testing</option>
-                    <option value="running">🚀 Running</option>
                   </select>
                 </div>
 
@@ -620,51 +617,6 @@ const ClientModal = ({ clientId, client, onClose, onSave, onDelete }) => {
                   </div>
                 )}
 
-                {formData.phase === 'testing' && (
-                  <div className="testing-options">
-                    <h4 style={{ margin: 'var(--space-lg) 0 var(--space-md)', color: 'var(--phase-testing)' }}>
-                      Testing Phase Settings
-                    </h4>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label className="form-label">Subscription Usage (%)</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.subscriptionUsage}
-                          onChange={(e) => setFormData({ ...formData, subscriptionUsage: parseInt(e.target.value) || 0 })}
-                          min="0"
-                          max="100"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Testing Round</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={formData.testingRound}
-                          onChange={(e) => setFormData({ ...formData, testingRound: parseInt(e.target.value) || 1 })}
-                          min="1"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            subscriptionUsage: 0,
-                            testingRound: (formData.testingRound || 1) + 1
-                          });
-                        }}
-                      >
-                        🔄 Start New Testing Round
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

@@ -32,7 +32,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
     const client = clients.find(c => c.id === clientId);
     if (!client) return null;
 
-    const order = ['evaluated', 'booked', 'follow-up', 'preparing'];
+    const order = ['evaluated', 'booked'];
     const currentIndex = order.indexOf(client.phase);
     if (currentIndex < order.length - 1) {
       const nextPhase = order[currentIndex + 1];
@@ -57,11 +57,6 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
       phase: targetPhase,
       phaseEnteredAt: new Date().toISOString()
     };
-
-    // Handle resubscription (reset to preparing)
-    if (targetPhase === 'preparing' && fromPhase !== 'preparing') {
-      updates.resubscriptionCount = (client.resubscriptionCount || 0) + 1;
-    }
 
     // Update auto switch date if enabled
     if (client.autoSwitch) {
@@ -159,9 +154,7 @@ export const usePhases = (clients, filters, currentUser = null, updateClient = n
     // This will be handled by the PhasesContainer component
     return {
       evaluated: getClientsByPhase('evaluated'),
-      booked: getClientsByPhase('booked'),
-      'follow-up': getClientsByPhase('follow-up'),
-      preparing: getClientsByPhase('preparing')
+      booked: getClientsByPhase('booked')
     };
   };
 

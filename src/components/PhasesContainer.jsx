@@ -2,26 +2,24 @@ import React, { useState, useEffect } from 'react';
 import PhaseColumn from './PhaseColumn';
 import ClientsTable from './ClientsTable';
 
-const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveClient, onUpdateClient, viewMode = 'kanban', onEvaluate, onManageQuestions }) => {
-  const [phases, setPhases] = useState(['evaluated', 'booked', 'follow-up', 'preparing']);
-  const [stageConfig, setStageConfig] = useState({});
+const REMOVED_STAGE_KEYS = new Set(['followup', 'preparing', 'testing', 'running']);
 
-  // Default stages config
-  const defaultStageConfig = {
-    evaluated: { emoji: '✅', title: 'EVALUATED', color: '#22c55e' },
-    booked: { emoji: '📅', title: 'BOOKED', color: '#3b82f6' },
-    'follow-up': { emoji: '📞', title: 'FOLLOW UP', color: '#f59e0b' },
-    preparing: { emoji: '⏳', title: 'PREPARING', color: '#8b5cf6' }
-  };
+const normalizeStageToken = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const isRemovedStage = (stage) => {
+  const keyToken = normalizeStageToken(stage?.stage_key);
+  const labelToken = normalizeStageToken(stage?.display_name);
+  return REMOVED_STAGE_KEYS.has(keyToken) || REMOVED_STAGE_KEYS.has(labelToken);
+};
+
+const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveClient, onUpdateClient, viewMode = 'kanban', onEvaluate, onManageQuestions }) => {
+  const [phases, setPhases] = useState(['evaluated', 'booked']);
+  const [stageConfig, setStageConfig] = useState({});
 
   // Default stages array
   const defaultStages = [
     { id: '0', stage_key: 'evaluated', display_name: 'Evaluated', emoji: '✅', color: '#22c55e', order_position: 0, is_system_default: true },
-    { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true },
-    { id: '2', stage_key: 'follow-up', display_name: 'Follow-up', emoji: '💬', color: '#f59e0b', order_position: 2, is_system_default: false },
-    { id: '3', stage_key: 'preparing', display_name: 'Preparing', emoji: '⏳', color: '#8b5cf6', order_position: 3, is_system_default: false },
-    { id: '4', stage_key: 'testing', display_name: 'Testing', emoji: '🧪', color: '#ec4899', order_position: 4, is_system_default: false },
-    { id: '5', stage_key: 'running', display_name: 'Running', emoji: '🚀', color: '#10b981', order_position: 5, is_system_default: false }
+    { id: '1', stage_key: 'booked', display_name: 'Booked', emoji: '📅', color: '#3b82f6', order_position: 1, is_system_default: true }
   ];
 
   // Load custom stages from localStorage on mount
@@ -34,40 +32,38 @@ const PhasesContainer = ({ clients, filters, onViewClient, onEditClient, onMoveC
         if (customStages) {
           const parsed = JSON.parse(customStages);
           if (Array.isArray(parsed) && parsed.length > 0) {
-              let stagesToUse = parsed;
+            const filteredStages = parsed.filter((stage) => !isRemovedStage(stage));
+            let stagesToUse = filteredStages;
 
-              // Ensure system default stages (evaluated and booked) are always present
-              const systemDefaultStages = defaultStages.filter(s => s.is_system_default);
-              const systemStageKeys = systemDefaultStages.map(s => s.stage_key);
+            // Ensure system default stages (evaluated and booked) are always present
+            const systemDefaultStages = defaultStages.filter(s => s.is_system_default);
+            // Check if any system default stage is missing
+            const hasEvaluated = stagesToUse.some(s => s.stage_key === 'evaluated');
+            const hasBooked = stagesToUse.some(s => s.stage_key === 'booked');
 
-              // Check if any system default stage is missing
-              const hasEvaluated = parsed.some(s => s.stage_key === 'evaluated');
-              const hasBooked = parsed.some(s => s.stage_key === 'booked');
+            if (!hasEvaluated || !hasBooked || filteredStages.length !== parsed.length) {
+              // Rebuild stages with system defaults included
+              const existingCustomStages = stagesToUse.filter(s => !s.is_system_default);
 
-              if (!hasEvaluated || !hasBooked) {
-                // Rebuild stages with system defaults included
-                const existingSystemStages = parsed.filter(s => s.is_system_default);
-                const existingCustomStages = parsed.filter(s => !s.is_system_default);
+              // Merge: system defaults + custom stages
+              const allStages = [...systemDefaultStages, ...existingCustomStages];
+              stagesToUse = allStages;
 
-                // Merge: system defaults + custom stages
-                const allStages = [...systemDefaultStages, ...existingCustomStages];
-                stagesToUse = allStages;
+              // Save to localStorage
+              localStorage.setItem('custom_stages', JSON.stringify(allStages));
+              console.log('Migrated: Ensured system default stages present');
+            }
 
-                // Save to localStorage
-                localStorage.setItem('custom_stages', JSON.stringify(allStages));
-                console.log('Migrated: Ensured system default stages present');
-              }
+            // Extract stage keys in order
+            const stageKeys = stagesToUse
+              .sort((a, b) => (a.order_position || 0) - (b.order_position || 0))
+              .map(s => s.stage_key);
 
-              // Extract stage keys in order
-              const stageKeys = stagesToUse
-                .sort((a, b) => (a.order_position || 0) - (b.order_position || 0))
-                .map(s => s.stage_key);
+            setPhases(stageKeys);
 
-              setPhases(stageKeys);
-
-              // Create stage config mapping
-              const config = {};
-              stagesToUse.forEach(stage => {
+            // Create stage config mapping
+            const config = {};
+            stagesToUse.forEach(stage => {
               config[stage.stage_key] = {
                 display_name: stage.display_name,
                 emoji: stage.emoji,

@@ -35,6 +35,7 @@ function parseTimestamp(value) {
 export function evaluateSevenDayWindow({
     lastInboundTimestamp,
     conversationLastMessageTimestamp,
+    conversationLastMessageFromPage,
     now = new Date()
 } = {}) {
     const lastInbound = parseTimestamp(lastInboundTimestamp);
@@ -46,6 +47,15 @@ export function evaluateSevenDayWindow({
             daysSinceLastMsg: null,
             outside7DayWindow: false,
             referenceSource: null
+        };
+    }
+
+    if (!lastInbound && conversationLastMessage && conversationLastMessageFromPage === true) {
+        const daysSinceLastMsg = (nowDate.getTime() - conversationLastMessage.getTime()) / (1000 * 60 * 60 * 24);
+        return {
+            daysSinceLastMsg,
+            outside7DayWindow: true,
+            referenceSource: 'conversation_last_message_from_page'
         };
     }
 
@@ -1164,7 +1174,7 @@ export default async function handler(req, res) {
                         // Get conversation details and check if AI is enabled
                         const { data: conversation } = await supabase
                             .from('facebook_conversations')
-                            .select('participant_id, participant_name, ai_enabled, lead_status, pipeline_stage, human_takeover, intuition_followup_disabled, best_time_scheduling_disabled, last_message_time')
+                            .select('participant_id, participant_name, ai_enabled, lead_status, pipeline_stage, human_takeover, intuition_followup_disabled, best_time_scheduling_disabled, last_message_time, last_message_from_page')
                             .eq('conversation_id', followup.conversation_id)
                             .single();
 
@@ -1242,6 +1252,7 @@ export default async function handler(req, res) {
                         const windowStatus = evaluateSevenDayWindow({
                             lastInboundTimestamp: lastCustomerMsg?.timestamp,
                             conversationLastMessageTimestamp: conversation?.last_message_time,
+                            conversationLastMessageFromPage: conversation?.last_message_from_page,
                             now: new Date(now)
                         });
 

@@ -19,10 +19,8 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
         userName: user.name || user.email,
         userEmail: user.email,
         totalClients: 0,
+        evaluated: 0,
         booked: 0,
-        preparing: 0,
-        testing: 0,
-        running: 0,
         paidClients: 0,
         monthlyRevenue: 0,
         totalExpenses: 0,
@@ -36,10 +34,8 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
       userName: 'All Team',
       userEmail: '',
       totalClients: 0,
+      evaluated: 0,
       booked: 0,
-      preparing: 0,
-      testing: 0,
-      running: 0,
       paidClients: 0,
       monthlyRevenue: 0,
       totalExpenses: 0,
@@ -67,14 +63,12 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
       // Update individual user metrics
       if (metrics[assignedUserId]) {
         metrics[assignedUserId].totalClients++;
+        if (client.phase === 'evaluated') metrics[assignedUserId].evaluated++;
         if (client.phase === 'booked') metrics[assignedUserId].booked++;
-        if (client.phase === 'preparing') metrics[assignedUserId].preparing++;
-        if (client.phase === 'testing') metrics[assignedUserId].testing++;
-        if (client.phase === 'running') metrics[assignedUserId].running++;
         if (client.paymentStatus === 'paid') metrics[assignedUserId].paidClients++;
 
-        // Revenue from running paid clients
-        if (client.phase === 'running' && client.paymentStatus === 'paid') {
+        // Revenue from paid clients
+        if (client.paymentStatus === 'paid') {
           const revenue = getPackagePrice(client);
           metrics[assignedUserId].monthlyRevenue += revenue;
         }
@@ -82,13 +76,11 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
 
       // Update "All Team" metrics
       metrics.all.totalClients++;
+      if (client.phase === 'evaluated') metrics.all.evaluated++;
       if (client.phase === 'booked') metrics.all.booked++;
-      if (client.phase === 'preparing') metrics.all.preparing++;
-      if (client.phase === 'testing') metrics.all.testing++;
-      if (client.phase === 'running') metrics.all.running++;
       if (client.paymentStatus === 'paid') metrics.all.paidClients++;
 
-      if (client.phase === 'running' && client.paymentStatus === 'paid') {
+      if (client.paymentStatus === 'paid') {
         const revenue = getPackagePrice(client);
         metrics.all.monthlyRevenue += revenue;
       }
@@ -98,8 +90,8 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
     const expenses = JSON.parse(localStorage.getItem('gaia_expenses') || '{}');
     Object.values(metrics).forEach(metric => {
       // Find clients assigned to this user/metric
-      const runningClients = clients.filter(c => {
-        if (c.phase !== 'running' || c.paymentStatus !== 'paid') return false;
+      const paidClientsForMetric = clients.filter(c => {
+        if (c.paymentStatus !== 'paid') return false;
 
         if (metric.userId === 'all') return true;
 
@@ -118,7 +110,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
         }
       });
 
-      metric.totalExpenses = runningClients.reduce((total, client) => {
+      metric.totalExpenses = paidClientsForMetric.reduce((total, client) => {
         const pkgExpense = expenses[client.package] || 0;
         const adsExpense = client.adsExpense || 0;
         return total + pkgExpense + adsExpense;
@@ -221,7 +213,7 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
       .map(member => ({
         ...member,
         rank: 0, // Will be set below
-        score: member.netProfit + (member.totalClients * 100) + (member.running * 500) // Scoring system
+        score: member.netProfit + (member.totalClients * 100) + (member.booked * 500) // Scoring system
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -311,14 +303,14 @@ const TeamPerformanceModal = ({ clients = [], users = [], onClose }) => {
                   <div className="stat-label">Total Clients</div>
                 </div>
                 <div className="stat-card" style={{ padding: '1rem' }}>
+                  <div className="stat-icon">✅</div>
+                  <div className="stat-value">{currentMetrics.evaluated}</div>
+                  <div className="stat-label">Evaluated</div>
+                </div>
+                <div className="stat-card" style={{ padding: '1rem' }}>
                   <div className="stat-icon">📅</div>
                   <div className="stat-value">{currentMetrics.booked}</div>
                   <div className="stat-label">Booked</div>
-                </div>
-                <div className="stat-card" style={{ padding: '1rem' }}>
-                  <div className="stat-icon">⏳</div>
-                  <div className="stat-value">{currentMetrics.preparing}</div>
-                  <div className="stat-label">Preparing</div>
                 </div>
 
               </div>

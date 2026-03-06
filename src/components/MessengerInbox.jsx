@@ -2,7 +2,11 @@ import React, { useState, useRef, useEffect } from "react";
 import useFacebookMessenger from "../hooks/useFacebookMessenger";
 import { facebookService } from "../services/facebookService";
 import { buildScopedPropertyUrl } from "../utils/propertyScope";
-import { resolveEvaluationPanelData } from "../utils/evaluationPanelData";
+import {
+  buildAnsweredEvaluationEntries,
+  resolveEvaluationPanelData,
+} from "../utils/evaluationPanelData";
+import { buildFlexibleSummaryItems } from "../utils/aiContextSummary";
 
 import AIControlPanel from "./AIControlPanel";
 import AIChatbotSettings from "./AIChatbotSettings";
@@ -231,10 +235,6 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
     return {
       stage_warning_days: {
         booked: 3,
-        "follow-up": 2,
-        preparing: 7,
-        testing: 30,
-        running: 0,
       },
       warning_color: "#f59e0b",
       danger_color: "#ef4444",
@@ -1379,15 +1379,17 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
   const evaluationQuestions = evaluationPanelData.questions;
   const evaluationAnswers = evaluationPanelData.answers;
   const evaluationEmptyMessage = evaluationPanelData.emptyMessage;
+  const answeredEvaluationEntries = buildAnsweredEvaluationEntries(
+    evaluationQuestions,
+    evaluationAnswers,
+  );
   const aiContextSummaryRaw =
     conversationInsights?.aiNotes ||
     conversationInsights?.aiSummary ||
     aiAnalysis?.notes ||
     selectedConversation?.ai_summary ||
     "";
-  const aiContextSummary = aiContextSummaryRaw
-    ? aiContextSummaryRaw.replace(/\s+/g, " ").trim()
-    : "";
+  const aiContextSummaryItems = buildFlexibleSummaryItems(aiContextSummaryRaw);
 
   return (
     <>
@@ -3993,7 +3995,7 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     padding: "1rem",
                   }}
                 >
-                  <p
+                  <div
                     style={{
                       fontSize: "0.85rem",
                       lineHeight: "1.5",
@@ -4001,8 +4003,12 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                       color: "var(--text-primary)",
                     }}
                   >
-                    {aiContextSummary || "No AI context summary yet."}
-                  </p>
+                    {aiContextSummaryItems.length > 0
+                      ? aiContextSummaryItems.map((line, index) => (
+                          <div key={`${index}-${line.slice(0, 20)}`}>{line}</div>
+                        ))
+                      : "No AI context summary yet."}
+                  </div>
                 </div>
               </div>
 
@@ -4029,10 +4035,10 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                     color: "var(--text-muted)",
                   }}
                 >
-                  {evaluationQuestions.length > 0 ? (
-                    evaluationQuestions.map((question, index) => (
+                  {answeredEvaluationEntries.length > 0 ? (
+                    answeredEvaluationEntries.map((entry) => (
                       <div
-                        key={`${index}-${question.substring(0, 12)}`}
+                        key={`${entry.questionNumber}-${entry.question.substring(0, 12)}`}
                         style={{ lineHeight: 1.4 }}
                       >
                         <div
@@ -4042,16 +4048,18 @@ const MessengerInbox = ({ clients = [], users = [], currentUserId }) => {
                             fontWeight: "600",
                           }}
                         >
-                          Q{index + 1}: {question}
+                          Q{entry.questionNumber}: {entry.question}
                         </div>
                         <div style={{ color: "var(--text-primary)" }}>
-                          {evaluationAnswers[index] || "(No answer)"}
+                          {entry.answer}
                         </div>
                       </div>
                     ))
                   ) : (
                     <div style={{ fontStyle: "italic" }}>
-                      {evaluationEmptyMessage}
+                      {evaluationQuestions.length > 0
+                        ? "No answered evaluation questions yet."
+                        : evaluationEmptyMessage}
                     </div>
                   )}
                 </div>
