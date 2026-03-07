@@ -16,6 +16,28 @@ function cleanAnswerList(rawAnswers) {
   return rawAnswers.map((answer) => `${answer || ""}`.trim());
 }
 
+export function isMeaningfulEvaluationAnswer(answer) {
+  const cleaned = `${answer || ""}`.trim();
+  if (!cleaned) {
+    return false;
+  }
+
+  return !/^\(?\s*no answer\s*\)?$/i.test(cleaned);
+}
+
+export function buildAnsweredEvaluationEntries(questions, answers) {
+  const safeQuestions = cleanQuestionList(questions);
+  const safeAnswers = cleanAnswerList(answers);
+
+  return safeQuestions
+    .map((question, index) => ({
+      question,
+      answer: safeAnswers[index] || "",
+      questionNumber: index + 1,
+    }))
+    .filter((entry) => isMeaningfulEvaluationAnswer(entry.answer));
+}
+
 export function sanitizeEvaluationQuestionNumbers(answeredNumbers, totalQuestions) {
   if (!Array.isArray(answeredNumbers)) {
     return [];

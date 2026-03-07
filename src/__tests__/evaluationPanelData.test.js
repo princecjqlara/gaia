@@ -1,4 +1,5 @@
 import {
+  buildAnsweredEvaluationEntries,
   buildEvaluationMemoryAnswers,
   resolveEvaluationPanelData,
   sanitizeEvaluationQuestionNumbers,
@@ -59,5 +60,20 @@ describe("evaluationPanelData", () => {
     );
 
     expect(answers).toEqual(["Captured in chat", "", "Captured in chat"]);
+  });
+
+  test("returns only answered evaluation entries", () => {
+    const entries = buildAnsweredEvaluationEntries(
+      ["Budget?", "Location?", "Timeline?"],
+      ["", "Alabang", "(No answer)"],
+    );
+
+    expect(entries).toEqual([
+      {
+        question: "Location?",
+        answer: "Alabang",
+        questionNumber: 2,
+      },
+    ]);
   });
 });
