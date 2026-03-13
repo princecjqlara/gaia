@@ -2287,20 +2287,32 @@ async function handleIncomingMessage(pageId, event) {
       const shouldSendWelcome = isNewConversation || (existingConv && existingConv.last_message_time === null);
 
       if (shouldSendWelcome) {
-        console.log("[WEBHOOK] New conversation detected - sending welcome trigger message...");
-        const welcomeSent = await sendWelcomeMessage(pageId, participantId, conversationId);
-        if (welcomeSent) {
-          // Reset recurring notification follow-up timer (7-day countdown restarts)
-          db.from("recurring_notification_tokens")
-            .update({ followup_sent: false })
-            .eq("conversation_id", conversationId)
-            .eq("token_status", "active")
-            .then(() => { })
-            .catch(() => { });
-          return; // Stop here, don't trigger AI text response
+        // Race guard: check if page already sent a message (prevents duplicate welcomes on fast replies)
+        const { data: existingPageMsgs } = await db
+          .from("facebook_messages")
+          .select("message_id")
+          .eq("conversation_id", conversationId)
+          .eq("is_from_page", true)
+          .limit(1);
+
+        if (existingPageMsgs?.length > 0) {
+          console.log("[WEBHOOK] Welcome already sent (race guard) — skipping to AI");
+        } else {
+          console.log("[WEBHOOK] New conversation detected - sending welcome trigger message...");
+          const welcomeSent = await sendWelcomeMessage(pageId, participantId, conversationId);
+          if (welcomeSent) {
+            // Reset recurring notification follow-up timer (7-day countdown restarts)
+            db.from("recurring_notification_tokens")
+              .update({ followup_sent: false })
+              .eq("conversation_id", conversationId)
+              .eq("token_status", "active")
+              .then(() => { })
+              .catch(() => { });
+            return; // Stop here, don't trigger AI text response
+          }
+          // If welcome fail (e.g. no booking URL AND no page token), fall through to AI
+          console.log("[WEBHOOK] Welcome message failed (missing config?) - falling back to AI.");
         }
-        // If welcome fail (e.g. no booking URL AND no page token), fall through to AI
-        console.log("[WEBHOOK] Welcome message failed (missing config?) - falling back to AI.");
       }
 
       // Reset recurring notification follow-up timer (7-day countdown restarts)
@@ -2571,14 +2583,27 @@ async function triggerAIResponse(db, conversationId, pageId, conversation) {
       console.log("[WEBHOOK] Human takeover active - AI skipping");
       return;
     }
-    // COOLDOWN: Don't respond if we responded in the last 30 seconds
-    if (conversation?.last_ai_response_at) {
-      const secondsSince = (Date.now() - new Date(conversation.last_ai_response_at).getTime()) / 1000;
-      if (secondsSince < 30) {
-        console.log(`[WEBHOOK] AI cooling down - ${secondsSince}s ago`);
-        return;
+    // COOLDOWN: Re-read from DB to prevent race conditions when lead sends fast messages
+    try {
+      const { data: freshConv } = await db
+        .from("facebook_conversations")
+        .select("last_ai_response_at")
+        .eq("conversation_id", conversationId)
+        .single();
+      if (freshConv?.last_ai_response_at) {
+        const secondsSince = (Date.now() - new Date(freshConv.last_ai_response_at).getTime()) / 1000;
+        if (secondsSince < 30) {
+          console.log(`[WEBHOOK] AI cooling down (fresh DB check) - ${Math.round(secondsSince)}s ago`);
+          return;
+        }
       }
+    } catch (cooldownErr) {
+      console.log("[WEBHOOK] Cooldown check error (non-fatal):", cooldownErr.message);
     }
+    // Immediately claim this response slot to block concurrent requests
+    await db.from("facebook_conversations")
+      .update({ last_ai_response_at: new Date().toISOString() })
+      .eq("conversation_id", conversationId);
 
     // PARALLEL: Fetch settings + spam check at the same time
     let settingsResult, spamCheckResult;
@@ -2958,11 +2983,20 @@ ${systemPrompt}
     aiPrompt += `
 ## 🗣️ LANGUAGE (CRITICAL - MUST FOLLOW)
 You MUST respond in ${language}. This is MANDATORY.
-- Use Taglish (mix Filipino and English naturally in sentences)
+${language.toLowerCase().includes('taglish') || language.toLowerCase().includes('tagalog') || language.toLowerCase().includes('filipino')
+? `- Use Taglish (mix Filipino and English naturally in sentences)
 - Use "po" and "opo" for respect
 - Example: "Salamat po sa message mo. Ano po ang hinahanap mong property?"
 - Example: "Based sa sinabi mo, Manila area po. Ano po budget range ninyo?"
-- NEVER respond in pure English only - always mix Filipino words.
+- NEVER respond in pure English only - always mix Filipino words.`
+: language.toLowerCase() === 'english'
+? `- Use clear, professional English.
+- Be friendly and approachable.
+- Match the customer's tone and formality level.`
+: `- Respond naturally in ${language}.
+- If the customer writes in a different language, match their language.
+- Be culturally appropriate and respectful.
+- You may mix ${language} with English if it feels natural.`}
 
 ## Platform: Facebook Messenger
 Contact Name: ${displayName || "NOT PROVIDED"}
@@ -3113,26 +3147,23 @@ Ask ONE question per message. Do NOT recommend properties yet — they are locke
 ### Priority 2: 📞 Be Conversational
 After asking the evaluation question, be friendly and natural. Make it feel like a chat, not an interrogation.
 
-### Priority 3: ${hasOptedIn ? '✅ Opt-in secured!' : '🔔 Get Notification Opt-in (LOW PRIORITY for now)'}
-${hasOptedIn
-          ? 'The customer has already opted in. Great!'
-          : `After asking your evaluation question, you may ALSO include an opt-in hook.
-- Add this marker at the END (not start) of your response: OPTIN_HOOK: [catchy text, max 20 words]
-- Only do this if it feels natural — evaluation questions are more important right now.`}
+### Priority 3: Be Conversational
+${hasOptedIn || aiReplyCount < 5
+          ? ''
+          : `You may include a notification opt-in hook at the END of your response: OPTIN_HOOK: [catchy text, max 20 words]
+- Only do this if the conversation has been going for a while and it feels natural.`}
 `;
     } else {
       // Evaluation is COMPLETE — now focus on opt-in and booking
       aiPrompt += `
-### Priority 1: ${hasOptedIn ? '✅ Opt-in secured!' : '🔔 Get Notification Opt-in (HIGHEST PRIORITY)'}
+### Priority 1: ${hasOptedIn || aiReplyCount < 5 ? '💬 Help the customer' : '🔔 Get Notification Opt-in'}
 ${hasOptedIn
           ? 'The customer has already opted in. Great! Focus on next priorities.'
-          : `The customer has NOT yet clicked the notification opt-in button below. Your TOP TASK is to naturally encourage them to click it.
-- START your response with this EXACT marker: OPTIN_HOOK: [Your short, catchy text here]
-- The system will use your text to create a button for them to click.
-- Create a catchy hook (max 20 words). Examples:
-  - "I saved a spot for you — click below so I can reach out pag may perfect property na!"
-  - "Click below po para ma-message kita pag may perfect match na!"
-  - "Quick question — are you still looking? Tap below so I can help you find it!"`
+          : aiReplyCount < 5
+            ? 'Focus on answering questions helpfully and building rapport first.'
+            : `Encourage the customer to subscribe for property updates.
+- Add this marker ONCE in your response: OPTIN_HOOK: [catchy text, max 20 words]
+- Make it feel natural, not pushy.`
         }
 
 ### Priority 2: 📞 Hop on a Call + Evaluation
@@ -3307,9 +3338,9 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
     } else {
       // GLM-5 (744B params) = smartest, with known-working fallbacks
       MODELS = [
-        "zhipu/glm-5",
+        "meta/llama-3.1-405b-instruct",
+        "meta/llama-3.3-70b-instruct",
         "meta/llama-3.1-70b-instruct",
-        "meta/llama-3.1-8b-instruct",
       ];
     }
 
@@ -3333,7 +3364,7 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
               model: model,
               messages: aiMessages,
               temperature: 0.7,
-              max_tokens: 300,
+              max_tokens: 500,
             }),
             signal: controller.signal,
           },
@@ -4326,88 +4357,80 @@ ${isFirstAIReply ? '- THIS IS YOUR FIRST MESSAGE to this customer. Make a great 
 
     console.log(`[WEBHOOK] AI reply sent! Total time: ${Date.now() - startTime}ms`);
 
-    // 📅 BOOKING BUTTON — only show at specific milestones:
-    //   1. First AI reply (introduction)
-    //   2. When evaluation reaches 50% of threshold (halfway point)
-    //   3. When evaluation reaches the threshold (qualified)
+    // 📅 BOOKING BUTTON — send at key moments (each milestone only fires ONCE)
+    //   1. First AI reply (new lead intro)
+    //   2. Evaluation halfway (building interest)
+    //   3. Evaluation complete (qualified lead)
+    //   4. Slow reply (5+ min gap — nudge with button)
     try {
       const bookingUrl = config.booking_url;
-      if (bookingUrl) {
-        // Get the evaluation threshold (default 70%) and check milestones
-        const evalThreshold = evaluationThreshold;
-        const halfThreshold = evaluationHalfThreshold;
+      const bookingSent = (conversation?.booking_btn_milestones && typeof conversation.booking_btn_milestones === "object")
+        ? conversation.booking_btn_milestones
+        : {};
 
-        // Check what booking milestone flags have been sent for this conversation
-        const bookingSent = bookingMilestones;
-        const isFirst = pageReplies.length === 0 && !bookingSent.first;
-        const atHalf = evaluationScore >= halfThreshold && !bookingSent.half;
-        const atFull = evaluationScore >= evalThreshold && !bookingSent.full;
+      const isFirst = isFirstAIReply && !bookingSent.first;
+      const atHalf = evaluationScore >= evaluationHalfThreshold && !bookingSent.half;
+      const atFull = evaluationScore >= evaluationThreshold && !bookingSent.full;
+      const isSlow = timeSinceLastContactMsg >= 5 && !bookingSent.slow;
 
-        const shouldSendBooking = isFirst || atHalf || atFull;
+      const shouldSendBooking = isFirst || atHalf || atFull || isSlow;
 
-        if (shouldSendBooking) {
-          const reason = isFirst ? 'first_reply' : atFull ? 'eval_complete' : 'eval_half';
-          console.log(`[WEBHOOK] 📅 Sending booking button (reason: ${reason}, score: ${evaluationScore}%, threshold: ${evalThreshold}%)`);
+      if (bookingUrl && shouldSendBooking) {
+        const reason = isFirst ? 'first_reply' : atFull ? 'eval_complete' : atHalf ? 'eval_half' : 'slow_reply';
+        const btnText = isFirst
+          ? "📅 Ready to chat? Click below to book a quick consultation!"
+          : atFull
+            ? "📅 Great news! Based on our chat, I think we have the perfect match. Book a viewing!"
+            : atHalf
+              ? "📅 Interested po? Click below to book a quick consultation!"
+              : "📅 Still interested? Tap below to schedule — we'd love to help!";
 
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log(`[WEBHOOK] 📅 Sending booking button (reason: ${reason}, score: ${evaluationScore}%)`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-          const bookingBtnBody = {
-            recipient: { id: participantId },
-            message: {
-              attachment: {
-                type: "template",
-                payload: {
-                  template_type: "button",
-                  text: isFirst
-                    ? "📅 Ready to book? Click below to schedule your consultation!"
-                    : atFull
-                      ? "📅 Great news! Based on our chat, I think we have the perfect property for you. Book a viewing!"
-                      : "📅 Interested po? Click below to book a quick consultation!",
-                  buttons: [
-                    {
-                      type: "web_url",
-                      url: bookingUrl,
-                      title: "📅 Book Now",
-                      webview_height_ratio: "full"
-                    }
-                  ]
-                }
+        const bookingBtnBody = {
+          recipient: { id: participantId },
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "button",
+                text: btnText,
+                buttons: [{
+                  type: "web_url",
+                  url: bookingUrl,
+                  title: "📅 Book Now",
+                  webview_height_ratio: "full"
+                }]
               }
-            },
-            messaging_type: "RESPONSE"
-          };
-
-          const btnResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(bookingBtnBody),
             }
-          );
+          },
+          messaging_type: "RESPONSE"
+        };
 
-          if (btnResponse.ok) {
-            console.log("[WEBHOOK] ✅ Booking button sent automatically!");
-            // Record which milestones have been reached to avoid resending
-            try {
-              const newMilestones = { ...bookingSent };
-              if (isFirst) newMilestones.first = true;
-              if (atHalf) newMilestones.half = true;
-              if (atFull) newMilestones.full = true;
-              await db.from('facebook_conversations').update({
-                booking_btn_milestones: newMilestones,
-                updated_at: new Date().toISOString(),
-              }).eq('conversation_id', conversationId);
-            } catch (milestoneErr) {
-              console.log('[WEBHOOK] Milestone update failed (column may not exist yet):', milestoneErr.message);
-            }
-          } else {
-            const btnErr = await btnResponse.text();
-            console.log("[WEBHOOK] Booking button send failed (non-fatal):", btnErr.substring(0, 100));
-          }
+        const btnResponse = await fetch(
+          `https://graph.facebook.com/v21.0/${pageId}/messages?access_token=${page.page_access_token}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bookingBtnBody) }
+        );
+
+        if (btnResponse.ok) {
+          console.log(`[WEBHOOK] ✅ Booking button sent (${reason})!`);
+          try {
+            const newMilestones = { ...bookingSent };
+            if (isFirst) newMilestones.first = true;
+            if (atHalf) newMilestones.half = true;
+            if (atFull) newMilestones.full = true;
+            if (isSlow) newMilestones.slow = true;
+            await db.from('facebook_conversations').update({
+              booking_btn_milestones: newMilestones,
+              updated_at: new Date().toISOString(),
+            }).eq('conversation_id', conversationId);
+          } catch (e) { console.log('[WEBHOOK] Milestone update (non-fatal):', e.message); }
         } else {
-          console.log(`[WEBHOOK] 📅 Booking button skipped (score: ${evaluationScore}%, half: ${halfThreshold}%, full: ${evalThreshold}%, milestones: ${JSON.stringify(bookingSent)})`);
+          console.log("[WEBHOOK] Booking button failed (non-fatal):", (await btnResponse.text()).substring(0, 100));
         }
+      } else {
+        console.log(`[WEBHOOK] 📅 Booking button skipped (score: ${evaluationScore}%, milestones: ${JSON.stringify(bookingSent)})`);
       }
     } catch (bookingBtnErr) {
       console.log("[WEBHOOK] Booking button error (non-fatal):", bookingBtnErr.message);
