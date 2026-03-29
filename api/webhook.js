@@ -4767,7 +4767,7 @@ async function handleReadReceipt(pageId, event) {
     // 3. Check the last message in this conversation — was it from the page (AI)?
     const { data: lastMsg } = await db
       .from('facebook_messages')
-      .select('is_from_page, timestamp, message_text')
+      .select('is_from_page, timestamp, message_text, sent_source')
       .eq('conversation_id', conv.conversation_id)
       .order('timestamp', { ascending: false })
       .limit(1)
@@ -4776,6 +4776,25 @@ async function handleReadReceipt(pageId, event) {
     if (!lastMsg || !lastMsg.is_from_page) {
       // Last message was from the customer, no need to follow up on a read
       console.log('[WEBHOOK] 👁️ Last message was from customer, no read follow-up needed');
+      return;
+    }
+
+    // 3b. Check if the last page message was itself a follow-up (prevent follow-up chains)
+    // If the last outbound message was a scheduled follow-up, don't trigger another one
+    // when the contact reads it — this prevents infinite follow-up loops.
+    const { data: lastFollowup } = await db
+      .from('ai_followup_schedule')
+      .select('id, follow_up_type, status')
+      .eq('conversation_id', conv.conversation_id)
+      .in('status', ['sent', 'pending'])
+      .in('follow_up_type', ['read_receipt', 'reminder', 'best_time'])
+      .order('scheduled_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lastFollowup && lastFollowup.status === 'sent') {
+      // The last action was a follow-up that was already sent — don't chain another
+      console.log('[WEBHOOK] 👁️ Last page message was a follow-up — skipping to prevent chain');
       return;
     }
 
