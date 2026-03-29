@@ -14,8 +14,15 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized. Pass ?key=<last 12 chars of service role key>" });
   }
 
+  const dbPassword = req.query.dbpass || process.env.SUPABASE_DB_PASSWORD || "";
+  const projectRef = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "")
+    .replace("https://", "").replace(".supabase.co", "");
   const dbUrl = process.env.DATABASE_URL ||
-    `postgresql://postgres:${process.env.SUPABASE_DB_PASSWORD || ""}@db.${(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace("https://", "").replace(".supabase.co", "")}.supabase.co:5432/postgres`;
+    `postgresql://postgres.${projectRef}:${dbPassword}@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`;
+
+  if (!dbPassword) {
+    return res.status(400).json({ error: "No database password. Set SUPABASE_DB_PASSWORD env var or pass ?dbpass=..." });
+  }
 
   const client = new Client({
     connectionString: dbUrl,
