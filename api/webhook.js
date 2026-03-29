@@ -548,10 +548,10 @@ async function handleCommentEvent(pageId, commentData) {
       return;
     }
 
-    // Get page access token
+    // Get page access token and tenant scope
     const { data: page } = await db
       .from("facebook_pages")
-      .select("page_access_token")
+      .select("page_access_token,team_id,organization_id")
       .eq("page_id", pageId)
       .single();
 
@@ -741,6 +741,8 @@ Knowledge base: ${config.knowledge_base || "We are a digital marketing agency."}
                 last_message_from_page: true,
                 source: "comment",
                 ai_enabled: true,
+                team_id: page?.team_id || null,
+                organization_id: page?.organization_id || null,
                 created_at: new Date().toISOString(),
               },
               { onConflict: "participant_id,page_id" },
@@ -1892,8 +1894,8 @@ async function handleIncomingMessage(pageId, event) {
       message.mid
         ? db.from("facebook_messages").select("message_id").eq("message_id", message.mid).single()
         : Promise.resolve({ data: null }),
-      // 2. Page existence check
-      db.from("facebook_pages").select("page_id").eq("page_id", pageId).single(),
+      // 2. Page existence check (also get tenant scope for data isolation)
+      db.from("facebook_pages").select("page_id,team_id,organization_id").eq("page_id", pageId).single(),
       // 3. Conversation lookup
       db.from("facebook_conversations").select("*").eq("participant_id", participantId).eq("page_id", pageId).single(),
     ]);
@@ -1902,6 +1904,10 @@ async function handleIncomingMessage(pageId, event) {
     if (dedupResult.data) {
       return; // Already processed
     }
+
+    // Extract tenant scope from page record
+    const pageTeamId = pageResult.data?.team_id || null;
+    const pageOrganizationId = pageResult.data?.organization_id || null;
 
     // Handle page creation if needed
     if (!pageResult.data) {
@@ -2067,6 +2073,8 @@ async function handleIncomingMessage(pageId, event) {
       last_message_time: new Date(timestamp).toISOString(),
       last_message_from_page: isFromPage,
       unread_count: newUnreadCount,
+      team_id: pageTeamId,
+      organization_id: pageOrganizationId,
       updated_at: new Date().toISOString(),
       // AUTO-ENABLE: AI is enabled by default for all contacts
       ai_enabled: existingConv?.ai_enabled ?? true,
@@ -2170,6 +2178,8 @@ async function handleIncomingMessage(pageId, event) {
         is_from_page: isFromPage,
         is_read: isFromPage, // Echo messages are already "read"
         sent_source: sentSource,
+        team_id: pageTeamId,
+        organization_id: pageOrganizationId,
       },
       { onConflict: "message_id" },
     );
@@ -4946,7 +4956,9 @@ async function handleBookingQuickReply(pageId, senderId, timestamp) {
         timestamp: new Date(timestamp).toISOString(),
         is_from_page: true,
         is_read: true,
-        sent_source: "app"
+        sent_source: "app",
+        team_id: pageTeamId,
+        organization_id: pageOrganizationId,
       },
       { onConflict: "message_id" }
     );
@@ -5144,12 +5156,15 @@ async function handlePostbackEvent(pageId, event) {
       );
     }
 
-    // Ensure page exists
+    // Ensure page exists and get tenant scope
     const { data: existingPage } = await db
       .from("facebook_pages")
-      .select("page_id")
+      .select("page_id,team_id,organization_id")
       .eq("page_id", pageId)
       .single();
+
+    const postbackPageTeamId = existingPage?.team_id || null;
+    const postbackPageOrgId = existingPage?.organization_id || null;
 
     if (!existingPage) {
       await db.from("facebook_pages").insert({
@@ -5204,6 +5219,8 @@ async function handlePostbackEvent(pageId, event) {
       last_message_time: new Date(timestamp).toISOString(),
       last_message_from_page: false,
       unread_count: 1,
+      team_id: postbackPageTeamId,
+      organization_id: postbackPageOrgId,
       updated_at: new Date().toISOString(),
       ai_enabled: existingConv?.ai_enabled ?? true,
       active_goal_id: existingConv?.active_goal_id || null,
@@ -5237,6 +5254,8 @@ async function handlePostbackEvent(pageId, event) {
         timestamp: new Date(timestamp).toISOString(),
         is_from_page: false,
         is_read: false,
+        team_id: postbackPageTeamId,
+        organization_id: postbackPageOrgId,
       },
       { onConflict: "message_id" },
     );
@@ -5308,12 +5327,15 @@ async function handleReferralEvent(pageId, event) {
       `[WEBHOOK] Referral from ${senderId}: source=${source}, type=${type}, ad_id=${adId}, ref=${ref}`,
     );
 
-    // Ensure page exists
+    // Ensure page exists and get tenant scope
     const { data: existingPage } = await db
       .from("facebook_pages")
-      .select("page_id")
+      .select("page_id,team_id,organization_id")
       .eq("page_id", pageId)
       .single();
+
+    const refPageTeamId = existingPage?.team_id || null;
+    const refPageOrgId = existingPage?.organization_id || null;
 
     if (!existingPage) {
       await db.from("facebook_pages").insert({
@@ -5375,6 +5397,8 @@ async function handleReferralEvent(pageId, event) {
       last_message_time: new Date(timestamp).toISOString(),
       last_message_from_page: false,
       unread_count: 1,
+      team_id: refPageTeamId,
+      organization_id: refPageOrgId,
       updated_at: new Date().toISOString(),
       ai_enabled: existingConv?.ai_enabled ?? true,
       active_goal_id: existingConv?.active_goal_id || null,
@@ -5409,6 +5433,8 @@ async function handleReferralEvent(pageId, event) {
         timestamp: new Date(timestamp).toISOString(),
         is_from_page: false,
         is_read: false,
+        team_id: refPageTeamId,
+        organization_id: refPageOrgId,
       },
       { onConflict: "message_id" },
     );
@@ -5459,14 +5485,16 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
   if (!db) return false;
 
   try {
-    // 1. Get Booking URL + page token in parallel
+    // 1. Get Booking URL + page token + tenant scope in parallel
     const [settingsResult, pageResult] = await Promise.all([
       db.from("settings").select("value").eq("key", "ai_chatbot_config").single(),
-      db.from("facebook_pages").select("page_access_token").eq("page_id", pageId).single()
+      db.from("facebook_pages").select("page_access_token,team_id,organization_id").eq("page_id", pageId).single()
     ]);
 
     const settings = settingsResult.data;
     const pageToken = pageResult.data?.page_access_token;
+    const welcomePageTeamId = pageResult.data?.team_id || null;
+    const welcomePageOrgId = pageResult.data?.organization_id || null;
 
     if (!pageToken || pageToken === 'pending') {
       console.error("[WEBHOOK] sendWelcomeMessage: No valid page token for", pageId);
@@ -5719,7 +5747,9 @@ async function sendWelcomeMessage(pageId, recipientId, conversationId = null) {
             message_text: welcomeText,
             is_from_page: true,
             timestamp: new Date().toISOString(),
-            sent_source: "app"
+            sent_source: "app",
+            team_id: welcomePageTeamId,
+            organization_id: welcomePageOrgId,
           });
         } catch (e) { console.warn("Failed to log welcome msg", e); }
 

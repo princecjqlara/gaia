@@ -167,9 +167,19 @@ class FacebookService {
      */
     async getSettings() {
         try {
-            const { data, error } = await getSupabase()
+            const scope = await getCurrentUserScope();
+            let query = getSupabase()
                 .from('facebook_settings')
                 .select('*');
+
+            // Scope settings to team if available
+            if (scope.teamId) {
+                query = query.or(`team_id.eq.${scope.teamId},team_id.is.null`);
+            } else if (scope.organizationId) {
+                query = query.or(`organization_id.eq.${scope.organizationId},organization_id.is.null`);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
 
@@ -185,16 +195,22 @@ class FacebookService {
     }
 
     /**
-     * Save Facebook settings
+     * Save Facebook settings (scoped to team)
      */
     async saveSettings(key, value, userId) {
         try {
+            const scope = await getCurrentUserScope();
+            // Build a team-scoped setting key to avoid overwriting other teams' settings
+            const scopedKey = scope.teamId ? `${key}__team_${scope.teamId}` : key;
+
             const { error } = await getSupabase()
                 .from('facebook_settings')
                 .upsert({
-                    setting_key: key,
+                    setting_key: scopedKey,
                     setting_value: value,
                     updated_by: userId,
+                    team_id: scope.teamId || null,
+                    organization_id: scope.organizationId || null,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'setting_key' });
 
@@ -270,21 +286,53 @@ class FacebookService {
                 console.warn('[FB] Could not archive old conversations (non-fatal):', archiveErr.message);
             }
 
-            const { data, error } = await getSupabase()
+            // Check if this team already has a record for this page
+            let existingPageQuery = getSupabase()
                 .from('facebook_pages')
-                .upsert({
-                    page_id: resolvedPageId,
-                    page_name: resolvedName,
-                    page_access_token: resolvedToken,
-                    page_picture_url: resolvedPicture,
-                    connected_by: userId,
-                    team_id: scope.teamId || null,
-                    organization_id: scope.organizationId || null,
-                    is_active: true,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'page_id' })
-                .select()
-                .single();
+                .select('id')
+                .eq('page_id', resolvedPageId);
+            existingPageQuery = applyScopeToQuery(existingPageQuery, scope);
+            const { data: existingPage } = await existingPageQuery.maybeSingle();
+
+            let data, error;
+            if (existingPage) {
+                // Update existing record for this team's page
+                let updateQuery = getSupabase()
+                    .from('facebook_pages')
+                    .update({
+                        page_name: resolvedName,
+                        page_access_token: resolvedToken,
+                        page_picture_url: resolvedPicture,
+                        connected_by: userId,
+                        is_active: true,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', existingPage.id)
+                    .select()
+                    .single();
+                const result = await updateQuery;
+                data = result.data;
+                error = result.error;
+            } else {
+                // Insert new record scoped to this team
+                const result = await getSupabase()
+                    .from('facebook_pages')
+                    .insert({
+                        page_id: resolvedPageId,
+                        page_name: resolvedName,
+                        page_access_token: resolvedToken,
+                        page_picture_url: resolvedPicture,
+                        connected_by: userId,
+                        team_id: scope.teamId || null,
+                        organization_id: scope.organizationId || null,
+                        is_active: true,
+                        updated_at: new Date().toISOString()
+                    })
+                    .select()
+                    .single();
+                data = result.data;
+                error = result.error;
+            }
 
             if (error) throw error;
 
@@ -324,10 +372,14 @@ class FacebookService {
      */
     async disconnectPage(pageId) {
         try {
-            const { error } = await getSupabase()
+            const scope = await getCurrentUserScope();
+            let query = getSupabase()
                 .from('facebook_pages')
                 .update({ is_active: false, updated_at: new Date().toISOString() })
                 .eq('page_id', pageId);
+
+            query = applyScopeToQuery(query, scope);
+            const { error } = await query;
 
             if (error) throw error;
             return true;
@@ -377,6 +429,7 @@ class FacebookService {
      */
     async syncConversations(pageId) {
         try {
+            const scope = await getCurrentUserScope();
             // Get page access token
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
@@ -518,6 +571,8 @@ class FacebookService {
                     // Track if last message was from page (for AI priority sorting)
                     last_message_from_page: isFromPage,
                     unread_count: conv.unread_count || 0,
+                    team_id: scope.teamId || null,
+                    organization_id: scope.organizationId || null,
                     updated_at: new Date().toISOString()
                 };
 
@@ -716,6 +771,7 @@ class FacebookService {
      */
     async syncMessages(conversationId, pageId) {
         try {
+            const scope = await getCurrentUserScope();
             // Skip syncing for webhook-created temporary conversations
             // These have IDs like "t_123456789" where the number is the participant_id
             // They don't exist on Facebook's Graph API
@@ -764,7 +820,9 @@ class FacebookService {
                     is_read: isRead,
                     message_text: msg.message,
                     attachments: msg.attachments?.data || [],
-                    timestamp: msg.created_time
+                    timestamp: msg.created_time,
+                    team_id: scope.teamId || null,
+                    organization_id: scope.organizationId || null
                 };
 
                 const { data, error } = await getSupabase()
@@ -951,6 +1009,7 @@ class FacebookService {
      */
     async sendMessageWithQuickReplies(pageId, recipientId, messageText, quickReplies = [], conversationId = null) {
         try {
+            const scope = await getCurrentUserScope();
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
             if (!page) throw new Error('Page not found');
@@ -1014,7 +1073,9 @@ class FacebookService {
                         is_from_page: true,
                         sent_source: 'app',
                         timestamp: new Date().toISOString(),
-                        is_read: true
+                        is_read: true,
+                        team_id: scope.teamId || null,
+                        organization_id: scope.organizationId || null
                     }, { onConflict: 'message_id' });
             }
 
@@ -1031,6 +1092,7 @@ class FacebookService {
      */
     async sendMessage(pageId, recipientId, messageText, conversationId = null) {
         try {
+            const scope = await getCurrentUserScope();
             // Get page access token
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
@@ -1139,7 +1201,9 @@ class FacebookService {
                         is_from_page: true,
                         sent_source: 'app',
                         timestamp: new Date().toISOString(),
-                        is_read: true
+                        is_read: true,
+                        team_id: scope.teamId || null,
+                        organization_id: scope.organizationId || null
                     }, { onConflict: 'message_id' });
 
                 console.log(`[SEND] Message ${result.message_id} saved with sent_source='app'${useMessageTag ? ' (used tag)' : ''}`);
@@ -1159,6 +1223,7 @@ class FacebookService {
      */
     async sendMessageWithTag(pageId, recipientId, messageText, tag = 'HUMAN_AGENT') {
         try {
+            const scope = await getCurrentUserScope();
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
             if (!page) throw new Error('Page not found');
@@ -1206,7 +1271,9 @@ class FacebookService {
                         is_from_page: true,
                         sent_source: 'app',
                         timestamp: new Date().toISOString(),
-                        is_read: true
+                        is_read: true,
+                        team_id: scope.teamId || null,
+                        organization_id: scope.organizationId || null
                     }, { onConflict: 'message_id' });
 
                 console.log(`[SEND] Tagged message ${result.message_id} saved with sent_source='app'`);
@@ -1836,6 +1903,7 @@ class FacebookService {
      */
     async sendPropertyCard(pageId, recipientId, propertyOrProperties, visitorName = null) {
         try {
+            const scope = await getCurrentUserScope();
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
             if (!page) throw new Error('Page not found');
@@ -1937,6 +2005,8 @@ class FacebookService {
                     timestamp: new Date().toISOString(),
                     is_from_page: true,
                     sent_source: 'app',
+                    team_id: scope.teamId || null,
+                    organization_id: scope.organizationId || null,
                     attachments: [{
                         type: 'template',
                         payload: payload
@@ -1956,6 +2026,7 @@ class FacebookService {
      */
     async sendVideoCard(pageId, recipientId, videoUrl, buttonTitle = 'Book Now!', buttonUrl = '') {
         try {
+            const scope = await getCurrentUserScope();
             const pages = await this.getConnectedPages();
             const page = pages.find(p => p.page_id === pageId);
             if (!page) throw new Error('Page not found');
@@ -2015,6 +2086,8 @@ class FacebookService {
                     timestamp: new Date().toISOString(),
                     is_from_page: true,
                     sent_source: 'app',
+                    team_id: scope.teamId || null,
+                    organization_id: scope.organizationId || null,
                     attachments: [{
                         type: 'template',
                         payload: {
