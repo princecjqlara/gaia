@@ -4779,22 +4779,32 @@ async function handleReadReceipt(pageId, event) {
       return;
     }
 
-    // 3b. Check if the last page message was itself a follow-up (prevent follow-up chains)
-    // If the last outbound message was a scheduled follow-up, don't trigger another one
-    // when the contact reads it — this prevents infinite follow-up loops.
-    const { data: lastFollowup } = await db
-      .from('ai_followup_schedule')
-      .select('id, follow_up_type, status')
+    // 3b. Limit read-receipt follow-up chains to 2 cycles max
+    // Count how many read-receipt follow-ups have already been sent for this conversation
+    // since the customer's last inbound message (resets when they reply).
+    const { data: lastInbound } = await db
+      .from('facebook_messages')
+      .select('timestamp')
       .eq('conversation_id', conv.conversation_id)
-      .in('status', ['sent', 'pending'])
-      .in('follow_up_type', ['read_receipt', 'reminder', 'best_time'])
-      .order('scheduled_at', { ascending: false })
+      .eq('is_from_page', false)
+      .order('timestamp', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (lastFollowup && lastFollowup.status === 'sent') {
-      // The last action was a follow-up that was already sent — don't chain another
-      console.log('[WEBHOOK] 👁️ Last page message was a follow-up — skipping to prevent chain');
+    const sinceTimestamp = lastInbound?.timestamp || '1970-01-01T00:00:00Z';
+
+    let readFollowupQuery = db
+      .from('ai_followup_schedule')
+      .select('id', { count: 'exact' })
+      .eq('conversation_id', conv.conversation_id)
+      .eq('follow_up_type', 'read_receipt')
+      .eq('status', 'sent')
+      .gte('scheduled_at', sinceTimestamp);
+
+    const { count: readFollowupCount } = await readFollowupQuery;
+
+    if ((readFollowupCount || 0) >= 2) {
+      console.log(`[WEBHOOK] 👁️ Already sent ${readFollowupCount} read-receipt follow-ups since last customer reply — stopping (max 2)`);
       return;
     }
 
